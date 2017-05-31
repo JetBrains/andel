@@ -1,0 +1,17 @@
+/target
+/classes
+/checkouts
+profiles.clj
+pom.xml
+pom.xml.asc
+*.jar
+*.class
+/.lein-*
+/.nrepl-port
+/resources/public/js
+/resources/public/css
+/out
+/.repl
+*.log
+/.env
+/.sass-cache
