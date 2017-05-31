@@ -46,7 +46,7 @@
 (defn make-editor-state []
   {:lines []
    :caret [0 0]
-   :selection [[0 2] [1 5]]
+   :selection [[3 0] [3 5]]
    :font {:font-family "Fira Code"}})
 
 (defn px [x]
@@ -79,47 +79,151 @@
                [(subs s frag) (conj res (subs s 0 frag))]))
            [s []] fragments)))
 
+(def token-styles {:kw {:color :magenta}
+                   :comment {:color :cyan}
+                   :ws {}
+                   :whatever {:color :yellow}
+                   :selected {:color :white
+                              :layer 100}})
+
+#_{:range [from to]
+ :layer 5
+ :style {}}
+
+#_[[1 nil] [5 style]]
+
+#_{:offset 5
+   :type :start
+   :layer 5
+   :style {}}
+
+#_{:type :end}
+
+(defn merge-styles [{l1 :layer :as s1 :or {l1 0}} {l2 :layer :as s2 :or {l2 0}}]
+  (merge-with (fn [x y]
+                (if (< l1 l2) y x))
+              s1 s2))
+
+(defn compare-offsets [x y]
+  (cond (= x y) 0
+        (= x :infinity) 1
+        (= y :infinity) -1
+        (< x y) -1
+        (< y x) 1))
+
+(defn subtract-offsets [x y]
+  (assert (not= y :infinity))
+  (if (= x :infinity)
+    :infinity
+    (- x y)))
+
+(defn shred [ranges]
+  (->> ranges
+       (mapcat (fn [{[from to] :range :keys [style] :as r}]
+                 [{:offset from
+                   :type :start
+                   :style style} {:offset to
+                                  :type :end
+                                  :style style}]))
+       (sort-by :offset compare-offsets)
+       (reduce
+        (fn [{:keys [merged-style style-start styles] :as s} {:keys [type style offset]}]
+          (let [styles' (if (= type :start)
+                          (conj styles style)
+                          (disj styles style))
+                style' (if (= type :start)
+                         (merge-styles merged-style style)
+                         (reduce merge-styles nil styles'))]
+            (if (= merged-style style')
+              (assoc s :styles styles')
+              (-> s
+                  (assoc :styles styles'
+                         :merged-style style'
+                         :style-start offset)
+                  (cond-> (not= offset style-start)
+                          (update :result conj! [(subtract-offsets offset style-start) merged-style]))))))
+        {:style-start 0
+         :merged-style nil
+         :styles #{}
+         :result (transient [])})
+       :result
+       (persistent!)))
+
+(comment
+
+  (shred [{:range [0 2]
+           :style {:color :green}}
+          {:range [1 5]
+           :style {:color :red}}
+          {:range [3 :infinity]
+           :style {:color :black}}
+          ])
+  )
+
+(defn render-selection [[from to] {:keys [width height]}]
+  [:div
+   {:style
+    (merge {:background-color "blue"
+            :height (px height)
+            :position :absolute
+            :top 0}
+           (if (= to :infinity)
+             {:left 0
+              :margin-left (px (* from width))
+              :width "100%"}
+             {:left (px (* from width))
+              :width (px (* (- to from) width))}))}])
+
+(defn render-text [tokens text]
+  (into
+   [:pre {:style
+          {:position :absolute
+           :left 0
+           :top 0}}]
+   (let [frags (fragments text (concat (map first tokens) [:infinity]))]
+     (map (fn [s style]
+            [:span {:style style} s])
+          frags
+          (concat (map second tokens) (repeat nil))))))
+
+(defn shred-selection-with-tokens [sel-tokens tokens]
+  (let [token-ranges  (first
+                       (reduce (fn [[result offset] [len ttype]]
+                                 [(conj result
+                                        {:range [offset (+ offset len)]
+                                         :style (get token-styles ttype)})
+                                  (+ offset len)]) [[] 0] tokens))
+        sel-ranges (first
+                    (reduce (fn [[result offset] [len ttype]]
+                              [(conj result
+                                     {:range [offset (+ offset len)]
+                                      :style (get token-styles ttype)})
+                               (+ offset len)]) [[] 0] sel-tokens))]
+    (shred (concat token-ranges sel-ranges))))
+
+(defn render-caret [col {:keys [width height]}]
+  [:div {:style {:width "1px"
+                 :top 0
+                 :background-color "red"
+                 :position :absolute
+                 :left (px (* col width))
+                 :height (px height)}}])
+
 (defn line-renderer [state index style metrics]
-  (let [{line-height :height
-         ch-width :width} metrics
-        [line col] (:caret @state)
-        text (:text (nth (:lines @state) index))
-        [from to :as sel] (line-selection (:selection @state) index)]
+  (let [[caret-line caret-col] (:caret @state)
+        {:keys [text tokens] :as line} (nth (:lines @state) index)
+        sel (line-selection (:selection @state) index)]
     [:div {:style style}
      (when sel
-       [:div {:style (merge {:background-color "blue"
-                             :height (px line-height)
-                             :position :absolute
-                             :top 0}
-                            (if (= to :infinity)
-                              {:left 0
-                               :margin-left (px (* from ch-width))
-                               :width "100%"}
-                              {:left (px (* from ch-width))
-                               :width (px (* (- to from) ch-width))}))}])
-     (into
-      [:pre {:style
-             {:position :absolute
-              :left 0
-              :top 0}}]
-      (let [tokens (if (some? sel)
-                     (if (= to :infinity)
-                       [[:none from] [:selected :infinity]]
-                       [[:none from] [:selected (- to from)] [:none :infinity]])
-                     [[:none :infinity]])
-            frags (fragments text (map second tokens))]
-        (map (fn [s ttype]
-               [:span {:style (case ttype
-                                :none nil
-                                :selected {:color :white})}
-                s]) frags (map first tokens))))
-     (when (= index line)
-       [:div {:style {:width "1px"
-                      :top 0
-                      :background-color "red"
-                      :position :absolute
-                      :left (px (* col ch-width))
-                      :height (px line-height)}}])]))
+       (render-selection sel metrics))
+     (let [tokens (let [sel-tokens (when-let [[from to] sel]
+                                     [[from nil] [(subtract-offsets to from) :selected]])]
+                    (if (and (seq tokens) (some? sel-tokens))
+                      (shred-selection-with-tokens sel-tokens tokens)
+                      (map (fn [[len ttype]] [len (get token-styles ttype)]) (or tokens sel-tokens [[:infinity nil]]))))]
+       (render-text tokens text))
+     (when (= index caret-line)       
+       (render-caret caret-col metrics))]))
 
 (defn editor [state]
   (let [{line-height :height
@@ -208,7 +312,7 @@
   (assoc state :lines (mapv (fn [s] {:text s}) (clojure.string/split-lines text))))
 
 (defn fake-lexems [state]
-  (assoc-in state [:lines 3 :tokens] [[1 :ws] [1 :comment] [1 :ws] [8 :kw] [1 :ws] []]))
+  (assoc-in state [:lines 3 :tokens] [[1 :ws] [1 :comment] [1 :ws] [8 :kw] [1 :ws] [5 :whatever]]))
   
 
 (defn with-virtualized [cb]
