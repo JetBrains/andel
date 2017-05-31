@@ -6,7 +6,7 @@
             [config.core :refer [env]]))
 
 (def mount-target
-  [:div#app
+  [:div#app {:style "width:100%;height:100%;display:flex;"}
       [:h3 "ClojureScript has not been compiled!"]
       [:p "please run "
        [:b "lein figwheel"]
@@ -17,13 +17,13 @@
    [:meta {:charset "utf-8"}]
    [:meta {:name "viewport"
            :content "width=device-width, initial-scale=1"}]
-   (include-css "/react-virtualized.css")
-   (include-css (if (env :dev) "/css/site.css" "/css/site.min.css"))])
+   (include-css "/firacode/fira_code.css")
+   (include-css "/react-virtualized.css")])
 
 (defn loading-page []
   (html5
     (head)
-    [:body {:class "body-container"}
+    [:body {:style "height: 100vh"}
      mount-target
      (include-js "/js/app.js")]))
 
