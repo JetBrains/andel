@@ -2,8 +2,11 @@
     (:require [reagent.core :as reagent :refer [atom]]
               [reagent.session :as session]
               [slurper.keybind :as keybind]
-              [garden.core :as g])
-    (:require-macros [reagent.interop :refer [$ $!]]))
+              [garden.core :as g]
+              [clojure.core.async :as a]
+              [cljs-http.client :as http])
+    (:require-macros [reagent.interop :refer [$ $!]]
+                     [cljs.core.async.macros :refer [go]]))
 
 (defn head []
   (aget (js/document.getElementsByTagName "head") 0))
@@ -32,18 +35,12 @@
          :margin "0px"}])
 
 (defn measure [s]
-  (let [elt (js/document.createElement "div")]
-    (.setAttribute elt "style" "font-family : Fira Code;")
-    (set! (.-innerHTML elt) (str "<span>" s "</span>"))
-    (.appendChild js/document.body elt)
-    (let [rect (-> elt
-                   (.-children)
-                   (aget 0)
-                   (.getBoundingClientRect))
-          result {:width ($ rect :width)
-                  :height ($ rect :height)}]
-      (.remove elt)
-      result)))
+  (let [canvas (js/document.createElement "canvas")
+        ctx (.getContext canvas "2d")]
+    (set! (.-font ctx) "16px Fira Code")
+    (let [res {:width (.-width (.measureText ctx s)) :height 18}]
+      (js/console.log (:width res))
+      res)))
 
 (defn make-editor-state []
   {:lines (vec (take 500 (repeat "hello world")))
@@ -207,6 +204,10 @@
 
 (defonce *virtualized-state (atom :initial))
 
+(defn set-text [state text]
+  (assoc state :lines (clojure.string/split-lines text)))
+  
+
 (defn with-virtualized [cb]
   (if (= @*virtualized-state :ready)
     (cb)
@@ -215,16 +216,22 @@
         nil
         (do
           (reset! *virtualized-state :scheduled)
-          (include-script "/react-virtualized.js"
-                          (fn []
-                            (include-style "/firacode/fira_code.css"
-                                           (fn []
-                                             (measure "X")
-                                             (js/setTimeout
-                                              (fn []
-                                                (reset! *virtualized-state :ready)
-                                                (cb))
-                                              100))))))))))
+          (include-script
+           "/react-virtualized.js"
+           (fn []
+             (include-style
+              "/firacode/fira_code.css"
+              (fn []
+                (measure "X")
+                (js/setTimeout
+                 (fn []
+                   (go
+                     (let [text (:body (a/<! (http/get "/EditorImpl.java")))]
+                       (reset! *virtualized-state :ready)
+                       (swap! state set-text text)
+                       (cb)
+                       )))
+                 100))))))))))
 
 (defn mount-root []
   (with-virtualized 
