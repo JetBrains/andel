@@ -20,6 +20,9 @@
             default-copy-state)
         state))))
 
+(defn style->keyword [style]
+  (some-> style keyword))
+
 ;; [String LexerState] -> [[Token] LexerState]
 (defn lex [modespec text state]
   (let [mode (modespec->mode modespec)
@@ -32,7 +35,7 @@
                 (swap! *result
                        (fn [result]
                          (-> result
-                             (update :tokens conj [(count text) style])
+                             (update :tokens conj [(count text) (style->keyword style)])
                              (assoc :state state)))))
               (clj->js {:state state}))
     @*result

@@ -1,5 +1,5 @@
 (ns slurper.core
-    (:require [slurper.lexer]
+    (:require [slurper.lexer :as lexer]
               [reagent.core :as reagent :refer [atom]]
               [reagent.session :as session]
               [slurper.keybind :as keybind]
@@ -58,12 +58,28 @@
 
 (defonce keys-dispatcher (js/window.addEventListener "keydown" on-keydown true))
 
+(defn update-line-lexems [{:keys [state text] :as line}]
+  (let [{:keys [tokens state]} (lexer/lex "text/x-java" text nil)]
+    (assoc line
+           :tokens tokens
+           :state state)))
+
+(defn update-lexems-before [state line]
+  (update state :lines
+          (fn [lines]
+            (let [[before after] (split-at line lines)]
+              (into (mapv update-line-lexems before) after)))))
+
 (defn type-in [{[line col] :caret :as state} val]
   (-> state
    (update-in [:lines line :text]
               (fn [s]
                 (str (subs s 0 col) val (subs s col))))
-   (update :caret (fn [[line col]] [line (inc col)]))))
+   (update :caret (fn [[line col]] [line (inc col)]))
+   (update-lexems-before line)
+   ((fn [state]
+     (prn "LINES: " (subvec (:lines state) 19 25))
+     state))))
 
 (defn line-selection [selection line]
   (let [[[from-line from-col] [to-line to-col]] selection]
