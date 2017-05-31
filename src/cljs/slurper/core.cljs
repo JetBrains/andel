@@ -5,9 +5,6 @@
               [garden.core :as g])
     (:require-macros [reagent.interop :refer [$ $!]]))
 
-;; -------------------------
-;; Views
-
 (defn head []
   (aget (js/document.getElementsByTagName "head") 0))
 
@@ -31,7 +28,8 @@
 (defonce defstyle (memoize defstyle-impl))
 
 (defstyle :editor
-  [:pre {:font-family "Fira Code, monospace"}])
+  [:pre {:font-family "Fira Code, monospace"
+         :margin "0px"}])
 
 (defn measure [s]
   (let [elt (js/document.createElement "div")]
@@ -50,6 +48,7 @@
 (defn make-editor-state []
   {:lines (vec (take 500 (repeat "hello world")))
    :caret [0 0]
+   :selection [[0 2] [1 5]]
    :font {:font-family "Fira Code"}})
 
 (defn px [x]
@@ -68,9 +67,66 @@
                 (str (subs s 0 col) val (subs s col))))
    (update :caret (fn [[line col]] [line (inc col)]))))
 
+(defn line-selection [selection line]
+  (let [[[from-line from-col] [to-line to-col]] selection]
+    (when (<= from-line line to-line)
+      [(if (= line from-line) from-col 0)
+       (if (= line to-line) to-col :infinity)])))
+
+(defn fragments [s fragments]
+  (second
+   (reduce (fn [[s res] frag]
+             (if (= frag :infinity)
+               (reduced [nil (conj res s)])
+               [(subs s frag) (conj res (subs s 0 frag))]))
+           [s []] fragments)))
+
+(defn line-renderer [state index style metrics]
+  (let [{line-height :height
+         ch-width :width} metrics
+        [line col] (:caret @state)
+        text (nth (:lines @state) index)
+        [from to :as sel] (line-selection (:selection @state) index)]
+    [:div {:style style}
+     (when sel
+       [:div {:style (merge {:background-color "blue"
+                             :height (px line-height)
+                             :position :absolute
+                             :top 0}
+                            (if (= to :infinity)
+                              {:left 0
+                               :margin-left (px (* from ch-width))
+                               :width "100%"}
+                              {:left (px (* from ch-width))
+                               :width (px (* (- to from) ch-width))}))}])
+     (into
+      [:pre {:style
+             {:position :absolute
+              :left 0
+              :top 0}}]
+      (let [tokens (if (some? sel)
+                     (if (= to :infinity)
+                       [[:none from] [:selected :infinity]]
+                       [[:none from] [:selected (- to from)] [:none :infinity]])
+                     [[:none :infinity]])
+            frags (fragments text (map second tokens))]
+        (map (fn [s ttype]
+               [:span {:style (case ttype
+                                :none nil
+                                :selected {:color :white})}
+                s]) frags (map first tokens)))) 
+     (when (= index line)
+       [:div {:style {:width "1px"
+                      :top 0
+                      :background-color "red"
+                      :position :absolute
+                      :left (px (* col ch-width))
+                      :height (px line-height)}}])]
+    ))
+
 (defn editor [state]
   (let [{line-height :height
-         ch-width :width} (measure "X")
+         ch-width :width :as metrics} (measure "X")
         dom-input (atom nil)
         listener (atom false)]
     [:div {:style {:display :flex
@@ -89,10 +145,10 @@
                          val (.-value e)]
                      (set! (.-value e) "")
                      (swap! state type-in val)))}]
-     [:> js/ReactVirtualized.AutoSizer
+     [:> (-> js/window ($ :ReactVirtualized) ($ :AutoSizer))
       (fn [m]
         (reagent/as-element
-         [:> js/ReactVirtualized.List
+         [:> (-> js/window ($ :ReactVirtualized) ($ :List))
           
           {:ref (fn [this] 
                   (when-not @listener
@@ -106,25 +162,14 @@
            :width ($ m :width)
            :font-family (:font-family (:font @state))
            :rowCount (count (:lines @state))
-           :rowHeight (inc line-height)
+           :rowHeight line-height
            :rowRenderer (fn [s]
-                          (let [;{:keys [index style isVisible isScrolling]} (js->clj s)
-                                index ($ s :index)
+                          (let [index ($ s :index)
                                 style ($ s :style)]
                             (reagent/as-element
                              ^{:key index}
-                             [(fn []
-                                (let [[line col] (:caret @state)]
-                                  [:pre {:style style}
-                                   (when (= index line)
-                                     [:div {:style {:width "1px"
-                                                    :background-color "red"
-                                                    :position :absolute
-                                                    :left (px (* col ch-width))
-                                                    :height (px line-height)}}])
-                                   (nth (:lines @state) index)]))])))
-           :noRowsRenderer (fn []
-                             (reagent/as-element [:div "hello empty"]))}]))]]))
+                             [line-renderer state index style metrics])))
+           :noRowsRenderer (fn [] (reagent/as-element [:div "hello empty"]))}]))]]))
 
 (defn right []
   (swap! state update-in [:caret 1] inc))
@@ -179,7 +224,7 @@
                                               (fn []
                                                 (reset! *virtualized-state :ready)
                                                 (cb))
-                                              0))))))))))
+                                              100))))))))))
 
 (defn mount-root []
   (with-virtualized 
