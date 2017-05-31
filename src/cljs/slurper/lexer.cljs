@@ -1,4 +1,6 @@
-(ns slurper.lexer)
+(ns slurper.lexer
+  (:require [cljs.core.async :as core.async])
+  (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
 (defn- modespec->mode [modespec]
   (.getMode js/CodeMirror (clj->js {:indentUnit 2}) modespec))
@@ -20,27 +22,60 @@
             default-copy-state)
         state))))
 
+(defn style->keyword [style]
+  (some-> style keyword))
+
 ;; [String LexerState] -> [[Token] LexerState]
 (defn lex [modespec text state]
   (let [mode (modespec->mode modespec)
-         state (copy-state mode state)
-         *result (atom
-                  {:tokens []
-                   :state  state})]
+        state (copy-state mode state)
+        *result (atom
+                 {:tokens []
+                  :state  state})]
     (.runMode js/CodeMirror text modespec
               (fn [text style line-number offset state]
                 (swap! *result
                        (fn [result]
                          (-> result
-                             (update :tokens conj [(count text) style])
+                             (update :tokens conj [(count text) (style->keyword style)])
                              (assoc :state state)))))
               (clj->js {:state state}))
     @*result
     #_(update @*result :state (partial copy-state mode))))
 
+(defn submit-request! [{:keys [input] :as worker} & {:keys [index text] :as req}]
+  (core.async/put! input req))
 
+(defn new-lexer-worker [modespec]
+  (let [input (core.async/chan)
+        output (core.async/chan)
+        *states (atom [nil])]
+    (go-loop []
+             (when-let [{:keys [index text] :as req} (core.async/<! input)]
+               (let [base-state (nth @*states index)
+                     {:keys [tokens state]} (lex modespec text base-state)]
+                 (swap! *states
+                        (fn [states]
+                          (conj (vec (take (inc index) states)) state)))
+                 (core.async/>! output (assoc req :tokens tokens)))
+               (recur)))
+    {:input input
+     :output output
+     :modespec modespec}))
 
 (comment
+
+  (def worker (new-lexer-worker "text/x-java"))
+  (go
+   (submit-request! worker :index 0
+                           :text "class Foo { static void foo() { return \"hell\\"))
+
+  (go
+   (submit-request! worker :index 1
+                    :text "o world\";} }"))
+
+  (go
+   (prn (core.async/<! (:output worker))))
 
   (let [{:keys [state tokens]} (lex "text/x-java" "class Foo { static void foo() { return \"hell\\" nil)]
     (prn "FIRST" tokens)
@@ -68,7 +103,8 @@
 
 (comment
   (use 'figwheel-sidecar.repl-api)
-
+  (nth [1] 0)
+  (conj (take 2 [1 2 3]) 2)
   (prn (:tokens (lex "javascript" "function foo() { return 42; }" nil)))
   ((.-startState (modespec->mode "javascript")))
   (modespec->mode "javascript"))
