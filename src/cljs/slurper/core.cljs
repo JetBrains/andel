@@ -30,8 +30,36 @@
 ;; -------------------------
 ;; Initialize app
 
+
+(defn head []
+  (aget (js/document.getElementsByTagName "head") 0))
+
+(defn include-script [src cb]
+  (let [e (js/document.createElement "script")]
+    (doto e
+      (.setAttribute "type" "text/javascript")
+      (.setAttribute "src" src))
+    (aset e "onload" cb)
+    (.appendChild (head) e)))
+
+(defonce *virtualized-state (atom :initial))
+
+(defn with-virtualized [cb]
+  (if (= @*virtualized-state :ready)
+    (cb)
+    (do
+      (if (= @*virtualized-state :scheduled)
+        nil
+        (do
+          (reset! *virtualized-state :scheduled)
+          (include-script "/react-virtualized.js" 
+                          (fn []
+                            (reset! *virtualized-state :ready)
+                            (cb))))))))
+
 (defn mount-root []
-  (reagent/render [current-page] (.getElementById js/document "app")))
+  (with-virtualized 
+    #(reagent/render [current-page] (.getElementById js/document "app"))))
 
 (defn init! []
   (accountant/configure-navigation!
