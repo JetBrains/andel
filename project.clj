@@ -16,6 +16,7 @@
                  [org.clojure/clojurescript "1.9.521"
                   :scope "provided"]
                  [secretary "1.2.3"]
+                 [garden "1.3.2"]
                  [venantius/accountant "0.2.0"
                   :exclusions [org.clojure/tools.reader]]]
 
@@ -51,7 +52,9 @@
              :compiler
              {:output-to "target/cljsbuild/public/js/app.js"
               :output-dir "target/uberjar"
+              :main "slurper.prod"
               :optimizations :advanced
+              :pseudo-names true
               :pretty-print  false}}
             :app
             {:source-paths ["src/cljs" "src/cljc" "env/dev/cljs"]
