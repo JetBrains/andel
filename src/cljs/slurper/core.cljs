@@ -1,5 +1,6 @@
 (ns slurper.core
-    (:require [reagent.core :as reagent :refer [atom]]
+    (:require [slurper.lexer]
+              [reagent.core :as reagent :refer [atom]]
               [reagent.session :as session]
               [slurper.keybind :as keybind]
               [garden.core :as g]
@@ -111,7 +112,7 @@
                [:span {:style (case ttype
                                 :none nil
                                 :selected {:color :white})}
-                s]) frags (map first tokens)))) 
+                s]) frags (map first tokens))))
      (when (= index line)
        [:div {:style {:width "1px"
                       :top 0
@@ -146,8 +147,8 @@
       (fn [m]
         (reagent/as-element
          [:> (-> js/window ($ :ReactVirtualized) ($ :List))
-          
-          {:ref (fn [this] 
+
+          {:ref (fn [this]
                   (when-not @listener
                     (when-let [node (reagent/dom-node this)]
                       (reset! listener true)
@@ -187,10 +188,10 @@
 
 (defn include-script [src cb]
   (let [e (js/document.createElement "script")]
-    (doto e
-      (.setAttribute "type" "text/javascript")
-      (.setAttribute "src" src))
     (aset e "onload" cb)
+    (doto e
+          (.setAttribute "type" "text/javascript")
+          (.setAttribute "src" src))
     (.appendChild (head) e)))
 
 (defn include-style [src cb]
@@ -233,9 +234,31 @@
                        )))
                  100))))))))))
 
+(defonce *codemirror-state (atom :initial))
+
+(defn with-codemirror [cb]
+  (if (= @*codemirror-state :ready)
+    (cb)
+    (do
+      (if (= @*codemirror-state :scheduled)
+        nil
+        (do
+          (reset! *codemirror-state :scheduled)
+          (include-script "/codemirror/addon/runmode/runmode-standalone.js"
+                          (fn []
+                            (include-script "/codemirror/mode/javascript/javascript.js"
+                                            (fn [] (js/console.log "js load")))
+                            (include-script "/codemirror/mode/clike/clike.js"
+                                            (fn [] (js/console.log "clike load")))
+                            (include-script "/codemirror/mode/clojure/clojure.js"
+                                            (fn [] (js/console.log "clojure load")))
+                            (cb))))))))
+
 (defn mount-root []
-  (with-virtualized 
-    #(reagent/render [main] (.getElementById js/document "app"))))
+  (with-virtualized
+   #(with-codemirror
+     (fn []
+        (reagent/render [main] (.getElementById js/document "app"))))))
 
 (defn init! []
   (mount-root))
