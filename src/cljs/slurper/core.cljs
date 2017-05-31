@@ -1,5 +1,6 @@
 (ns slurper.core
-    (:require [reagent.core :as reagent :refer [atom]]
+    (:require [slurper.lexer]
+              [reagent.core :as reagent :refer [atom]]
               [reagent.session :as session]
               [secretary.core :as secretary :include-macros true]
               [accountant.core :as accountant]))
@@ -36,10 +37,10 @@
 
 (defn include-script [src cb]
   (let [e (js/document.createElement "script")]
-    (doto e
-      (.setAttribute "type" "text/javascript")
-      (.setAttribute "src" src))
     (aset e "onload" cb)
+    (doto e
+          (.setAttribute "type" "text/javascript")
+          (.setAttribute "src" src))
     (.appendChild (head) e)))
 
 (defonce *virtualized-state (atom :initial))
@@ -57,9 +58,31 @@
                             (reset! *virtualized-state :ready)
                             (cb))))))))
 
+(defonce *codemirror-state (atom :initial))
+
+(defn with-codemirror [cb]
+  (if (= @*codemirror-state :ready)
+    (cb)
+    (do
+      (if (= @*codemirror-state :scheduled)
+        nil
+        (do
+          (reset! *codemirror-state :scheduled)
+          (include-script "/codemirror/addon/runmode/runmode-standalone.js"
+                          (fn []
+                            (include-script "/codemirror/mode/javascript/javascript.js"
+                                            (fn [] (js/console.log "js load")))
+                            (include-script "/codemirror/mode/clike/clike.js"
+                                            (fn [] (js/console.log "clike load")))
+                            (include-script "/codemirror/mode/clojure/clojure.js"
+                                            (fn [] (js/console.log "clojure load")))
+                            (cb))))))))
+
 (defn mount-root []
-  (with-virtualized 
-    #(reagent/render [current-page] (.getElementById js/document "app"))))
+  (with-virtualized
+   #(with-codemirror
+     (fn []
+        (reagent/render [current-page] (.getElementById js/document "app"))))))
 
 (defn init! []
   (accountant/configure-navigation!
