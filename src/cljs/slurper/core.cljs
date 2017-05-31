@@ -44,7 +44,7 @@
       res)))
 
 (defn make-editor-state []
-  {:lines (vec (take 500 (repeat "hello world")))
+  {:lines []
    :caret [0 0]
    :selection [[0 2] [1 5]]
    :font {:font-family "Fira Code"}})
@@ -83,7 +83,7 @@
   (let [{line-height :height
          ch-width :width} metrics
         [line col] (:caret @state)
-        text (nth (:lines @state) index)
+        text (:text (nth (:lines @state) index))
         [from to :as sel] (line-selection (:selection @state) index)]
     [:div {:style style}
      (when sel
@@ -206,7 +206,7 @@
 (defonce *virtualized-state (atom :initial))
 
 (defn set-text [state text]
-  (assoc state :lines (clojure.string/split-lines text)))
+  (assoc state :lines (mapv (fn [s] {:text s}) (clojure.string/split-lines text))))
   
 
 (defn with-virtualized [cb]
