@@ -60,7 +60,7 @@
 
 (defn type-in [{[line col] :caret :as state} val]
   (-> state
-   (update-in [:lines line]
+   (update-in [:lines line :text]
               (fn [s]
                 (str (subs s 0 col) val (subs s col))))
    (update :caret (fn [[line col]] [line (inc col)]))))
@@ -119,8 +119,7 @@
                       :background-color "red"
                       :position :absolute
                       :left (px (* col ch-width))
-                      :height (px line-height)}}])]
-    ))
+                      :height (px line-height)}}])]))
 
 (defn editor [state]
   (let [{line-height :height
@@ -207,6 +206,9 @@
 
 (defn set-text [state text]
   (assoc state :lines (mapv (fn [s] {:text s}) (clojure.string/split-lines text))))
+
+(defn fake-lexems [state]
+  (assoc-in state [:lines 3 :tokens] [[1 :ws] [1 :comment] [1 :ws] [8 :kw] [1 :ws] []]))
   
 
 (defn with-virtualized [cb]
@@ -229,7 +231,9 @@
                    (go
                      (let [text (:body (a/<! (http/get "/EditorImpl.java")))]
                        (reset! *virtualized-state :ready)
-                       (swap! state set-text text)
+                       (swap! state (fn [state] (-> state
+                                                   (set-text text)
+                                                   (fake-lexems))))
                        (cb)
                        )))
                  100))))))))))
