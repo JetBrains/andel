@@ -17,7 +17,10 @@
    [:meta {:charset "utf-8"}]
    [:meta {:name "viewport"
            :content "width=device-width, initial-scale=1"}]
-   (include-css "/firacode/fira_code.css")
+   #_[:link {:href "/firacode/fira_code.css"
+           :rel "stylesheet"
+           :type "text/css"
+           :async "false"}]
    (include-css "/react-virtualized.css")])
 
 (defn loading-page []
