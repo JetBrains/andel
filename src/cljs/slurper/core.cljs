@@ -54,6 +54,7 @@
      :font {:font-family "Fira Code"}
      :lexer-broker ch
      :first-invalid 0
+     :next-id 0
      :modespec "text/x-java"
      :timestamp 0}))
 
@@ -152,9 +153,11 @@
       (update :caret (fn [[line col]] [line (max 0 (dec col))]))
       (invalidate-lines line)))
 
-(defn split-line [{:keys [text] :as line} column]
-  [{:text (subs text 0 column)}
-   {:text (subs text column (count text))}])
+(defn split-line [{:keys [text id] :as line} column new-id]
+  [{:text (subs text 0 column)
+    :id id}
+   {:text (subs text column (count text))
+    :id new-id}])
 
 (defn concat-lines [line1 line2]
   {:text (str (:text line1) (:text line2))})
@@ -171,15 +174,15 @@
         (assoc :caret [(dec line-number) (count (:text (first to-concat)))])
         (invalidate-lines (dec line-number)))))
 
-(defn insert-line [state]
-  (let [[line-number column] (:caret state)
-        lines (:lines state)
+(defn insert-line [{:keys [next-id lines caret] :as state}]
+  (let [[line-number column] caret        
         [before after] (split-at line-number lines)
         current-line (first after)
         new-lines (vec (concat before
-                               (split-line current-line column)
+                               (split-line current-line column next-id)
                                (rest after)))]
     (-> state
+        (update :next-id inc)
         (assoc :lines new-lines)
         (assoc :caret [(inc line-number) 0])
         (invalidate-lines line-number))))
@@ -338,24 +341,31 @@
                  :left (px (* col width))
                  :height (px height)}}])
 
-(defn line-renderer [state index style metrics]
-  (let [caret-here? (reaction (= index (first (:caret @state))))
-        *line (reaction (nth (:lines @state) index))
-        *line-selection (reaction (line-selection (:selection @state) index))]
-    (fn []
-      (let [{:keys [text tokens] :as line} @*line]
-        [:div {:style style}
-         (when @*line-selection
-           (render-selection @*line-selection metrics))
-         (let [tokens (let [sel-tokens (when-let [[from to] @*line-selection]
-                                         [[from nil] [(subtract-offsets to from) :selected]])]
-                        (if (and (seq tokens) (some? sel-tokens))
-                          (shred-selection-with-tokens sel-tokens tokens)
-                          (map (fn [[len ttype]] [len (get theme/token-styles ttype)]) (or tokens sel-tokens [[:infinity nil]]))))]
-           (render-text tokens text))
-         (when @caret-here?
-           (let [[_ caret-col] (:caret @state)]
-             (render-caret caret-col metrics)))]))))
+(defn line-renderer-slow [*line *caret caret-here? *line-selection metrics]
+  (js/console.log (str "rendering" (:text @*line)))
+  (let [{:keys [text tokens] :as line} @*line]
+    [:div 
+     (when @*line-selection
+       (render-selection @*line-selection metrics))
+     (let [tokens (let [sel-tokens (when-let [[from to] @*line-selection]
+                                     [[from nil] [(subtract-offsets to from) :selected]])]
+                    (if (and (seq tokens) (some? sel-tokens))
+                      (shred-selection-with-tokens sel-tokens tokens)
+                      (map (fn [[len ttype]] [len (get theme/token-styles ttype)]) (or tokens sel-tokens [[:infinity nil]]))))]
+       (render-text tokens text))
+     (when @caret-here?
+       (let [[_ caret-col] @*caret]
+         (render-caret caret-col metrics)))]))
+
+(defn line-renderer [state index metrics]
+  (let [*index (reagent/atom index)
+        caret-here? (reaction (= @*index (first (:caret @state))))
+        *line (reaction (nth (:lines @state) @*index))
+        *line-selection (reaction (line-selection (:selection @state) @*index))
+        *caret (reaction (:caret @state))]
+    (fn [_ index metrics]
+      (reset! *index index)
+      [line-renderer-slow *line *caret caret-here? *line-selection metrics])))
 
 (defn editor [state]
   (let [{line-height :height
@@ -401,12 +411,13 @@
               :overscanRowCount 100
               :rowRenderer (fn [s]
                              (let [index ($ s :index)
-                                   style (js->clj ($ s :style))
+                                   style ($ s :style)
                                    id  (:id (nth (:lines @state) index))]
                                
                                (reagent/as-element
                                 ^{:key id}
-                                [line-renderer state index style metrics])))
+                                [:div {:style style}
+                                 [line-renderer state index metrics]])))
               :noRowsRenderer (fn [] (reagent/as-element [:div "hello empty"]))}]))]))]]))
 
 (defn main []
@@ -434,7 +445,7 @@
 (defonce *virtualized-state (atom :initial))
 
 (defn set-text [state text]
-  (let [[lines! next-id] (reduce (fn [[next-id lines]]
+  (let [[next-id lines!] (reduce (fn [[next-id lines] s]
                            [(inc next-id) (conj! lines {:text s
                                                         :id next-id})])
                          [(:next-id state) (transient [])]
