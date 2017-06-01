@@ -26,7 +26,7 @@
 (defn loading-page []
   (html5
     (head)
-    [:body {:style "height: 100vh"}
+    [:body {:style "height: 100vh; margin-left: 0; margin-top: 0; overflow: hidden"}
      mount-target
      (include-js "/js/app.js")]))
 
