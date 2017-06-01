@@ -146,22 +146,36 @@
       (update :caret (fn [[line col]] [line (inc col)]))      
       (invalidate-lines line)))
 
-(defn backspace-in [{[line col] :caret :as state}]
+(defn delete-symbol [{[line col] :caret :as state}]
   (-> state
       (delete-insert 1 "")
-      (update :caret (fn [[line col]] [line (dec col)]))
+      (update :caret (fn [[line col]] [line (max 0 (dec col))]))
       (invalidate-lines line)))
-
 
 (defn split-line [{:keys [text] :as line} column]
   [{:text (subs text 0 column)}
    {:text (subs text column (count text))}])
 
-(defn enter-in [state]
+(defn concat-lines [line1 line2]
+  {:text (str (:text line1) (:text line2))})
+
+(defn delete-line [{[line-number col] :caret :as state}]
+  (let [lines (:lines state)
+        [before after] (split-at (dec line-number) lines)
+        [to-concat rest] (split-at 2 after)
+        new-lines (vec (concat before
+                               [(apply concat-lines to-concat)]
+                               rest))]
+    (-> state
+        (assoc :lines new-lines)
+        (assoc :caret [(dec line-number) (count (:text (first to-concat)))])
+        (invalidate-lines (dec line-number)))))
+
+(defn insert-line [state]
   (let [[line-number column] (:caret state)
         lines (:lines state)
         [before after] (split-at line-number lines)
-        current-line (or (first after) {:text ""})
+        current-line (first after)
         new-lines (vec (concat before
                                (split-line current-line column)
                                (rest after)))]
@@ -169,6 +183,15 @@
         (assoc :lines new-lines)
         (assoc :caret [(inc line-number) 0])
         (invalidate-lines line-number))))
+
+(defn on-backspace [{[line col] :caret :as state}]
+  (cond
+    (and (zero? line) (zero? col)) state
+    (zero? col) (delete-line state)
+    :else (delete-symbol state)))
+
+(defn on-enter [state]
+  (insert-line state))
 
 (defn line-selection [selection line]
   (let [[[from-line from-col] [to-line to-col]] selection]
@@ -415,9 +438,8 @@
       (assoc :first-invalid 0)
       (update :timestamp inc)))
 
-(defn fake-lexems [state]
-  (assoc-in state [:lines 3 :tokens] [[1 :ws] [1 :comment] [1 :ws] [8 :keyword] [1 :ws] [5 :whatever]]))
-  
+
+(defn fake-text [] "public static void main() {\n return 0; \n }")
 
 (defn with-virtualized [cb]
   (if (= @*virtualized-state :ready)
@@ -498,12 +520,12 @@
 (bind-movement! "down"   [1 0])
 (bind-movement! "pgdown" [10 0])
 
-(bind-function! "enter" enter-in)
+(bind-function! "enter" on-enter)
 
 (defn backspace [state]
   (type-in state "X"))
 
-(bind-function! "backspace" backspace-in)
+(bind-function! "backspace" on-backspace)
 
 (defn bench [state]
   (js/console.log "BENCH LEXING")
