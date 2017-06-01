@@ -34,6 +34,8 @@
 
 (defstyle :editor
   [:pre {:font-family "Fira Code, monospace"
+         :color theme/foreground
+         :background theme/background
          :margin "0px"}])
 
 (defn measure [s]
@@ -301,6 +303,7 @@
         dom-input (atom nil)
         listener (atom false)]
     [:div {:style {:display :flex
+                   :background-color theme/background
                    :flex 1}}
      [:textarea
       {:ref (fn [this]
