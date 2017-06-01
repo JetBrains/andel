@@ -35,7 +35,6 @@
 (defstyle :editor
   [:pre {:font-family "Fira Code, monospace"
          :color theme/foreground
-         :background theme/background
          :margin "0px"}])
 
 (defn measure [s]
@@ -335,7 +334,6 @@
            :height ($ m :height)
            :width ($ m :width)
            :font-family (:font-family (:font @state))
-           :background-color theme/background
            :rowCount (count (:lines @state))
            :rowHeight line-height
            :rowRenderer (fn [s]
