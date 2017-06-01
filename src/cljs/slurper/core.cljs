@@ -95,7 +95,7 @@
                [(subs s frag) (conj res (subs s 0 frag))]))
            [s []] fragments)))
 
-(def token-styles {:kw {:color :magenta}
+(def token-styles {:keyword {:color :magenta}
                    :comment {:color :cyan}
                    :ws {}
                    :whatever {:color :yellow}
@@ -328,7 +328,7 @@
   (assoc state :lines (mapv (fn [s] {:text s}) (clojure.string/split-lines text))))
 
 (defn fake-lexems [state]
-  (assoc-in state [:lines 3 :tokens] [[1 :ws] [1 :comment] [1 :ws] [8 :kw] [1 :ws] [5 :whatever]]))
+  (assoc-in state [:lines 3 :tokens] [[1 :ws] [1 :comment] [1 :ws] [8 :keyword] [1 :ws] [5 :whatever]]))
   
 
 (defn with-virtualized [cb]
