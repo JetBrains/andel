@@ -292,7 +292,8 @@
   (letfn [(clamp [v hi] (min (max v 0) hi))
           (move [[row col]]
             (let [new-row (clamp (+ row drow) (dec (count (:lines state))))
-                  new-col (clamp (+ col dcol) 1000000)]
+                  line-len (count (get-in state [:lines new-row :text]))
+                  new-col (clamp (+ col dcol) line-len)]
               [new-row new-col]))]
     (update-in state [:caret] move)))
 
