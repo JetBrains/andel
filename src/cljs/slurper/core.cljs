@@ -1,5 +1,6 @@
 (ns slurper.core
     (:require [slurper.lexer :as lexer]
+              [slurper.theme :as theme]
               [reagent.core :as reagent :refer [atom]]
               [reagent.session :as session]
               [slurper.keybind :as keybind]
@@ -102,13 +103,6 @@
                [(subs s frag) (conj res (subs s 0 frag))]))
            [s []] fragments)))
 
-(def token-styles {:keyword {:color :magenta :font-weight :bold}
-                   :def {:color :steelblue}
-                   :comment {:color :cyan}
-                   :ws {}
-                   :whatever {:color :yellow}
-                   :selected {:color :white
-                              :layer 100}})
 
 #_{:range [from to]
  :layer 5
@@ -215,13 +209,13 @@
                        (reduce (fn [[result offset] [len ttype]]
                                  [(conj result
                                         {:range [offset (+ offset len)]
-                                         :style (get token-styles ttype)})
+                                         :style (get theme/token-styles ttype)})
                                   (+ offset len)]) [[] 0] tokens))
         sel-ranges (first
                     (reduce (fn [[result offset] [len ttype]]
                               [(conj result
                                      {:range [offset (+ offset len)]
-                                      :style (get token-styles ttype)})
+                                      :style (get theme/token-styles ttype)})
                                (+ offset len)]) [[] 0] sel-tokens))]
     (shred (concat token-ranges sel-ranges))))
 
@@ -244,7 +238,7 @@
                                      [[from nil] [(subtract-offsets to from) :selected]])]
                     (if (and (seq tokens) (some? sel-tokens))
                       (shred-selection-with-tokens sel-tokens tokens)
-                      (map (fn [[len ttype]] [len (get token-styles ttype)]) (or tokens sel-tokens [[:infinity nil]]))))]
+                      (map (fn [[len ttype]] [len (get theme/token-styles ttype)]) (or tokens sel-tokens [[:infinity nil]]))))]
        (render-text tokens text))
      (when (= index caret-line)       
        (render-caret caret-col metrics))]))
