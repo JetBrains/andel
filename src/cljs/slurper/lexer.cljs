@@ -1,9 +1,10 @@
 (ns slurper.lexer
   (:require [cljs.core.async :as core.async])
-  (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
+  (:require-macros [cljs.core.async.macros :refer [go go-loop]]
+                   [reagent.interop :refer [$]]))
 
 (defn- modespec->mode [modespec]
-  (.getMode js/CodeMirror (clj->js {:indentUnit 2}) modespec))
+  ($  js/CodeMirror getMode (clj->js {:indentUnit 2}) modespec))
 
 (defn- copy-state [mode state]
   (letfn
@@ -32,7 +33,7 @@
         *result (atom
                  {:tokens []
                   :state  state})]
-    (.runMode js/CodeMirror text modespec
+    ($ js/CodeMirror runMode text modespec
               (fn [text style line-number offset state]
                 (swap! *result
                        (fn [result]
