@@ -2,6 +2,7 @@
     (:require [slurper.lexer :as lexer]
               [slurper.theme :as theme]
               [reagent.core :as reagent]
+              [reagent.ratom :refer [track]]
               [reagent.session :as session]
               [slurper.keybind :as keybind]
               [garden.core :as g]
@@ -341,31 +342,27 @@
                  :left (px (* col width))
                  :height (px height)}}])
 
-(defn line-renderer-slow [*line *caret caret-here? *line-selection metrics]
-  (js/console.log (str "rendering" (:text @*line)))
-  (let [{:keys [text tokens] :as line} @*line]
-    [:div 
-     (when @*line-selection
-       (render-selection @*line-selection metrics))
-     (let [tokens (let [sel-tokens (when-let [[from to] @*line-selection]
-                                     [[from nil] [(subtract-offsets to from) :selected]])]
-                    (if (and (seq tokens) (some? sel-tokens))
-                      (shred-selection-with-tokens sel-tokens tokens)
-                      (map (fn [[len ttype]] [len (get theme/token-styles ttype)]) (or tokens sel-tokens [[:infinity nil]]))))]
-       (render-text tokens text))
-     (when @caret-here?
-       (let [[_ caret-col] @*caret]
-         (render-caret caret-col metrics)))]))
+(defn line-renderer-very-slow [{:keys [text tokens] :as line} *caret caret-here? line-selection metrics]
+  [:div
+   (when line-selection
+     (render-selection line-selection metrics))
+   (let [tokens (let [sel-tokens (when-let [[from to] line-selection]
+                                   [[from nil] [(subtract-offsets to from) :selected]])]
+                  (if (and (seq tokens) (some? sel-tokens))
+                    (shred-selection-with-tokens sel-tokens tokens)
+                    (map (fn [[len ttype]] [len (get theme/token-styles ttype)]) (or tokens sel-tokens [[:infinity nil]]))))]
+     (render-text tokens text))
+   (when caret-here?
+     (let [[_ caret-col] @*caret]
+       (render-caret caret-col metrics)))])
 
 (defn line-renderer [state index metrics]
-  (let [*index (reagent/atom index)
-        caret-here? (reaction (= @*index (first (:caret @state))))
-        *line (reaction (nth (:lines @state) @*index))
-        *line-selection (reaction (line-selection (:selection @state) @*index))
-        *caret (reaction (:caret @state))]
+  (let [*caret (reaction (:caret @state))]
     (fn [_ index metrics]
-      (reset! *index index)
-      [line-renderer-slow *line *caret caret-here? *line-selection metrics])))
+      (let [caret-here? (= index (first @*caret))
+            line (nth (:lines @state) index)
+            line-selection (line-selection (:selection @state) index)]
+        [line-renderer-very-slow line *caret caret-here? line-selection metrics]))))
 
 (defn editor [state]
   (let [{line-height :height
@@ -394,6 +391,7 @@
         (reagent/as-element
          [(fn []
             (let [listener (atom false)]
+              (js/console.log "render editor")
             [:> (-> js/window ($ :ReactVirtualized) ($ :List))
              {:ref (fn [this]
                      (when-not @listener
@@ -405,7 +403,6 @@
                                                 (.focus @dom-input)))))))
               :height ($ m :height)
               :width ($ m :width)
-              :font-family (:font-family (:font @state))
               :rowCount @lines-count
               :rowHeight line-height
               :overscanRowCount 100
@@ -413,10 +410,9 @@
                              (let [index ($ s :index)
                                    style ($ s :style)
                                    id  (:id (nth (:lines @state) index))]
-                               
                                (reagent/as-element
-                                ^{:key id}
-                                [:div {:style style}
+                                [:div {:style style
+                                       :key id}
                                  [line-renderer state index metrics]])))
               :noRowsRenderer (fn [] (reagent/as-element [:div "hello empty"]))}]))]))]]))
 
