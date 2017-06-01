@@ -392,21 +392,25 @@
 
 (defn left [] (swap! state move-caret-by [0 -1]))
 (defn home [] (swap! state move-caret-by [0 -1000000]))
+
 (defn right [] (swap! state move-caret-by [0 1]))
 (defn end [] (swap! state move-caret-by [0 1000000]))
 
-(defn up []
-  (swap! state move-caret-by [-1 0]))
+(defn up [] (swap! state move-caret-by [-1 0]))
+(defn pgup [] (swap! state move-caret-by [-10 0]))
 
-(defn down []
-  (swap! state move-caret-by [1 0]))
+(defn down [] (swap! state move-caret-by [1 0]))
+(defn pgdown [] (swap! state move-caret-by [10 0]))
 
-(keybind/bind! "left" :global (capture left))
-(keybind/bind! "home" :global (capture home))
+(keybind/bind! "left"   :global (capture left))
+(keybind/bind! "home"   :global (capture home))
 
-(keybind/bind! "right" :global (capture right))
-(keybind/bind! "end"   :global (capture end))
+(keybind/bind! "right"  :global (capture right))
+(keybind/bind! "end"    :global (capture end))
 
-(keybind/bind! "up"   :global (capture up))
-(keybind/bind! "down" :global (capture down))
+(keybind/bind! "up"     :global (capture up))
+(keybind/bind! "pgup"   :global (capture pgup))
+
+(keybind/bind! "down"   :global (capture down))
+(keybind/bind! "pgdown" :global (capture pgdown))
 
