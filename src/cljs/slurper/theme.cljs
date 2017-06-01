@@ -40,7 +40,7 @@
 
 (def token-styles {:keyword {:color (zenburn :yellow) :font-weight :bold}
                    :def {:color :steelblue}
-                   :comment {:color :cyan}
+                   :comment {:color (zenburn :green)}
                    :ws {}
                    :whatever {:color :yellow}
                    :selected {:color :white
