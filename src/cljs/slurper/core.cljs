@@ -218,6 +218,11 @@
     :infinity
     (- x y)))
 
+(defn add-offsets [x y]
+  (if (or (= x :infinity) (= y :infinity))
+    :infinity
+    (+ x y)))
+
 (defn shred [ranges]
   (->> ranges
        (mapcat (fn [{[from to] :range :keys [style] :as r}]
@@ -291,15 +296,15 @@
   (let [token-ranges  (first
                        (reduce (fn [[result offset] [len ttype]]
                                  [(conj result
-                                        {:range [offset (+ offset len)]
+                                        {:range [offset (add-offsets offset len)]
                                          :style (get theme/token-styles ttype)})
-                                  (+ offset len)]) [[] 0] tokens))
+                                  (add-offsets offset len)]) [[] 0] tokens))
         sel-ranges (first
                     (reduce (fn [[result offset] [len ttype]]
                               [(conj result
-                                     {:range [offset (+ offset len)]
+                                     {:range [offset (add-offsets offset len)]
                                       :style (get theme/token-styles ttype)})
-                               (+ offset len)]) [[] 0] sel-tokens))]
+                               (add-offsets offset len)]) [[] 0] sel-tokens))]
     (shred (concat token-ranges sel-ranges))))
 
 (defn render-caret [col {:keys [width height]}]
@@ -373,9 +378,11 @@
               :overscanRowCount 100
               :rowRenderer (fn [s]
                              (let [index ($ s :index)
-                                   style ($ s :style)]
+                                   style (js->clj ($ s :style))
+                                   id  (:id (nth (:lines @state) index))]
+                               
                                (reagent/as-element
-                                ^{:key index}
+                                ^{:key id}
                                 [line-renderer state index style metrics])))
               :noRowsRenderer (fn [] (reagent/as-element [:div "hello empty"]))}]))]))]]))
 
@@ -404,10 +411,16 @@
 (defonce *virtualized-state (atom :initial))
 
 (defn set-text [state text]
-  (-> state
-      (assoc :lines (mapv (fn [s] {:text s}) (clojure.string/split-lines text)))
-      (assoc :first-invalid 0)
-      (update :timestamp inc)))
+  (let [[lines! next-id] (reduce (fn [[next-id lines]]
+                           [(inc next-id) (conj! lines {:text s
+                                                        :id next-id})])
+                         [(:next-id state) (transient [])]
+                         (clojure.string/split-lines text))]
+    (-> state
+        (assoc :lines (persistent! lines!))
+        (assoc :next-id next-id)
+        (assoc :first-invalid 0)
+        (update :timestamp inc))))
 
 (defn fake-lexems [state]
   (assoc-in state [:lines 3 :tokens] [[1 :ws] [1 :comment] [1 :ws] [8 :keyword] [1 :ws] [5 :whatever]]))
@@ -477,10 +490,20 @@
 (defn- bind-function! [key f & args]
   (keybind/bind! key :global (capture #(swap! state (fn [s] (apply f s args))))))
 
+(defn <pos [[l1 c1] [l2 c2]]
+  (if (= l1 l2)
+    (< c1 c2)
+    (< l1 l2)))
 
+(defn min-pos [p1 p2]
+  (if (<pos p1 p2) p1 p2))
 
-(defn move-caret [{:keys [lines caret] :as state} dir]
-  (let [[line col] caret
+(defn max-pos [p1 p2]
+  (if (<pos p1 p2) p2 p1))
+
+(defn move-caret [{:keys [lines caret selection] :as state} dir selection?]
+  (let [[sel-from sel-to] selection
+        [line col] caret
         prev-line  (:text (get lines (dec line)))
         current-line (:text (get lines line))
         next-line (:text (get lines (inc line)))
@@ -494,28 +517,29 @@
                                                             col)]
                           [line (inc col)])
                  :up [(max 0 (dec line)) (min col (or (some-> prev-line (count)) col))]
-                 :down [(min (count lines) (inc line)) (min col (or (some-> next-line (count)) col))])]
-    (assoc state :caret caret')))
-
-(defn- move-caret-by [state [drow dcol] append-selection?]
-  (letfn [(clamp [v hi] (min (max v 0) hi))
-          (move [[row col]]
-            (let [new-row (clamp (+ row drow) (dec (count (:lines state))))
-                  line-len (count (get-in state [:lines new-row :text]))
-                  new-col (clamp (+ col dcol) line-len)]
-              [new-row new-col]))]
+                 :down [(min (count lines) (inc line)) (min col (or (some-> next-line (count)) col))])
+        selection' (cond
+                    (not selection?) [caret' caret']
+                    (= caret sel-from) [(min-pos caret' sel-to) (max-pos caret' sel-to)]
+                    (= caret sel-to) [(min-pos sel-from caret') (max-pos sel-from caret')]
+                    :else [(min-pos caret caret') (max-pos caret caret')])]
     (-> state
-        (update-in [:caret] move))))
-
-#_(defn- bind-movement! [key & args]
-  (bind-function! key #(apply move-caret-by % args)))
+        (assoc :caret caret')
+        (assoc :selection selection'))))
 
 
 
-(bind-function! "left" move-caret :left)
-(bind-function! "down" move-caret :down)
-(bind-function! "right" move-caret :right)
-(bind-function! "up" move-caret :up)
+
+
+(bind-function! "shift-left" move-caret :left true)
+(bind-function! "shift-right" move-caret :right true)
+(bind-function! "shift-up" move-caret :up true)
+(bind-function! "shift-down" move-caret :down true)
+
+(bind-function! "left" move-caret :left false)
+(bind-function! "down" move-caret :down false)
+(bind-function! "right" move-caret :right false)
+(bind-function! "up" move-caret :up false)
 
 (bind-function! "enter" enter-in)
 
