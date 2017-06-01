@@ -334,20 +334,23 @@
                  :height (px height)}}])
 
 (defn line-renderer [state index style metrics]
-  (let [[caret-line caret-col] (:caret @state)
-        {:keys [text tokens] :as line} (nth (:lines @state) index)
-        sel (line-selection (:selection @state) index)]
-    [:div {:style style}
-     (when sel
-       (render-selection sel metrics))
-     (let [tokens (let [sel-tokens (when-let [[from to] sel]
-                                     [[from nil] [(subtract-offsets to from) :selected]])]
-                    (if (and (seq tokens) (some? sel-tokens))
-                      (shred-selection-with-tokens sel-tokens tokens)
-                      (map (fn [[len ttype]] [len (get theme/token-styles ttype)]) (or tokens sel-tokens [[:infinity nil]]))))]
-       (render-text tokens text))
-     (when (= index caret-line)       
-       (render-caret caret-col metrics))]))
+  (let [caret-here? (reaction (= index (first (:caret @state))))
+        *line (reaction (nth (:lines @state) index))
+        *line-selection (reaction (line-selection (:selection @state) index))]
+    (fn []
+      (let [{:keys [text tokens] :as line} @*line]
+        [:div {:style style}
+         (when @*line-selection
+           (render-selection @*line-selection metrics))
+         (let [tokens (let [sel-tokens (when-let [[from to] @*line-selection]
+                                         [[from nil] [(subtract-offsets to from) :selected]])]
+                        (if (and (seq tokens) (some? sel-tokens))
+                          (shred-selection-with-tokens sel-tokens tokens)
+                          (map (fn [[len ttype]] [len (get theme/token-styles ttype)]) (or tokens sel-tokens [[:infinity nil]]))))]
+           (render-text tokens text))
+         (when @caret-here?
+           (let [[_ caret-col] (:caret @state)]
+             (render-caret caret-col metrics)))]))))
 
 (defn editor [state]
   (let [{line-height :height
@@ -398,15 +401,6 @@
                                 ^{:key index}
                                 [line-renderer state index style metrics])))
               :noRowsRenderer (fn [] (reagent/as-element [:div "hello empty"]))}]))]))]]))
-
-(defn- move-caret-by [state [drow dcol]]
-  (letfn [(clamp [v hi] (min (max v 0) hi))
-          (move [[row col]]
-            (let [new-row (clamp (+ row drow) (dec (count (:lines state))))
-                  line-len (count (get-in state [:lines new-row :text]))
-                  new-col (clamp (+ col dcol) line-len)]
-              [new-row new-col]))]
-    (update-in state [:caret] move)))
 
 (defn main []
   [:div {:style {:display :flex
@@ -502,23 +496,48 @@
     (.stopPropagation evt)
     (.preventDefault evt)))
 
-(defn- bind-function! [key f]
-  (keybind/bind! key :global (capture #(swap! state f))))
+(defn- bind-function! [key f & args]
+  (keybind/bind! key :global (capture #(swap! state (fn [s] (apply f s args))))))
 
-(defn- bind-movement! [key amount]
-  (bind-function! key #(move-caret-by % amount)))
 
-(bind-movement! "left" [0 -1])
-(bind-movement! "home" [0 -10000])
 
-(bind-movement! "right" [0 1])
-(bind-movement! "end"   [0 10000])
+(defn move-caret [{:keys [lines caret] :as state} dir]
+  (let [[line col] caret
+        prev-line  (:text (get lines (dec line)))
+        current-line (:text (get lines line))
+        next-line (:text (get lines (inc line)))
+        caret' (case dir
+                 :left (if (= col 0)
+                         [(max 0 (dec line)) (or (some-> prev-line count) 0)]
+                         [line (dec col)])
+                 :right (if (= col (count current-line))
+                          [(min (count lines) (inc line)) (if (some? next-line)
+                                                            0
+                                                            col)]
+                          [line (inc col)])
+                 :up [(max 0 (dec line)) (min col (or (some-> prev-line (count)) col))]
+                 :down [(min (count lines) (inc line)) (min col (or (some-> next-line (count)) col))])]
+    (assoc state :caret caret')))
 
-(bind-movement! "up"   [-1 0])
-(bind-movement! "pgup" [-10 0])
+(defn- move-caret-by [state [drow dcol] append-selection?]
+  (letfn [(clamp [v hi] (min (max v 0) hi))
+          (move [[row col]]
+            (let [new-row (clamp (+ row drow) (dec (count (:lines state))))
+                  line-len (count (get-in state [:lines new-row :text]))
+                  new-col (clamp (+ col dcol) line-len)]
+              [new-row new-col]))]
+    (-> state
+        (update-in [:caret] move))))
 
-(bind-movement! "down"   [1 0])
-(bind-movement! "pgdown" [10 0])
+#_(defn- bind-movement! [key & args]
+  (bind-function! key #(apply move-caret-by % args)))
+
+
+
+(bind-function! "left" move-caret :left)
+(bind-function! "down" move-caret :down)
+(bind-function! "right" move-caret :right)
+(bind-function! "up" move-caret :up)
 
 (bind-function! "enter" on-enter)
 
