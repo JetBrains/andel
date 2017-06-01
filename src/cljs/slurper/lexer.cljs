@@ -56,7 +56,7 @@
                      {:keys [tokens state]} (lex modespec text base-state)]
                  (swap! *states
                         (fn [states]
-                          (conj (vec (take (inc index) states)) state)))
+                          (conj (subvec 0 (inc index) states) state)))
                  (core.async/>! output (assoc req :tokens tokens)))
                (recur)))
     {:input input
