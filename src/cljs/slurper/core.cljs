@@ -288,17 +288,25 @@
                              [line-renderer state index style metrics])))
            :noRowsRenderer (fn [] (reagent/as-element [:div "hello empty"]))}]))]]))
 
+(defn- move-caret-by [state [drow dcol]]
+  (letfn [(clamp [v hi] (min (max v 0) hi))
+          (move [[row col]]
+            (let [new-row (clamp (+ row drow) 1000000)
+                  new-col (clamp (+ col dcol) 1000000)]
+              [new-row new-col]))]
+    (update-in state [:caret] move)))
+
 (defn right []
-  (swap! state update-in [:caret 1] inc))
+  (swap! state move-caret-by [0 1]))
 
 (defn left []
-  (swap! state update-in [:caret 1] dec))
+  (swap! state move-caret-by [0 -1]))
 
 (defn up []
-  (swap! state update-in [:caret 0] dec))
+  (swap! state move-caret-by [-1 0]))
 
 (defn down []
-  (swap! state update-in [:caret 0] inc))
+  (swap! state move-caret-by [1 0]))
 
 (defn main []
   [:div {:style {:display :flex
