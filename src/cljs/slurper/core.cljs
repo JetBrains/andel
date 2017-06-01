@@ -181,7 +181,7 @@
 (defn render-selection [[from to] {:keys [width height]}]
   [:div
    {:style
-    (merge {:background-color "blue"
+    (merge {:background-color theme/selection
             :height (px height)
             :position :absolute
             :top 0}
@@ -280,6 +280,7 @@
            :height ($ m :height)
            :width ($ m :width)
            :font-family (:font-family (:font @state))
+           :background-color theme/background
            :rowCount (count (:lines @state))
            :rowHeight line-height
            :rowRenderer (fn [s]

@@ -45,3 +45,6 @@
                    :whatever {:color :yellow}
                    :selected {:color :white
                               :layer 100}})
+
+(def background (zenburn :bg))
+(def selection (zenburn :bg-1))
