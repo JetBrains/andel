@@ -1,14 +1,14 @@
 (ns slurper.core
     (:require [slurper.lexer :as lexer]
               [slurper.theme :as theme]
-              [reagent.core :as reagent :refer [atom]]
+              [reagent.core :as reagent]
               [reagent.session :as session]
               [slurper.keybind :as keybind]
               [garden.core :as g]
               [clojure.core.async :as a]
               [cljs-http.client :as http])
     (:require-macros [reagent.interop :refer [$ $!]]
-                     [cljs.core.async.macros :refer [go alt!]]))
+                     [cljs.core.async.macros :refer [go]]))
 
 (defn head []
   (aget (js/document.getElementsByTagName "head") 0))
@@ -75,22 +75,34 @@
              state))))
 
 (defn attach-lexer! [{:keys [modespec lexer-broker]}]
-  (let [{:keys [input output] :as worker} (lexer/new-lexer-worker modespec)]
+  (let [{:keys [input output]} (lexer/new-lexer-worker modespec)]    
     (go
       (loop [state nil
-             line 0]
-        (let [next-text (some-> state :lines (get line) :text)
-              [val port] (alts! (cond-> [lexer-broker output]
-                                  (some? next-text) (conj [input {:index line
-                                                                  :text next-text
-                                                                  :req-ts (:timestamp state)}]))
-                                :priority true)]
-          (cond
-            (= port lexer-broker) (recur val (:first-invalid val))
-            (= port output) (do
-                              (deliver-lexems! val)
-                              (recur state (inc line)))
-            (= port input) (recur state line)))))))
+             line 0
+             to (a/timeout 10)
+             start-time 0]
+        
+        
+        (let [elapsed (- (.getTime (js/Date.)) start-time)
+              next-text (some-> state :lines (get line) :text)
+              [val port] (a/alts! (cond-> [to lexer-broker output]
+                                    (some? next-text) (conj [input {:index line
+                                                                    :text next-text
+                                                                    :req-ts (:timestamp state)}]))
+                                  :priority true)]
+          (let [start-time' (if (< 10 elapsed)
+                              (do (a/<! (a/timeout 10))
+                                  (.getTime (js/Date.)))
+                              start-time)]
+            
+            (cond
+              (= port to) (recur state line (a/timeout 10) start-time')
+              (= port lexer-broker) (recur val (:first-invalid val) to start-time')
+              (= port output) (do
+                                (deliver-lexems! val)
+                                (recur state (inc line) to start-time'))
+              (= port input) (recur state line to start-time'))))))
+    ))
 
 (comment
 
