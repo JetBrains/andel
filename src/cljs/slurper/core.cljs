@@ -470,3 +470,18 @@
   (type-in state "X"))
 
 (bind-function! "backspace" backspace-in)
+
+(defn bench [state]
+  (js/console.log "BENCH LEXING")
+  (let [{:keys [input output :as worker]} (lexer/new-lexer-worker "text/x-java")
+        start-time ($ js/Date now)]
+    (go
+     (doseq [[idx {:keys [text]}] (map vector (range) (:lines state))]
+       (a/>! input {:index idx :text text})
+       (let [resp (a/<! output)]
+         nil
+         #_(prn "RESP " resp)))
+     (js/console.log "FILE LEXING TIME: " (- ($ js/Date now) start-time))))
+  state)
+
+(bind-function! "ctrl-l" bench)
