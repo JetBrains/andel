@@ -212,6 +212,51 @@
        (second)
        (persistent!)))
 
+(defn <pos [[l1 c1] [l2 c2]]
+  (if (= l1 l2)
+    (< c1 c2)
+    (< l1 l2)))
+
+(defn min-pos [p1 p2]
+  (if (<pos p1 p2) p1 p2))
+
+(defn max-pos [p1 p2]
+  (if (<pos p1 p2) p2 p1))
+
+(defn move-caret [{:keys [lines caret selection] :as state} dir selection?]
+  (let [[sel-from sel-to] selection
+        [line col] caret
+        prev-line  (:text (get lines (dec line)))
+        current-line (:text (get lines line))
+        next-line (:text (get lines (inc line)))
+        caret' (case dir
+                 :left (if (= col 0)
+                         [(max 0 (dec line)) (or (some-> prev-line count) 0)]
+                         [line (dec col)])
+                 :right (if (= col (count current-line))
+                          [(min (count lines) (inc line)) (if (some? next-line)
+                                                            0
+                                                            col)]
+                          [line (inc col)])
+                 :up [(max 0 (dec line)) (min col (or (some-> prev-line (count)) col))]
+                 :down [(min (count lines) (inc line)) (min col (or (some-> next-line (count)) col))])
+        selection' (cond
+                     (not selection?) [caret' caret']
+                     (= caret sel-from) [(min-pos caret' sel-to) (max-pos caret' sel-to)]
+                     (= caret sel-to) [(min-pos sel-from caret') (max-pos sel-from caret')]
+                     :else [(min-pos caret caret') (max-pos caret caret')])]
+    (-> state
+        (assoc :caret caret')
+        (assoc :selection selection'))))
+
+(defn set-caret [state [line column]]
+  (let [max-column (count (get-in state [:lines line :text]))
+        max-line (count (:lines state))
+        caret [(min line max-line) (min column max-column)]]
+    (prn "NEW CARET: " caret)
+    (-> state
+        (assoc :caret caret)
+        (assoc :selection [caret caret]))))
 
 #_{:range [from to]
  :layer 5
@@ -342,7 +387,7 @@
                  :height (px height)}}])
 
 (defn line-renderer-slow [*line *caret caret-here? *line-selection metrics]
-  (js/console.log (str "rendering" (:text @*line)))
+  #_(js/console.log (str "rendering" (:text @*line)))
   (let [{:keys [text tokens] :as line} @*line]
     [:div 
      (when @*line-selection
@@ -366,6 +411,10 @@
     (fn [_ index metrics]
       (reset! *index index)
       [line-renderer-slow *line *caret caret-here? *line-selection metrics])))
+
+(defn on-mouse-click [line column]
+  (prn "LINE " line " column " column)
+  (swap! state #(set-caret % [line column])))
 
 (defn editor [state]
   (let [{line-height :height
@@ -393,20 +442,38 @@
       (fn [m]
         (reagent/as-element
          [(fn []
-            (let [listener (atom false)]
+            (prn "NEW COMP!")
+            (let [listener (clojure.core/atom false)
+                  *view-region (atom {:top 0
+                                      :client-height 0
+                                      :scroll-height 0})]
             [:> (-> js/window ($ :ReactVirtualized) ($ :List))
              {:ref (fn [this]
+                     (prn "LISTENER: " @listener)
                      (when-not @listener
+                       (prn "ADD LISTENER " @listener)
                        (when-let [node (reagent/dom-node this)]
                          (reset! listener true)
                          (.addEventListener node "focus"
                                             (fn []
                                               (when @dom-input
-                                                (.focus @dom-input)))))))
+                                                (.focus @dom-input))))
+                         (.addEventListener node "click"
+                                            (fn [event]
+                                              (let [absolute-x ($ event :clientX)
+                                                    absolute-y (+ ($ event :clientY) (:top @*view-region))]
+                                                (on-mouse-click (Math/round (/ absolute-y line-height))
+                                                                (Math/round (/ absolute-x ch-width))))
+                                              (.stopPropagation event)
+                                              (.preventDefault event))))))
               :height ($ m :height)
               :width ($ m :width)
               :font-family (:font-family (:font @state))
               :rowCount @lines-count
+              :onScroll (fn [view-region]
+                          (reset! *view-region {:top ($ view-region :scrollTop)
+                                                :client-height ($ view-region :clientHeight)
+                                                :scroll-height ($ view-region :scrollHeight)}))
               :rowHeight line-height
               :overscanRowCount 100
               :rowRenderer (fn [s]
@@ -522,47 +589,6 @@
 
 (defn- bind-function! [key f & args]
   (keybind/bind! key :global (capture #(swap! state (fn [s] (apply f s args))))))
-
-(defn <pos [[l1 c1] [l2 c2]]
-  (if (= l1 l2)
-    (< c1 c2)
-    (< l1 l2)))
-
-(defn min-pos [p1 p2]
-  (if (<pos p1 p2) p1 p2))
-
-(defn max-pos [p1 p2]
-  (if (<pos p1 p2) p2 p1))
-
-(defn move-caret [{:keys [lines caret selection] :as state} dir selection?]
-  (let [[sel-from sel-to] selection
-        [line col] caret
-        prev-line  (:text (get lines (dec line)))
-        current-line (:text (get lines line))
-        next-line (:text (get lines (inc line)))
-        caret' (case dir
-                 :left (if (= col 0)
-                         [(max 0 (dec line)) (or (some-> prev-line count) 0)]
-                         [line (dec col)])
-                 :right (if (= col (count current-line))
-                          [(min (count lines) (inc line)) (if (some? next-line)
-                                                            0
-                                                            col)]
-                          [line (inc col)])
-                 :up [(max 0 (dec line)) (min col (or (some-> prev-line (count)) col))]
-                 :down [(min (count lines) (inc line)) (min col (or (some-> next-line (count)) col))])
-        selection' (cond
-                    (not selection?) [caret' caret']
-                    (= caret sel-from) [(min-pos caret' sel-to) (max-pos caret' sel-to)]
-                    (= caret sel-to) [(min-pos sel-from caret') (max-pos sel-from caret')]
-                    :else [(min-pos caret caret') (max-pos caret caret')])]
-    (-> state
-        (assoc :caret caret')
-        (assoc :selection selection'))))
-
-
-
-
 
 (bind-function! "shift-left" move-caret :left true)
 (bind-function! "shift-right" move-caret :right true)
