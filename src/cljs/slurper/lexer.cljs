@@ -27,22 +27,18 @@
   (some-> style keyword))
 
 ;; [String LexerState] -> [[Token] LexerState]
-(defn lex [modespec text state]
+(defn lex [modespec text initial-state]
   (let [mode (modespec->mode modespec)
-        state (copy-state mode state)
-        *result (atom
-                 {:tokens []
-                  :state  state})]
+        tokens #js []
+        *state (atom initial-state)]
     ($ js/CodeMirror runMode text modespec
-              (fn [text style line-number offset state]
-                (swap! *result
-                       (fn [result]
-                         (-> result
-                             (update :tokens conj [(count text) (style->keyword style)])
-                             (assoc :state state)))))
-              (clj->js {:state state}))
-    @*result
-    #_(update @*result :state (partial copy-state mode))))
+       (fn [text style line-number offset state]
+         (.push tokens [(.-length text) (style->keyword style)])
+         (reset! *state state))
+       #js {:state (copy-state mode initial-state)})
+    
+    {:tokens (vec tokens)
+     :state @*state}))
 
 (defn submit-request! [{:keys [input] :as worker} {:keys [index text] :as req}]
   (core.async/put! input req))
@@ -50,16 +46,15 @@
 (defn new-lexer-worker [modespec]
   (let [input (core.async/chan)
         output (core.async/chan)
-        *states (atom [nil])]
+        states #js [nil]]
     (go-loop []
-             (when-let [{:keys [index text] :as req} (core.async/<! input)]
-               (let [base-state (nth @*states index)
-                     {:keys [tokens state]} (lex modespec text base-state)]
-                 (swap! *states
-                        (fn [states]
-                          (conj (subvec states 0 (inc index)) state)))
-                 (core.async/>! output (assoc req :tokens tokens)))
-               (recur)))
+      (when-let [{:keys [index text] :as req} (core.async/<! input)]
+        (let [base-state (aget states index)
+              {:keys [tokens state]} (lex modespec text base-state)]
+          (.splice states (inc index) (- (.-length states) index))
+          (.push states state)
+          (core.async/>! output (assoc req :tokens tokens)))
+        (recur)))
     {:input input
      :output output
      :modespec modespec}))
