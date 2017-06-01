@@ -420,6 +420,7 @@
          ch-width :width :as metrics} (measure "X")
         dom-input (atom nil)
         lines-count (reaction (count (:lines @state)))
+        caret-line (reaction (get-in @state [:caret 0]))
         view-region #js{}]
     [:div {:style {:display :flex
                    :background-color theme/background
@@ -458,6 +459,7 @@
               :height ($ m :height)
               :width ($ m :width)
               :font-family (:font-family (:font @state))
+              :scrollToIndex @caret-line
               :rowCount @lines-count
               :onScroll (fn [vr]
                           ($! view-region :value vr))
@@ -603,9 +605,6 @@
 (bind-function! "up" move-caret :up false)
 
 (bind-function! "enter" on-enter)
-
-(defn backspace [state]
-  (type-in state "X"))
 
 (bind-function! "backspace" on-backspace)
 
