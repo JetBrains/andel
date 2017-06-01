@@ -20,7 +20,7 @@
    #_[:link {:href "/firacode/fira_code.css"
            :rel "stylesheet"
            :type "text/css"
-           :async "false"}]
+             :async "false"}]
    (include-css "/react-virtualized.css")])
 
 (defn loading-page []

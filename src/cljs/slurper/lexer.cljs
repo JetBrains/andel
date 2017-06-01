@@ -43,7 +43,7 @@
     @*result
     #_(update @*result :state (partial copy-state mode))))
 
-(defn submit-request! [{:keys [input] :as worker} & {:keys [index text] :as req}]
+(defn submit-request! [{:keys [input] :as worker} {:keys [index text] :as req}]
   (core.async/put! input req))
 
 (defn new-lexer-worker [modespec]

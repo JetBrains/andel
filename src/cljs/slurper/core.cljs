@@ -7,7 +7,7 @@
               [clojure.core.async :as a]
               [cljs-http.client :as http])
     (:require-macros [reagent.interop :refer [$ $!]]
-                     [cljs.core.async.macros :refer [go]]))
+                     [cljs.core.async.macros :refer [go alt!]]))
 
 (defn head []
   (aget (js/document.getElementsByTagName "head") 0))
@@ -44,10 +44,15 @@
       res)))
 
 (defn make-editor-state []
-  {:lines []
-   :caret [0 0]
-   :selection [[3 0] [3 5]]
-   :font {:font-family "Fira Code"}})
+  (let [ch (a/chan)]
+    {:lines []
+     :caret [0 0]
+     :selection [[3 0] [3 5]]
+     :font {:font-family "Fira Code"}
+     :lexer-broker ch
+     :first-invalid 0
+     :modespec "text/x-java"
+     :timestamp 0}))
 
 (defn px [x]
   (str x "px"))
@@ -57,6 +62,38 @@
 (defonce on-keydown (keybind/dispatcher))
 
 (defonce keys-dispatcher (js/window.addEventListener "keydown" on-keydown true))
+
+(defn deliver-lexems! [{:keys [req-ts tokens index]}]
+  (swap! state
+         (fn [{:keys [timestamp] :as state}]
+           (if (= timestamp req-ts)
+             (-> state
+                 (assoc-in [:lines index :tokens] tokens)
+                 (assoc :first-invalid (inc index)))
+             state))))
+
+(defn attach-lexer! [{:keys [modespec lexer-broker]}]
+  (let [{:keys [input output] :as worker} (lexer/new-lexer-worker modespec)]
+    (go
+      (loop [state nil
+             line 0]
+        (when-let [next-text (some-> state :lines (get line) :text)]
+          (a/>! input {:index line
+                       :text next-text
+                       :req-ts (:timestamp state)}))
+        (let [[type x] (alt! lexer-broker ([s] [:new-state s])
+                             output ([l] [:lexems l])
+                             :priority true)]
+          (case type
+            :new-state (recur x (:first-invalid x))
+            :lexems (do
+                      (deliver-lexems! x)
+                      (recur state (inc line)))))))))
+
+(comment
+
+  (:timestamp @state)
+  )
 
 (defn update-line-lexems [{:keys [state text] :as line}]
   (let [{:keys [tokens state]} (lexer/lex "text/x-java" text nil)]
@@ -70,16 +107,26 @@
             (let [[before after] (split-at (inc line) lines)]
               (into (mapv update-line-lexems before) after)))))
 
+(defn invalidate-lines [state line]
+  (-> state
+      (update :first-invalid min line)
+      (update :timestamp inc)))
+
 (defn type-in [{[line col] :caret :as state} val]
   (-> state
    (update-in [:lines line :text]
               (fn [s]
                 (str (subs s 0 col) val (subs s col))))
    (update :caret (fn [[line col]] [line (inc col)]))
-   (update-lexems-upto line)
-   ((fn [state]
-     (prn "LINES: " (subvec (:lines state) 14 18))
-     state))))
+   (invalidate-lines line)))
+
+(defonce modification-watcher
+  (do (add-watch state :lexer
+                 (fn [_ _ {old-ts :timestamp} {new-ts :timestamp
+                                              broker :lexer-broker :as s}]
+                   (when (not= old-ts new-ts)
+                     (a/put! broker s))))
+      true))
 
 (defn line-selection [selection line]
   (let [[[from-line from-col] [to-line to-col]] selection]
@@ -333,7 +380,10 @@
 (defonce *virtualized-state (atom :initial))
 
 (defn set-text [state text]
-  (assoc state :lines (mapv (fn [s] {:text s}) (clojure.string/split-lines text))))
+  (-> state
+      (assoc :lines (mapv (fn [s] {:text s}) (clojure.string/split-lines text)))
+      (assoc :first-invalid 0)
+      (update :timestamp inc)))
 
 (defn fake-lexems [state]
   (assoc-in state [:lines 3 :tokens] [[1 :ws] [1 :comment] [1 :ws] [8 :keyword] [1 :ws] [5 :whatever]]))
@@ -359,9 +409,8 @@
                    (go
                      (let [text (:body (a/<! (http/get "/EditorImpl.java")))]
                        (reset! *virtualized-state :ready)
-                       (swap! state (fn [state] (-> state
-                                                   (set-text text)
-                                                   (fake-lexems))))
+                       (attach-lexer! @state)
+                       (swap! state set-text text)
                        (cb)
                        )))
                  100))))))))))
@@ -387,10 +436,10 @@
                             (cb))))))))
 
 (defn mount-root []
-  (with-virtualized
-   #(with-codemirror
-     (fn []
-        (reagent/render [main] (.getElementById js/document "app"))))))
+  (with-codemirror
+    #(with-virtualized
+       (fn []
+         (reagent/render [main] (.getElementById js/document "app"))))))
 
 (defn init! []
   (mount-root))
