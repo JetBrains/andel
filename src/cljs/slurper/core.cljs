@@ -291,7 +291,7 @@
 (defn- move-caret-by [state [drow dcol]]
   (letfn [(clamp [v hi] (min (max v 0) hi))
           (move [[row col]]
-            (let [new-row (clamp (+ row drow) 1000000)
+            (let [new-row (clamp (+ row drow) (dec (count (:lines state))))
                   new-col (clamp (+ col dcol) 1000000)]
               [new-row new-col]))]
     (update-in state [:caret] move)))
