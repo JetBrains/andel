@@ -297,18 +297,6 @@
               [new-row new-col]))]
     (update-in state [:caret] move)))
 
-(defn right []
-  (swap! state move-caret-by [0 1]))
-
-(defn left []
-  (swap! state move-caret-by [0 -1]))
-
-(defn up []
-  (swap! state move-caret-by [-1 0]))
-
-(defn down []
-  (swap! state move-caret-by [1 0]))
-
 (defn main []
   [:div {:style {:display :flex
                  :flex "1"}}
@@ -402,7 +390,23 @@
     (.stopPropagation evt)
     (.preventDefault evt)))
 
+(defn left [] (swap! state move-caret-by [0 -1]))
+(defn home [] (swap! state move-caret-by [0 -1000000]))
+(defn right [] (swap! state move-caret-by [0 1]))
+(defn end [] (swap! state move-caret-by [0 1000000]))
+
+(defn up []
+  (swap! state move-caret-by [-1 0]))
+
+(defn down []
+  (swap! state move-caret-by [1 0]))
+
 (keybind/bind! "left" :global (capture left))
+(keybind/bind! "home" :global (capture home))
+
 (keybind/bind! "right" :global (capture right))
-(keybind/bind! "up" :global (capture up))
+(keybind/bind! "end"   :global (capture end))
+
+(keybind/bind! "up"   :global (capture up))
 (keybind/bind! "down" :global (capture down))
+
