@@ -1,5 +1,6 @@
 (ns slurper.core
     (:require [slurper.lexer :as lexer]
+              [slurper.theme :as theme]
               [reagent.core :as reagent :refer [atom]]
               [reagent.session :as session]
               [slurper.keybind :as keybind]
@@ -107,18 +108,11 @@
             (let [[before after] (split-at (inc line) lines)]
               (into (mapv update-line-lexems before) after)))))
 
+
 (defn invalidate-lines [state line]
   (-> state
       (update :first-invalid min line)
       (update :timestamp inc)))
-
-(defn type-in [{[line col] :caret :as state} val]
-  (-> state
-   (update-in [:lines line :text]
-              (fn [s]
-                (str (subs s 0 col) val (subs s col))))
-   (update :caret (fn [[line col]] [line (inc col)]))
-   (invalidate-lines line)))
 
 (defonce modification-watcher
   (do (add-watch state :lexer
@@ -127,6 +121,25 @@
                    (when (not= old-ts new-ts)
                      (a/put! broker s))))
       true))
+
+(defn delete-insert [state delete insert]
+  (let [[line col] (:caret state)]
+    (update-in state [:lines line :text]
+               (fn [s]
+                 (str (subs s 0 (- col delete)) insert (subs s col))))))
+
+(defn type-in [{[line col] :caret :as state} val]
+  (-> state
+      (delete-insert 0 val)
+      (update :caret (fn [[line col]] [line (inc col)]))      
+      (invalidate-lines line)))
+
+(defn backspace-in [{[line col] :caret :as state}]
+  (-> state
+      (delete-insert 1 "")
+      (update :caret (fn [[line col]] [line (dec col)]))
+      (invalidate-lines line)))
+
 
 (defn line-selection [selection line]
   (let [[[from-line from-col] [to-line to-col]] selection]
@@ -142,12 +155,6 @@
                [(subs s frag) (conj res (subs s 0 frag))]))
            [s []] fragments)))
 
-(def token-styles {:keyword {:color :magenta}
-                   :comment {:color :cyan}
-                   :ws {}
-                   :whatever {:color :yellow}
-                   :selected {:color :white
-                              :layer 100}})
 
 #_{:range [from to]
  :layer 5
@@ -226,7 +233,7 @@
 (defn render-selection [[from to] {:keys [width height]}]
   [:div
    {:style
-    (merge {:background-color "blue"
+    (merge {:background-color theme/selection
             :height (px height)
             :position :absolute
             :top 0}
@@ -254,13 +261,13 @@
                        (reduce (fn [[result offset] [len ttype]]
                                  [(conj result
                                         {:range [offset (+ offset len)]
-                                         :style (get token-styles ttype)})
+                                         :style (get theme/token-styles ttype)})
                                   (+ offset len)]) [[] 0] tokens))
         sel-ranges (first
                     (reduce (fn [[result offset] [len ttype]]
                               [(conj result
                                      {:range [offset (+ offset len)]
-                                      :style (get token-styles ttype)})
+                                      :style (get theme/token-styles ttype)})
                                (+ offset len)]) [[] 0] sel-tokens))]
     (shred (concat token-ranges sel-ranges))))
 
@@ -283,7 +290,7 @@
                                      [[from nil] [(subtract-offsets to from) :selected]])]
                     (if (and (seq tokens) (some? sel-tokens))
                       (shred-selection-with-tokens sel-tokens tokens)
-                      (map (fn [[len ttype]] [len (get token-styles ttype)]) (or tokens sel-tokens [[:infinity nil]]))))]
+                      (map (fn [[len ttype]] [len (get theme/token-styles ttype)]) (or tokens sel-tokens [[:infinity nil]]))))]
        (render-text tokens text))
      (when (= index caret-line)       
        (render-caret caret-col metrics))]))
@@ -325,6 +332,7 @@
            :height ($ m :height)
            :width ($ m :width)
            :font-family (:font-family (:font @state))
+           :background-color theme/background
            :rowCount (count (:lines @state))
            :rowHeight line-height
            :rowRenderer (fn [s]
@@ -338,22 +346,11 @@
 (defn- move-caret-by [state [drow dcol]]
   (letfn [(clamp [v hi] (min (max v 0) hi))
           (move [[row col]]
-            (let [new-row (clamp (+ row drow) 1000000)
-                  new-col (clamp (+ col dcol) 1000000)]
+            (let [new-row (clamp (+ row drow) (dec (count (:lines state))))
+                  line-len (count (get-in state [:lines new-row :text]))
+                  new-col (clamp (+ col dcol) line-len)]
               [new-row new-col]))]
     (update-in state [:caret] move)))
-
-(defn right []
-  (swap! state move-caret-by [0 1]))
-
-(defn left []
-  (swap! state move-caret-by [0 -1]))
-
-(defn up []
-  (swap! state move-caret-by [-1 0]))
-
-(defn down []
-  (swap! state move-caret-by [1 0]))
 
 (defn main []
   [:div {:style {:display :flex
@@ -450,7 +447,25 @@
     (.stopPropagation evt)
     (.preventDefault evt)))
 
-(keybind/bind! "left" :global (capture left))
-(keybind/bind! "right" :global (capture right))
-(keybind/bind! "up" :global (capture up))
-(keybind/bind! "down" :global (capture down))
+(defn- bind-function! [key f]
+  (keybind/bind! key :global (capture #(swap! state f))))
+
+(defn- bind-movement! [key amount]
+  (bind-function! key #(move-caret-by % amount)))
+
+(bind-movement! "left" [0 -1])
+(bind-movement! "home" [0 -10000])
+
+(bind-movement! "right" [0 1])
+(bind-movement! "end"   [0 10000])
+
+(bind-movement! "up"   [-1 0])
+(bind-movement! "pgup" [-10 0])
+
+(bind-movement! "down"   [1 0])
+(bind-movement! "pgdown" [10 0])
+
+(defn backspace [state]
+  (type-in state "X"))
+
+(bind-function! "backspace" backspace-in)
