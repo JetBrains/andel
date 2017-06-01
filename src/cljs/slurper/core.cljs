@@ -390,27 +390,18 @@
     (.stopPropagation evt)
     (.preventDefault evt)))
 
-(defn left [] (swap! state move-caret-by [0 -1]))
-(defn home [] (swap! state move-caret-by [0 -1000000]))
+(defn- bind-movement! [key amount]
+  (keybind/bind! key :global
+                 (capture #(swap! state move-caret-by amount))))
 
-(defn right [] (swap! state move-caret-by [0 1]))
-(defn end [] (swap! state move-caret-by [0 1000000]))
+(bind-movement! "left" [0 -1])
+(bind-movement! "home" [0 -10000])
 
-(defn up [] (swap! state move-caret-by [-1 0]))
-(defn pgup [] (swap! state move-caret-by [-10 0]))
+(bind-movement! "right" [0 1])
+(bind-movement! "end"   [0 10000])
 
-(defn down [] (swap! state move-caret-by [1 0]))
-(defn pgdown [] (swap! state move-caret-by [10 0]))
+(bind-movement! "up"   [-1 0])
+(bind-movement! "pgup" [-10 0])
 
-(keybind/bind! "left"   :global (capture left))
-(keybind/bind! "home"   :global (capture home))
-
-(keybind/bind! "right"  :global (capture right))
-(keybind/bind! "end"    :global (capture end))
-
-(keybind/bind! "up"     :global (capture up))
-(keybind/bind! "pgup"   :global (capture pgup))
-
-(keybind/bind! "down"   :global (capture down))
-(keybind/bind! "pgdown" :global (capture pgdown))
-
+(bind-movement! "down"   [1 0])
+(bind-movement! "pgdown" [10 0])
