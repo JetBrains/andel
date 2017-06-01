@@ -64,10 +64,10 @@
            :tokens tokens
            :state state)))
 
-(defn update-lexems-before [state line]
+(defn update-lexems-upto [state line]
   (update state :lines
           (fn [lines]
-            (let [[before after] (split-at line lines)]
+            (let [[before after] (split-at (inc line) lines)]
               (into (mapv update-line-lexems before) after)))))
 
 (defn type-in [{[line col] :caret :as state} val]
@@ -76,9 +76,9 @@
               (fn [s]
                 (str (subs s 0 col) val (subs s col))))
    (update :caret (fn [[line col]] [line (inc col)]))
-   (update-lexems-before line)
+   (update-lexems-upto line)
    ((fn [state]
-     (prn "LINES: " (subvec (:lines state) 19 25))
+     (prn "LINES: " (subvec (:lines state) 14 18))
      state))))
 
 (defn line-selection [selection line]
