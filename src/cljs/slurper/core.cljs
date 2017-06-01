@@ -78,18 +78,18 @@
     (go
       (loop [state nil
              line 0]
-        (when-let [next-text (some-> state :lines (get line) :text)]
-          (a/>! input {:index line
-                       :text next-text
-                       :req-ts (:timestamp state)}))
-        (let [[type x] (alt! lexer-broker ([s] [:new-state s])
-                             output ([l] [:lexems l])
-                             :priority true)]
-          (case type
-            :new-state (recur x (:first-invalid x))
-            :lexems (do
-                      (deliver-lexems! x)
-                      (recur state (inc line)))))))))
+        (let [next-text (some-> state :lines (get line) :text)
+              [val port] (alts! (cond-> [lexer-broker output]
+                                  (some? next-text) (conj [input {:index line
+                                                                  :text next-text
+                                                                  :req-ts (:timestamp state)}]))
+                                :priority true)]
+          (cond
+            (= port lexer-broker) (recur val (:first-invalid val))
+            (= port output) (do
+                              (deliver-lexems! val)
+                              (recur state (inc line)))
+            (= port input) (recur state line)))))))
 
 (comment
 
@@ -117,7 +117,7 @@
 (defonce modification-watcher
   (do (add-watch state :lexer
                  (fn [_ _ {old-ts :timestamp} {new-ts :timestamp
-                                              broker :lexer-broker :as s}]
+                                              broker :lexer-broker :as s}]                   
                    (when (not= old-ts new-ts)
                      (a/put! broker s))))
       true))
