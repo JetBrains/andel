@@ -38,7 +38,7 @@
    :blue-5    "#366060"
    :magenta   "#DC8CC3"})
 
-(def token-styles {:keyword {:color (zenburn :magenta) :font-weight :bold}
+(def token-styles {:keyword {:color (zenburn :yellow) :font-weight :bold}
                    :def {:color :steelblue}
                    :comment {:color :cyan}
                    :ws {}
@@ -47,4 +47,5 @@
                               :layer 100}})
 
 (def background (zenburn :bg))
+(def foreground (zenburn :fg))
 (def selection (zenburn :bg-1))
