@@ -39,8 +39,12 @@
    :magenta   "#DC8CC3"})
 
 (def token-styles {:keyword {:color (zenburn :yellow) :font-weight :bold}
-                   :def {:color :steelblue}
+                   :def {:color (zenburn :blue-1)}
+                   :variable {:color (zenburn :cyan)}
+                   :variable-3 {:color (zenburn :blue+1)}
+                   :meta {:color (zenburn :green+4)}
                    :comment {:color (zenburn :green)}
+                   :string {:color (zenburn :red)}
                    :ws {}
                    :whatever {:color :yellow}
                    :selected {:color :white
