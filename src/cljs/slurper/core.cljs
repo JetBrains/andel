@@ -177,12 +177,14 @@
        (if (= line to-line) to-col :infinity)])))
 
 (defn fragments [s fragments]
-  (second
-   (reduce (fn [[s res] frag]
-             (if (= frag :infinity)
-               (reduced [nil (conj res s)])
-               [(subs s frag) (conj res (subs s 0 frag))]))
-           [s []] fragments)))
+  (->> fragments
+       (reduce (fn [[s res] frag]
+                 (if (= frag :infinity)
+                   (reduced [nil (conj! res s)])
+                   [(subs s frag) (conj! res (subs s 0 frag))]))
+               [s (transient [])])
+       (second)
+       (persistent!)))
 
 
 #_{:range [from to]
@@ -365,6 +367,7 @@
               :font-family (:font-family (:font @state))
               :rowCount @lines-count
               :rowHeight line-height
+              :overscanRowCount 100
               :rowRenderer (fn [s]
                              (let [index ($ s :index)
                                    style ($ s :style)]

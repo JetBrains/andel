@@ -56,7 +56,7 @@
               :output-dir "target/uberjar"
               :main "slurper.prod"
               :optimizations :advanced
-              :pseudo-names true
+;              :pseudo-names true
               :pretty-print  false}}
             :app
             {:source-paths ["src/cljs" "src/cljc" "env/dev/cljs"]
