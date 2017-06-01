@@ -70,16 +70,23 @@
             (let [[before after] (split-at (inc line) lines)]
               (into (mapv update-line-lexems before) after)))))
 
+(defn delete-insert [state delete insert]
+  (let [[line col] (:caret state)]
+    (update-in state [:lines line :text]
+               (fn [s]
+                 (str (subs s 0 (- col delete)) insert (subs s col))))))
+
 (defn type-in [{[line col] :caret :as state} val]
   (-> state
-   (update-in [:lines line :text]
-              (fn [s]
-                (str (subs s 0 col) val (subs s col))))
-   (update :caret (fn [[line col]] [line (inc col)]))
-   (update-lexems-upto line)
-   ((fn [state]
-     (prn "LINES: " (subvec (:lines state) 14 18))
-     state))))
+      (delete-insert 0 val)
+      (update :caret (fn [[line col]] [line (inc col)]))
+      (update-lexems-upto line)))
+
+(defn backspace-in [{[line col] :caret :as state}]
+  (-> state
+      (delete-insert 1 "")
+      (update :caret (fn [[line col]] [line (dec col)]))
+      (update-lexems-upto line)))
 
 (defn line-selection [selection line]
   (let [[[from-line from-col] [to-line to-col]] selection]
@@ -390,9 +397,11 @@
     (.stopPropagation evt)
     (.preventDefault evt)))
 
+(defn- bind-function! [key f]
+  (keybind/bind! key :global (capture #(swap! state f))))
+
 (defn- bind-movement! [key amount]
-  (keybind/bind! key :global
-                 (capture #(swap! state move-caret-by amount))))
+  (bind-function! key #(move-caret-by % amount)))
 
 (bind-movement! "left" [0 -1])
 (bind-movement! "home" [0 -10000])
@@ -405,3 +414,8 @@
 
 (bind-movement! "down"   [1 0])
 (bind-movement! "pgdown" [10 0])
+
+(defn backspace [state]
+  (type-in state "X"))
+
+(bind-function! "backspace" backspace-in)
