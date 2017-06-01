@@ -4,16 +4,16 @@
                    [reagent.interop :refer [$]]))
 
 (defn- modespec->mode [modespec]
-  ($  js/CodeMirror getMode (clj->js {:indentUnit 2}) modespec))
+  ($  js/CodeMirror getMode #js{:indentUnit 2} modespec))
 
 (defn- copy-state [mode state]
   (letfn
     [(copy-value [v]
                  (if (array? v)
-                   (.concat v (clj->js []))
+                   (.concat v #js[])
                    v))
      (default-copy-state [state]
-                         (let [js-obj (clj->js {})]
+                         (let [js-obj #js{}]
                            (doseq [k (js-keys state)]
                              (aset js-obj k (copy-value (aget state k))))
                            js-obj))]

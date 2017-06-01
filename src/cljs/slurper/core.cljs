@@ -8,6 +8,7 @@
               [clojure.core.async :as a]
               [cljs-http.client :as http])
     (:require-macros [reagent.interop :refer [$ $!]]
+                     [reagent.ratom :refer [reaction]]
                      [cljs.core.async.macros :refer [go]]))
 
 (defn head []
@@ -152,6 +153,23 @@
       (invalidate-lines line)))
 
 
+(defn split-line [{:keys [text] :as line} column]
+  [{:text (subs text 0 column)}
+   {:text (subs text column (count text))}])
+
+(defn enter-in [state]
+  (let [[line-number column] (:caret state)
+        lines (:lines state)
+        [before after] (split-at line-number lines)
+        current-line (or (first after) {:text ""})
+        new-lines (vec (concat before
+                               (split-line current-line column)
+                               (rest after)))]
+    (-> state
+        (assoc :lines new-lines)
+        (assoc :caret [(inc line-number) 0])
+        (invalidate-lines line-number))))
+
 (defn line-selection [selection line]
   (let [[[from-line from-col] [to-line to-col]] selection]
     (when (<= from-line line to-line)
@@ -293,26 +311,29 @@
                  :height (px height)}}])
 
 (defn line-renderer [state index style metrics]
-  (let [[caret-line caret-col] (:caret @state)
-        {:keys [text tokens] :as line} (nth (:lines @state) index)
-        sel (line-selection (:selection @state) index)]
-    [:div {:style style}
-     (when sel
-       (render-selection sel metrics))
-     (let [tokens (let [sel-tokens (when-let [[from to] sel]
-                                     [[from nil] [(subtract-offsets to from) :selected]])]
-                    (if (and (seq tokens) (some? sel-tokens))
-                      (shred-selection-with-tokens sel-tokens tokens)
-                      (map (fn [[len ttype]] [len (get theme/token-styles ttype)]) (or tokens sel-tokens [[:infinity nil]]))))]
-       (render-text tokens text))
-     (when (= index caret-line)       
-       (render-caret caret-col metrics))]))
+  (let [caret-here? (reaction (= index (first (:caret @state))))
+        *line (reaction (nth (:lines @state) index))
+        *line-selection (reaction (line-selection (:selection @state) index))]
+    (fn []
+      (let [{:keys [text tokens] :as line} @*line]
+        [:div {:style style}
+         (when @*line-selection
+           (render-selection @*line-selection metrics))
+         (let [tokens (let [sel-tokens (when-let [[from to] @*line-selection]
+                                         [[from nil] [(subtract-offsets to from) :selected]])]
+                        (if (and (seq tokens) (some? sel-tokens))
+                          (shred-selection-with-tokens sel-tokens tokens)
+                          (map (fn [[len ttype]] [len (get theme/token-styles ttype)]) (or tokens sel-tokens [[:infinity nil]]))))]
+           (render-text tokens text))
+         (when @caret-here?
+           (let [[_ caret-col] (:caret @state)]
+             (render-caret caret-col metrics)))]))))
 
 (defn editor [state]
   (let [{line-height :height
          ch-width :width :as metrics} (measure "X")
         dom-input (atom nil)
-        listener (atom false)]
+        lines-count (reaction (count (:lines @state)))]
     [:div {:style {:display :flex
                    :background-color theme/background
                    :flex 1}}
@@ -333,29 +354,30 @@
      [:> (-> js/window ($ :ReactVirtualized) ($ :AutoSizer))
       (fn [m]
         (reagent/as-element
-         [:> (-> js/window ($ :ReactVirtualized) ($ :List))
-
-          {:ref (fn [this]
-                  (when-not @listener
-                    (when-let [node (reagent/dom-node this)]
-                      (reset! listener true)
-                      (.addEventListener node "focus"
-                                          (fn []
+         [(fn []
+            (let [listener (atom false)]
+            [:> (-> js/window ($ :ReactVirtualized) ($ :List))
+             {:ref (fn [this]
+                     (when-not @listener
+                       (when-let [node (reagent/dom-node this)]
+                         (reset! listener true)
+                         (.addEventListener node "focus"
+                                            (fn []
                                               (when @dom-input
                                                 (.focus @dom-input)))))))
-           :height ($ m :height)
-           :width ($ m :width)
-           :font-family (:font-family (:font @state))
-           :rowCount (count (:lines @state))
-           :rowHeight line-height
-           :overscanRowCount 100
-           :rowRenderer (fn [s]
-                          (let [index ($ s :index)
-                                style ($ s :style)]
-                            (reagent/as-element
-                             ^{:key index}
-                             [line-renderer state index style metrics])))
-           :noRowsRenderer (fn [] (reagent/as-element [:div "hello empty"]))}]))]]))
+              :height ($ m :height)
+              :width ($ m :width)
+              :font-family (:font-family (:font @state))
+              :rowCount @lines-count
+              :rowHeight line-height
+              :overscanRowCount 100
+              :rowRenderer (fn [s]
+                             (let [index ($ s :index)
+                                   style ($ s :style)]
+                               (reagent/as-element
+                                ^{:key index}
+                                [line-renderer state index style metrics])))
+              :noRowsRenderer (fn [] (reagent/as-element [:div "hello empty"]))}]))]))]]))
 
 (defn main []
   [:div {:style {:display :flex
@@ -495,4 +517,21 @@
 (bind-function! "right" move-caret :right)
 (bind-function! "up" move-caret :up)
 
+(bind-function! "enter" enter-in)
+
 (bind-function! "backspace" backspace-in)
+
+(defn bench [state]
+  (js/console.log "BENCH LEXING")
+  (let [{:keys [input output :as worker]} (lexer/new-lexer-worker "text/x-java")
+        start-time ($ js/Date now)]
+    (go
+     (doseq [[idx {:keys [text]}] (map vector (range) (:lines state))]
+       (a/>! input {:index idx :text text})
+       (let [resp (a/<! output)]
+         nil
+         #_(prn "RESP " resp)))
+     (js/console.log "FILE LEXING TIME: " (- ($ js/Date now) start-time))))
+  state)
+
+(bind-function! "ctrl-l" bench)
