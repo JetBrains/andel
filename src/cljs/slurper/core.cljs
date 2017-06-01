@@ -102,7 +102,8 @@
                [(subs s frag) (conj res (subs s 0 frag))]))
            [s []] fragments)))
 
-(def token-styles {:keyword {:color :magenta}
+(def token-styles {:keyword {:color :magenta :font-weight :bold}
+                   :def {:color :steelblue}
                    :comment {:color :cyan}
                    :ws {}
                    :whatever {:color :yellow}
