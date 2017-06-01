@@ -18,6 +18,7 @@
                  [secretary "1.2.3"]
                  [cljs-http "0.1.43"]
                  [garden "1.3.2"]
+                 [hiccups "0.3.0"]
                  [org.clojure/core.async "0.3.443"]
                  [venantius/accountant "0.2.0"
                   :exclusions [org.clojure/tools.reader]]]
