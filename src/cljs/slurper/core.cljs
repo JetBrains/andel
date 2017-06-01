@@ -8,6 +8,7 @@
               [clojure.core.async :as a]
               [cljs-http.client :as http])
     (:require-macros [reagent.interop :refer [$ $!]]
+                     [reagent.ratom :refer [reaction]]
                      [cljs.core.async.macros :refer [go]]))
 
 (defn head []
@@ -151,6 +152,23 @@
       (update :caret (fn [[line col]] [line (dec col)]))
       (invalidate-lines line)))
 
+
+(defn split-line [{:keys [text] :as line} column]
+  [{:text (subs text 0 column)}
+   {:text (subs text column (count text))}])
+
+(defn enter-in [state]
+  (let [[line-number column] (:caret state)
+        lines (:lines state)
+        [before after] (split-at line-number lines)
+        current-line (or (first after) {:text ""})
+        new-lines (vec (concat before
+                               (split-line current-line column)
+                               (rest after)))]
+    (-> state
+        (assoc :lines new-lines)
+        (assoc :caret [(inc line-number) 0])
+        (invalidate-lines line-number))))
 
 (defn line-selection [selection line]
   (let [[[from-line from-col] [to-line to-col]] selection]
@@ -310,7 +328,7 @@
   (let [{line-height :height
          ch-width :width :as metrics} (measure "X")
         dom-input (atom nil)
-        listener (atom false)]
+        lines-count (reaction (count (:lines @state)))]
     [:div {:style {:display :flex
                    :background-color theme/background
                    :flex 1}}
@@ -331,28 +349,29 @@
      [:> (-> js/window ($ :ReactVirtualized) ($ :AutoSizer))
       (fn [m]
         (reagent/as-element
-         [:> (-> js/window ($ :ReactVirtualized) ($ :List))
-
-          {:ref (fn [this]
-                  (when-not @listener
-                    (when-let [node (reagent/dom-node this)]
-                      (reset! listener true)
-                      (.addEventListener node "focus"
-                                          (fn []
+         [(fn []
+            (let [listener (atom false)]
+            [:> (-> js/window ($ :ReactVirtualized) ($ :List))
+             {:ref (fn [this]
+                     (when-not @listener
+                       (when-let [node (reagent/dom-node this)]
+                         (reset! listener true)
+                         (.addEventListener node "focus"
+                                            (fn []
                                               (when @dom-input
                                                 (.focus @dom-input)))))))
-           :height ($ m :height)
-           :width ($ m :width)
-           :font-family (:font-family (:font @state))
-           :rowCount (count (:lines @state))
-           :rowHeight line-height
-           :rowRenderer (fn [s]
-                          (let [index ($ s :index)
-                                style ($ s :style)]
-                            (reagent/as-element
-                             ^{:key index}
-                             [line-renderer state index style metrics])))
-           :noRowsRenderer (fn [] (reagent/as-element [:div "hello empty"]))}]))]]))
+              :height ($ m :height)
+              :width ($ m :width)
+              :font-family (:font-family (:font @state))
+              :rowCount @lines-count
+              :rowHeight line-height
+              :rowRenderer (fn [s]
+                             (let [index ($ s :index)
+                                   style ($ s :style)]
+                               (reagent/as-element
+                                ^{:key index}
+                                [line-renderer state index style metrics])))
+              :noRowsRenderer (fn [] (reagent/as-element [:div "hello empty"]))}]))]))]]))
 
 (defn- move-caret-by [state [drow dcol]]
   (letfn [(clamp [v hi] (min (max v 0) hi))
@@ -475,6 +494,8 @@
 
 (bind-movement! "down"   [1 0])
 (bind-movement! "pgdown" [10 0])
+
+(bind-function! "enter" enter-in)
 
 (defn backspace [state]
   (type-in state "X"))
