@@ -72,36 +72,34 @@
              (-> state
                  (assoc-in [:lines index :tokens] tokens)
                  (assoc :first-invalid (inc index)))
-             state))))
+             state)))
+  (= (:timestamp @state) req-ts))
 
 (defn attach-lexer! [{:keys [modespec lexer-broker]}]
   (let [{:keys [input output]} (lexer/new-lexer-worker modespec)]    
     (go
       (loop [state nil
              line 0
-             to (a/timeout 10)
              start-time 0]
-        
-        
         (let [elapsed (- (.getTime (js/Date.)) start-time)
               next-text (some-> state :lines (get line) :text)
-              [val port] (a/alts! (cond-> [to lexer-broker output]
+              
+              [val port] (a/alts! (cond-> [lexer-broker output]
                                     (some? next-text) (conj [input {:index line
                                                                     :text next-text
                                                                     :req-ts (:timestamp state)}]))
                                   :priority true)]
           (let [start-time' (if (< 10 elapsed)
-                              (do (a/<! (a/timeout 10))
+                              (do (a/<! (a/timeout 1))
                                   (.getTime (js/Date.)))
-                              start-time)]
-            
+                              start-time)]            
             (cond
-              (= port to) (recur state line (a/timeout 10) start-time')
-              (= port lexer-broker) (recur val (:first-invalid val) to start-time')
+              (= port lexer-broker) (recur val (:first-invalid val) start-time')
               (= port output) (do
-                                (deliver-lexems! val)
-                                (recur state (inc line) to start-time'))
-              (= port input) (recur state line to start-time'))))))
+                           
+                                (let [delivered?  (deliver-lexems! val)]
+                                  (recur state (if delivered? (inc line) line) start-time')))
+              (= port input) (recur state line start-time'))))))
     ))
 
 (comment
