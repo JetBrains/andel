@@ -1,6 +1,7 @@
 (ns slurper.core
     (:require [slurper.lexer :as lexer]
               [slurper.theme :as theme]
+              [slurper.throttling :as throttling]
               [reagent.core :as reagent]
               [reagent.ratom :refer [track]]
               [reagent.session :as session]
@@ -448,61 +449,56 @@
 (defn on-mouse-click [line column]
   (swap! state #(set-caret % [line column])))
 
+"transform: translate3d(0px, -5904px, 0px);"
+
 (defn editor [state]
   (let [{line-height :height
          ch-width :width :as metrics} (measure "X")
         dom-input (atom nil)
-        lines-count (reaction (count (:lines @state)))]
+        lines-count (reaction (count (:lines @state)))
+        caret-line (reaction (get-in @state [:caret 0]))
+        view-region #js{}]
     [:div {:style {:display :flex
                    :background-color theme/background
+                   :cursor :text
+                   :left 0
                    :flex 1}}
-     [:textarea
-      {:ref (fn [this]
-              (when-let [dom-node (reagent/dom-node this)]
-                (.addEventListener dom-node "focus" (fn [] (js/console.log "focus input")))
-                (reset! dom-input dom-node)))
-       :auto-focus true
-       :style {:opacity 0
-               :height "0px"
-               :width "0px"}
-       :on-input (fn [evt]
-                   (let [e (.-target evt)
-                         val (.-value e)]
-                     (set! (.-value e) "")
-                     (swap! state type-in val)))}]
      [:> (-> js/window ($ :ReactVirtualized) ($ :AutoSizer))
       (fn [m]
         (reagent/as-element
          [(fn []
-            (let [listener (clojure.core/atom false)
-                  *view-region (atom {:top 0
-                                      :client-height 0
-                                      :scroll-height 0})]
-
+            #_(prn "NEW COMP!")
+            (let [listener (clojure.core/atom false)]
             [:> (-> js/window ($ :ReactVirtualized) ($ :List))
              {:ref (fn [this]
+                     #_(prn "LISTENER: " @listener)
                      (when-not @listener
+                       #_(prn "ADD LISTENER " @listener)
+
                        (when-let [node (reagent/dom-node this)]
+                         #_(prn node)
                          (reset! listener true)
                          (.addEventListener node "focus"
                                             (fn []
                                               (when @dom-input
                                                 (.focus @dom-input))))
-                         #_(.addEventListener node "click"
+                         (.addEventListener node "click"
                                             (fn [event]
-                                              (let [absolute-x ($ event :clientX)
-                                                    absolute-y (+ ($ event :clientY) (:top @*view-region))]
-                                                (on-mouse-click (Math/round (/ absolute-y line-height))
-                                                                (Math/round (/ absolute-x ch-width))))
+                                              (let [view-region ($ view-region :value)
+                                                    client-x ($ event :pageX)
+                                                    client-y ($ event :pageY)
+                                                    x client-x
+                                                    y (- (+ client-y ($ view-region :scrollTop)) (/ line-height 2))]
+                                                (on-mouse-click (Math/round (/ y line-height))
+                                                                (Math/round (/ x ch-width))))
                                               (.stopPropagation event)
                                               (.preventDefault event))))))
               :height ($ m :height)
               :width ($ m :width)
+              :scrollToIndex @caret-line
               :rowCount @lines-count
-              #_:onScroll #_(fn [view-region]
-                          (reset! *view-region {:top ($ view-region :scrollTop)
-                                                :client-height ($ view-region :clientHeight)
-                                                :scroll-height ($ view-region :scrollHeight)}))
+              :onScroll (fn [vr]
+                          ($! view-region :value vr))
               :rowHeight line-height
               :overscanRowCount 100
               :rowRenderer (fn [s]
@@ -513,7 +509,23 @@
                                 [:div {:style style
                                        :key id}
                                  [line-renderer state index metrics]])))
-              :noRowsRenderer (fn [] (reagent/as-element [:div "hello empty"]))}]))]))]]))
+              :noRowsRenderer (fn [] (reagent/as-element [:div "hello empty"]))}]))]))]
+     [:textarea
+      {:ref (fn [this]
+              (when-let [dom-node (reagent/dom-node this)]
+                (.addEventListener dom-node "focus" (fn [] (js/console.log "focus input")))
+                (reset! dom-input dom-node)))
+       :auto-focus true
+       :style {:opacity 0
+               :pading "0px"
+               :border :none
+               :height "0px"
+               :width "0px"}
+       :on-input (fn [evt]
+                   (let [e (.-target evt)
+                         val (.-value e)]
+                     (set! (.-value e) "")
+                     (swap! state type-in val)))}]]))
 
 (defn main []
   [:div {:style {:display :flex
@@ -629,9 +641,6 @@
 (bind-function! "up" move-caret :up false)
 
 (bind-function! "enter" on-enter)
-
-(defn backspace [state]
-  (type-in state "X"))
 
 (bind-function! "backspace" on-backspace)
 
