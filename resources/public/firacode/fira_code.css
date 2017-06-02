@@ -46,3 +46,8 @@
   50% { opacity: 0; }
 }
 
+@keyframes blinker2 {
+    from {opacity : 0.5;}
+    to {opacity : 1; }
+}
+

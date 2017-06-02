@@ -460,17 +460,23 @@
   [:div
    (map-indexed
     (fn [i c]
-      ^{:key c} [:pre (when (= i selected-index)
-                        {:style {:background-color :black}}) c]) filtered-content)])
+      ^{:key c} [:pre {:style {:padding "0px 5px"
+                               :background-color
+                               (when (= i selected-index)
+                                 :black)}} c]) filtered-content)])
 
 (defn render-popup [popup offset metrics]
   [:div {:style {:position :relative
                  :left offset
                  :top (:height metrics)
-                 :width "100px"
+                 :width "300px"
                  :z-index "10"
-                 :height "100px"
-                 :background-color :red}}
+                 :padding-bottom "10px"
+                 :animation "blinker2 0.2s ease-in-out"
+                 :background-color "rgb(66, 68, 57)"
+                 :border-radius "5px"
+                 :overflow :hidden
+                 :box-shadow "11px 17px 65px -13px rgba(0,0,0,1)"}}
    [popup-content popup]])
 
 (defn line-renderer-very-slow [{:keys [line *caret caret-here? line-selection metrics *popup]}]
@@ -485,7 +491,8 @@
                (when line-selection
                  (render-selection line-selection metrics))
                (let [tokens (let [sel-tokens (when-let [[from to] line-selection]
-                                               [[from nil] [(subtract-offsets to from) :selected]])]
+                                               (when (not= from to)
+                                                 [[from nil] [(subtract-offsets to from) :selected]]))]
                               (if (and (seq tokens) (some? sel-tokens))
                                 (shred-selection-with-tokens sel-tokens tokens)
                                 (map (fn [[len ttype]] [len (get theme/token-styles ttype)]) (or tokens sel-tokens [[:infinity nil]]))))]
@@ -715,10 +722,29 @@
     (insert-line state)))
 
 (defn show-completion [state]
-  (let [content ["jello"
-                 "my"
-                 "name"
-                 "is"]]
+  (let [content ["class"
+                 "interface"
+                 "package"
+                 "public"
+                 "private"
+                 "protected"
+                 "implements"
+                 "import"
+                 "throws"
+                 "throw"
+                 "static"
+                 "finally"
+                 "synchronized"
+                 "abstract"
+                 "default"
+                 "final"
+                 "void"
+                 "return"
+                 "int"
+                 "float"
+                 "double"
+                 "long"
+                 "char"]]
     (assoc state :popup {:type :completion
                          :selected-index 0
                          :prefix ""
