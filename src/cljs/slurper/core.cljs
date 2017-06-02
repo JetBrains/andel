@@ -260,13 +260,20 @@
         (assoc :caret caret')
         (assoc :selection selection'))))
 
-(defn set-caret [state [line column]]
-  (let [max-column (count (get-in state [:lines line :text]))
+(defn set-caret [{:keys [caret selection] :as state} [line column] selection?]
+  (let [[sel-from sel-to] selection
         max-line (dec (count (:lines state)))
-        caret [(min line max-line) (min column max-column)]]
+        line (min line max-line)
+        max-column (count (get-in state [:lines line :text]))
+        column (min column max-column)
+        caret' [line column]]
     (-> state
-        (assoc :caret caret)
-        (assoc :selection [caret caret]))))
+        (assoc :caret caret')
+        (assoc :selection (cond
+                            (not selection?) [caret' caret']
+                            (= caret sel-from) [(min-pos caret' sel-to) (max-pos caret' sel-to)]
+                            (= caret sel-to) [(min-pos sel-from caret') (max-pos sel-from caret')]
+                            :else [(min-pos caret caret') (max-pos caret caret')])))))
 
 #_{:range [from to]
  :layer 5
@@ -454,10 +461,17 @@
             line-selection (line-selection (:selection @state) index)]
         [line-renderer-very-slow line *caret caret-here? line-selection metrics]))))
 
-(defn on-mouse-click [line column]
-  (swap! state #(set-caret % [line column])))
+(defn on-mouse-action [line column selection?]
+  (swap! state #(set-caret % [line column] selection?)))
 
 "transform: translate3d(0px, -5904px, 0px);"
+
+(defn absolute->line-ch [client-x client-y {line-height :height
+                                            ch-width :width :as metrics} view-region]
+  (let [view-region ($ view-region :value)
+        x client-x
+        y (- (+ client-y ($ view-region :scrollTop)) (/ line-height 2))]
+    [(Math/round (/ y line-height)) (Math/round (/ x ch-width))]))
 
 (defn editor [state]
   (let [{line-height :height
@@ -475,32 +489,29 @@
       (fn [m]
         (reagent/as-element
          [(fn []
-            #_(prn "NEW COMP!")
             (let [listener (clojure.core/atom false)]
             [:> (-> js/window ($ :ReactVirtualized) ($ :List))
              {:ref (fn [this]
-                     #_(prn "LISTENER: " @listener)
                      (when-not @listener
-                       #_(prn "ADD LISTENER " @listener)
-
                        (when-let [node (reagent/dom-node this)]
-                         #_(prn node)
                          (reset! listener true)
                          (.addEventListener node "focus"
                                             (fn []
                                               (when @dom-input
                                                 (.focus @dom-input))))
-                         (.addEventListener node "click"
+                         (.addEventListener node "mousedown"
                                             (fn [event]
-                                              (let [view-region ($ view-region :value)
-                                                    client-x ($ event :pageX)
-                                                    client-y ($ event :pageY)
-                                                    x client-x
-                                                    y (- (+ client-y ($ view-region :scrollTop)) (/ line-height 2))]
-                                                (on-mouse-click (Math/round (/ y line-height))
-                                                                (Math/round (/ x ch-width))))
-                                              (.stopPropagation event)
-                                              (.preventDefault event))))))
+                                              (let [client-x ($ event :clientX)
+                                                    client-y ($ event :clientY)
+                                                    [line ch] (absolute->line-ch client-x client-y metrics view-region)]
+                                                (on-mouse-action line ch false))))
+                         (.addEventListener node "mousemove"
+                                            (fn [event]
+                                              (when (= ($ event :buttons) 1)
+                                                (let [client-x ($ event :clientX)
+                                                      client-y ($ event :clientY)
+                                                      [line ch] (absolute->line-ch client-x client-y metrics view-region)]
+                                                  (on-mouse-action line ch true))))))))
               :height ($ m :height)
               :width ($ m :width)
               :scrollToIndex @caret-line
@@ -595,7 +606,7 @@
                      (let [text (:body (a/<! (http/get "/EditorImpl.java")))]
                        (reset! *virtualized-state :ready)
                        (attach-lexer! @state)
-                       (swap! state set-text (fake-text) #_text)
+                       (swap! state set-text text)
                        (cb)
                        )))
                  100))))))))))
