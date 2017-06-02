@@ -537,18 +537,18 @@
         y (- (+ client-y ($ view-region :scrollTop)) (/ line-height 2))]
     [(Math/round (/ y line-height)) (Math/round (/ x ch-width))]))
 
-(defonce metrics (measure "X"))
+(defonce metrics (reagent/atom (measure "X")))
 (defonce view-region #js{})
 
 (defn visible-lines-count []
   (let [view-region ($ view-region :value)
         client-height ($ view-region :clientHeight)
-        line-height (:height metrics)]
+        line-height (:height @metrics)]
     (/ client-height line-height)))
 
 (defn editor [state]
   (let [{line-height :height
-         ch-width :width :as metrics} metrics
+         ch-width :width :as metrics} @metrics
         dom-input (atom nil)
         lines-count (reaction (count (:lines @state)))
         caret-line (reaction (get-in @state [:caret 0]))]
@@ -671,7 +671,14 @@
              (include-style
               "/firacode/fira_code.css"
               (fn []
-                (measure "X")
+
+                ;; At this point, the css is loaded, but fonts themselves
+                ;; might be here yet. There's no standard way to get "font loaded"
+                ;; event yet (https://developer.mozilla.org/en-US/docs/Web/API/CSS_Font_Loading_API),
+                ;; so let's use setTimeout as the simplest hack =/
+                (js/setTimeout #(reset! metrics (measure "X")) 100)
+                (js/setTimeout #(reset! metrics (measure "X")) 1000)
+
                 (js/setTimeout
                  (fn []
                    (go
