@@ -744,6 +744,12 @@
         (dissoc :popup))
     (insert-line state)))
 
+(defn word-before-caret [{:keys [lines caret]} ]
+  (let [[line col v-col] caret
+        text (:text (get lines line))
+        text-before-caret (subs text 0 col)]
+    (or (re-find #"[a-zA-Z]+$" text-before-caret) "")))
+
 (defn show-completion [state]
   (let [content ["class"
                  "interface"
@@ -768,11 +774,12 @@
                  "double"
                  "long"
                  "char"]]
-    (assoc state :popup {:type :completion
-                         :selected-index 0
-                         :prefix ""
-                         :content content
-                         :filtered-content content})))
+    (let [popup (filter-popup {:type :completion
+                               :selected-index 0
+                               :prefix (word-before-caret state)
+                               :content content
+                               :filtered-content content})]
+      (assoc state :popup popup))))
 
 (defn esc [state]
   (dissoc state :popup))
