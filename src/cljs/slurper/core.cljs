@@ -357,7 +357,7 @@
 
 (defn html [[tag & rest :as el]]
   (when el
-    (if (string? el) el
+    (if (string? el) (goog.string/htmlEscape el)
         (let [[attrs? & children :as rest] (if (string? rest) nil rest)
               html-tag (str "<" (name tag) " "
                             (when (map? attrs?)
@@ -418,11 +418,12 @@
 
 (defn render-caret [col {:keys [width height]}]
   [:div {:style (style {:width "1px"
-                          :top 0
-                          :background-color "red"
-                          :position :absolute
-                          :left (px (* col width))
-                          :height (px height)})}])
+                        :animation "blinker 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite"
+                        :top 0
+                        :background-color "red"
+                        :position :absolute
+                        :left (px (* col width))
+                        :height (px (inc height))})}])
 
 
 

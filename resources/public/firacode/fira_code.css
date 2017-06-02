@@ -41,3 +41,8 @@
     font-weight: 700;
     font-style: normal;
 }
+
+@keyframes blinker {  
+  50% { opacity: 0; }
+}
+
