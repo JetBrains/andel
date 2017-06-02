@@ -289,7 +289,7 @@
 (defn set-caret [{:keys [caret selection] :as state} [line column] selection?]
   (let [[sel-from sel-to] selection
         max-line (dec (count (:lines state)))
-        line (min line max-line)
+        line (max 0 (min line max-line))
         max-column (count (get-in state [:lines line :text]))
         column (min column max-column)
         caret' [line column column]]
