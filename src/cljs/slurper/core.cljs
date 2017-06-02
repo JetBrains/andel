@@ -633,11 +633,11 @@
 
 (defn include-style [src cb]
   (let [e (js/document.createElement "link")]
+    (aset e "onload" cb)
     (doto e
       (.setAttribute "type" "text/css")
       (.setAttribute "rel" "stylesheet")
       (.setAttribute "href" src))
-    (aset e "onload" cb)
     (.appendChild (head) e)))
 
 (defonce *virtualized-state (atom :initial))
