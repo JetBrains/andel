@@ -201,17 +201,24 @@
         (invalidate-lines (dec line-number))
         (dissoc :popup))))
 
+(defn indent-like [{sample-text :text :as sample} {subject-text :text :as subject}]
+  (let [prefix (re-find #"\s*" sample-text)]
+    [(assoc subject :text (str prefix (clojure.string/triml subject-text))) (count prefix)]))
+
 (defn insert-line [{:keys [next-id lines caret] :as state}]
-  (let [[line-number column] caret        
-        [before after] (split-at line-number lines)
-        current-line (first after)
-        new-lines (vec (concat before
-                               (split-line current-line column next-id)
-                               (rest after)))]
+  (let [[line-number column] caret
+        [lines-before lines-after] (split-at line-number lines)
+        current-line (first lines-after)
+        [old-line new-line] (split-line current-line column next-id)
+        [new-line indentation] (indent-like old-line new-line)
+        new-lines (vec (concat lines-before
+                               [old-line
+                                new-line]
+                               (rest lines-after)))]
     (-> state
         (update :next-id inc)
         (assoc :lines new-lines)
-        (assoc :caret [(inc line-number) 0])
+        (assoc :caret [(inc line-number) indentation])
         (invalidate-lines line-number))))
 
 (defn on-backspace [{[line col] :caret :as state}]
@@ -258,12 +265,12 @@
                          [(max 0 (dec line)) (or (some-> prev-line count) 0)]
                          [line (dec col)])
                  :right (if (= col (count current-line))
-                          [(min (count lines) (inc line)) (if (some? next-line)
-                                                            0
-                                                            col)]
+                          [(min (dec (count lines)) (inc line)) (if (some? next-line)
+                                                                  0
+                                                                  col)]
                           [line (inc col)])
                  :up [(max 0 (dec line)) (min col (or (some-> prev-line (count)) col))]
-                 :down [(min (count lines) (inc line)) (min col (or (some-> next-line (count)) col))])
+                 :down [(min (dec (count lines)) (inc line)) (min col (or (some-> next-line (count)) col))])
         selection' (cond
                      (not selection?) [caret' caret']
                      (= caret sel-from) [(min-pos caret' sel-to) (max-pos caret' sel-to)]
@@ -273,13 +280,20 @@
         (assoc :caret caret')
         (assoc :selection selection'))))
 
-(defn set-caret [state [line column]]
-  (let [max-column (count (get-in state [:lines line :text]))
-        max-line (count (:lines state))
-        caret [(min line max-line) (min column max-column)]]
+(defn set-caret [{:keys [caret selection] :as state} [line column] selection?]
+  (let [[sel-from sel-to] selection
+        max-line (dec (count (:lines state)))
+        line (min line max-line)
+        max-column (count (get-in state [:lines line :text]))
+        column (min column max-column)
+        caret' [line column]]
     (-> state
-        (assoc :caret caret)
-        (assoc :selection [caret caret]))))
+        (assoc :caret caret')
+        (assoc :selection (cond
+                            (not selection?) [caret' caret']
+                            (= caret sel-from) [(min-pos caret' sel-to) (max-pos caret' sel-to)]
+                            (= caret sel-to) [(min-pos sel-from caret') (max-pos sel-from caret')]
+                            :else [(min-pos caret caret') (max-pos caret caret')])))))
 
 #_{:range [from to]
  :layer 5
@@ -496,10 +510,17 @@
                                   :metrics metrics
                                   :*popup (when caret-here? *popup)}]))))
 
-(defn on-mouse-click [line column]
-  (swap! state #(set-caret % [line column])))
+(defn on-mouse-action [line column selection?]
+  (swap! state #(set-caret % [line column] selection?)))
 
 "transform: translate3d(0px, -5904px, 0px);"
+
+(defn absolute->line-ch [client-x client-y {line-height :height
+                                            ch-width :width :as metrics} view-region]
+  (let [view-region ($ view-region :value)
+        x client-x
+        y (- (+ client-y ($ view-region :scrollTop)) (/ line-height 2))]
+    [(Math/round (/ y line-height)) (Math/round (/ x ch-width))]))
 
 (defn editor [state]
   (let [{line-height :height
@@ -517,32 +538,29 @@
       (fn [m]
         (reagent/as-element
          [(fn []
-            #_(prn "NEW COMP!")
             (let [listener (clojure.core/atom false)]
             [:> (-> js/window ($ :ReactVirtualized) ($ :List))
              {:ref (fn [this]
-                     #_(prn "LISTENER: " @listener)
                      (when-not @listener
-                       #_(prn "ADD LISTENER " @listener)
-
                        (when-let [node (reagent/dom-node this)]
-                         #_(prn node)
                          (reset! listener true)
                          (.addEventListener node "focus"
                                             (fn []
                                               (when @dom-input
                                                 (.focus @dom-input))))
-                         (.addEventListener node "click"
+                         (.addEventListener node "mousedown"
                                             (fn [event]
-                                              (let [view-region ($ view-region :value)
-                                                    client-x ($ event :pageX)
-                                                    client-y ($ event :pageY)
-                                                    x client-x
-                                                    y (- (+ client-y ($ view-region :scrollTop)) (/ line-height 2))]
-                                                (on-mouse-click (Math/round (/ y line-height))
-                                                                (Math/round (/ x ch-width))))
-                                              (.stopPropagation event)
-                                              (.preventDefault event))))))
+                                              (let [client-x ($ event :clientX)
+                                                    client-y ($ event :clientY)
+                                                    [line ch] (absolute->line-ch client-x client-y metrics view-region)]
+                                                (on-mouse-action line ch false))))
+                         (.addEventListener node "mousemove"
+                                            (fn [event]
+                                              (when (= ($ event :buttons) 1)
+                                                (let [client-x ($ event :clientX)
+                                                      client-y ($ event :clientY)
+                                                      [line ch] (absolute->line-ch client-x client-y metrics view-region)]
+                                                  (on-mouse-action line ch true))))))))
               :height ($ m :height)
               :width ($ m :width)
               :scrollToIndex @caret-line
@@ -731,6 +749,7 @@
 (bind-function! "up" up-down :up)
 (bind-function! "ctrl-space" show-completion)
 (bind-function! "esc" esc)
+(bind-function! "tab" (fn [state] (type-in state "    ")))
 
 (bind-function! "enter" on-enter)
 
