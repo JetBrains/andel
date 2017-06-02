@@ -52,7 +52,7 @@
 (defn make-editor-state []
   (let [ch (a/chan)]
     {:lines []
-     :caret [0 0]
+     :caret [0 0 0]
      :selection [[3 0] [3 5]]
      :font {:font-family "Fira Code"}
      :lexer-broker ch
@@ -163,7 +163,7 @@
   (let [[line col] caret]
     (-> state
         (delete-insert 0 val)
-        (update :caret (fn [[line col]] [line (+ col (count val))]))
+        (update :caret (fn [[line col]] (let [col' (+ col (count val))] [line col' col'])))
         (invalidate-lines line)
         (cond-> popup
           (->
@@ -173,7 +173,7 @@
 (defn delete-symbol [{[line col] :caret popup :popup :as state}]
   (-> state
       (delete-insert 1 "")
-      (update :caret (fn [[line col]] [line (max 0 (dec col))]))
+      (update :caret (fn [[line col]] (let [col' (max 0 (dec col))] [line col' col'])))
       (invalidate-lines line)
       (cond-> popup
         (update :popup truncate-prefix))))
@@ -194,10 +194,11 @@
         [to-concat rest] (split-at 2 after)
         new-lines (vec (concat before
                                [(apply concat-lines to-concat)]
-                               rest))]
+                               rest))
+        col' (count (:text (first to-concat)))]
     (-> state
         (assoc :lines new-lines)
-        (assoc :caret [(dec line-number) (count (:text (first to-concat)))])
+        (assoc :caret [(dec line-number) col' col'])
         (invalidate-lines (dec line-number))
         (dissoc :popup))))
 
@@ -218,7 +219,7 @@
     (-> state
         (update :next-id inc)
         (assoc :lines new-lines)
-        (assoc :caret [(inc line-number) indentation])
+        (assoc :caret [(inc line-number) indentation indentation])
         (invalidate-lines line-number))))
 
 (defn on-backspace [{[line col] :caret :as state}]
@@ -254,27 +255,32 @@
 (defn max-pos [p1 p2]
   (if (<pos p1 p2) p2 p1))
 
+(defn pos= [[l1 c1] [l2 c2]]
+  (and (= l1 l2) (= c1 c2)))
+
 (defn move-caret [{:keys [lines caret selection] :as state} dir selection?]
   (let [[sel-from sel-to] selection
-        [line col] caret
+        [line col v-col] caret
         prev-line  (:text (get lines (dec line)))
         current-line (:text (get lines line))
         next-line (:text (get lines (inc line)))
         caret' (case dir
                  :left (if (= col 0)
-                         [(max 0 (dec line)) (or (some-> prev-line count) 0)]
-                         [line (dec col)])
+                         (let [col' (or (some-> prev-line count) 0)]
+                           [(max 0 (dec line)) col' col'])
+                          [line (dec col) (dec col)])
                  :right (if (= col (count current-line))
-                          [(min (dec (count lines)) (inc line)) (if (some? next-line)
-                                                                  0
-                                                                  col)]
-                          [line (inc col)])
-                 :up [(max 0 (dec line)) (min col (or (some-> prev-line (count)) col))]
-                 :down [(min (dec (count lines)) (inc line)) (min col (or (some-> next-line (count)) col))])
+                          (let [col' (if (some? next-line)
+                                       0
+                                       col)]
+                            [(min (dec (count lines)) (inc line)) col' col'])
+                          [line (inc col) (inc col)])
+                 :up [(max 0 (dec line)) (min (max col v-col) (or (some-> prev-line (count)) col)) v-col]
+                 :down [(min (dec (count lines)) (inc line)) (min (max col v-col) (or (some-> next-line (count)) col)) v-col])
         selection' (cond
                      (not selection?) [caret' caret']
-                     (= caret sel-from) [(min-pos caret' sel-to) (max-pos caret' sel-to)]
-                     (= caret sel-to) [(min-pos sel-from caret') (max-pos sel-from caret')]
+                     (pos= caret sel-from) [(min-pos caret' sel-to) (max-pos caret' sel-to)]
+                     (pos= caret sel-to) [(min-pos sel-from caret') (max-pos sel-from caret')]
                      :else [(min-pos caret caret') (max-pos caret caret')])]
     (-> state
         (assoc :caret caret')
@@ -286,13 +292,13 @@
         line (min line max-line)
         max-column (count (get-in state [:lines line :text]))
         column (min column max-column)
-        caret' [line column]]
+        caret' [line column column]]
     (-> state
         (assoc :caret caret')
         (assoc :selection (cond
                             (not selection?) [caret' caret']
-                            (= caret sel-from) [(min-pos caret' sel-to) (max-pos caret' sel-to)]
-                            (= caret sel-to) [(min-pos sel-from caret') (max-pos sel-from caret')]
+                            (pos= caret sel-from) [(min-pos caret' sel-to) (max-pos caret' sel-to)]
+                            (pos= caret sel-to) [(min-pos sel-from caret') (max-pos sel-from caret')]
                             :else [(min-pos caret caret') (max-pos caret caret')])))))
 
 #_{:range [from to]
@@ -483,7 +489,9 @@
   (let [{:keys [text tokens]} line]
     [:div
      (when caret-here?
-       {:style {:z-index "10"}})
+       {:style {:z-index "10"
+                :background-color "#30585f"
+                :height (px (inc (:height metrics)))}})
      [:div {:dangerouslySetInnerHTML
             {:__html
              (html
@@ -783,7 +791,7 @@
 
 (defn pg-move [{:keys [caret] :as state} selection? op]
   (let [[line ch] caret]
-    (set-caret state [(op line (visible-lines-count)) ch] selection?)))
+    (set-caret state [(js/Math.round (op line (visible-lines-count))) ch] selection?)))
 
 (bind-function! "shift-left" move-caret :left true)
 (bind-function! "shift-right" move-caret :right true)
