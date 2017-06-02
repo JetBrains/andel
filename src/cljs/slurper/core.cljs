@@ -522,13 +522,21 @@
         y (- (+ client-y ($ view-region :scrollTop)) (/ line-height 2))]
     [(Math/round (/ y line-height)) (Math/round (/ x ch-width))]))
 
+(defonce metrics (measure "X"))
+(defonce view-region #js{})
+
+(defn visible-lines-count []
+  (let [view-region ($ view-region :value)
+        client-height ($ view-region :clientHeight)
+        line-height (:height metrics)]
+    (/ client-height line-height)))
+
 (defn editor [state]
   (let [{line-height :height
-         ch-width :width :as metrics} (measure "X")
+         ch-width :width :as metrics} metrics
         dom-input (atom nil)
         lines-count (reaction (count (:lines @state)))
-        caret-line (reaction (get-in @state [:caret 0]))
-        view-region #js{}]
+        caret-line (reaction (get-in @state [:caret 0]))]
     [:div {:style {:display :flex
                    :background-color theme/background
                    :cursor :text
@@ -739,10 +747,30 @@
       (move-caret :right false)
       (dissoc :popup)))
 
+(defn home [{:keys [caret] :as state} selection?]
+  (let [[line ch] caret]
+    (set-caret state [line 0] selection?)))
+
+(defn end [{:keys [caret] :as state} selection?]
+  (let [[line ch] caret]
+    (set-caret state [line (count (get-in state [:lines line :text]))] selection?)))
+
+(defn pg-move [{:keys [caret] :as state} selection? op]
+  (let [[line ch] caret]
+    (set-caret state [(op line (visible-lines-count)) ch] selection?)))
+
 (bind-function! "shift-left" move-caret :left true)
 (bind-function! "shift-right" move-caret :right true)
 (bind-function! "shift-up" move-caret :up true)
 (bind-function! "shift-down" move-caret :down true)
+(bind-function! "home" home false)
+(bind-function! "shift-home" home true)
+(bind-function! "end" end false)
+(bind-function! "shift-end" end true)
+(bind-function! "pgup" pg-move false -)
+(bind-function! "shift-pgup" pg-move true -)
+(bind-function! "pgdown" pg-move false +)
+(bind-function! "shift-pgdown" pg-move true +)
 (bind-function! "left" left)
 (bind-function! "right" right)
 (bind-function! "down" up-down :down)
