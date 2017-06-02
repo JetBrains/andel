@@ -144,17 +144,39 @@
                (fn [s]
                  (str (subs s 0 (- col delete)) insert (subs s col))))))
 
-(defn type-in [{[line col] :caret :as state} val]
-  (-> state
-      (delete-insert 0 val)
-      (update :caret (fn [[line col]] [line (inc col)]))      
-      (invalidate-lines line)))
+(defn filter-popup [{:keys [prefix content] :as popup}]
+  (let [popup' (-> popup
+                   (assoc :filtered-content
+                          (filter (fn [c] (or (nil? prefix) (clojure.string/starts-with? c prefix))) content))
+                   (assoc :selected-index 0))]
+    (when (seq (:filtered-content popup'))
+      popup')))
 
-(defn delete-symbol [{[line col] :caret :as state}]
+(defn truncate-prefix [{:keys [prefix] :as popup}]
+  (if  (= (count prefix) 0)
+    nil
+    (-> popup
+        (update :prefix (fn [s] (when s (subs s 0 (dec (count s))))) )
+        (filter-popup))))
+
+(defn type-in [{:keys [caret popup] :as state} val]
+  (let [[line col] caret]
+    (-> state
+        (delete-insert 0 val)
+        (update :caret (fn [[line col]] [line (+ col (count val))]))
+        (invalidate-lines line)
+        (cond-> popup
+          (->
+           (update-in [:popup :prefix] str val)
+           (update :popup filter-popup))))))
+
+(defn delete-symbol [{[line col] :caret popup :popup :as state}]
   (-> state
       (delete-insert 1 "")
       (update :caret (fn [[line col]] [line (max 0 (dec col))]))
-      (invalidate-lines line)))
+      (invalidate-lines line)
+      (cond-> popup
+        (update :popup truncate-prefix))))
 
 (defn split-line [{:keys [text id] :as line} column new-id]
   [{:text (subs text 0 column)
@@ -176,7 +198,8 @@
     (-> state
         (assoc :lines new-lines)
         (assoc :caret [(dec line-number) (count (:text (first to-concat)))])
-        (invalidate-lines (dec line-number)))))
+        (invalidate-lines (dec line-number))
+        (dissoc :popup))))
 
 (defn insert-line [{:keys [next-id lines caret] :as state}]
   (let [[line-number column] caret        
@@ -196,9 +219,6 @@
     (and (zero? line) (zero? col)) state
     (zero? col) (delete-line state)
     :else (delete-symbol state)))
-
-(defn on-enter [state]
-  (insert-line state))
 
 (defn line-selection [selection line]
   (let [[[from-line from-col] [to-line to-col]] selection]
@@ -418,34 +438,63 @@
                         :left (px (* col width))
                         :height (px (inc height))})}])
 
+(defmulti popup-content :type)
 
+(defmethod popup-content :default [_])
 
+(defmethod popup-content :completion [{:keys [filtered-content selected-index prefix]}]
+  [:div
+   (map-indexed
+    (fn [i c]
+      ^{:key c} [:pre (when (= i selected-index)
+                        {:style {:background-color :black}}) c]) filtered-content)])
 
-(defn line-renderer-very-slow [{:keys [text tokens] :as line} *caret caret-here? line-selection metrics]
-  [:div {:dangerouslySetInnerHTML
-         {:__html
-          (html
-           [:div
-            (when line-selection
-              (render-selection line-selection metrics))
-            (let [tokens (let [sel-tokens (when-let [[from to] line-selection]
-                                            [[from nil] [(subtract-offsets to from) :selected]])]
-                           (if (and (seq tokens) (some? sel-tokens))
-                             (shred-selection-with-tokens sel-tokens tokens)
-                             (map (fn [[len ttype]] [len (get theme/token-styles ttype)]) (or tokens sel-tokens [[:infinity nil]]))))]
-              (render-text tokens text))
-            (when caret-here?
-              (let [[_ caret-col] @*caret]
-                (render-caret caret-col metrics)))])
-          }}])
+(defn render-popup [popup offset metrics]
+  [:div {:style {:position :relative
+                 :left offset
+                 :top (:height metrics)
+                 :width "100px"
+                 :z-index "10"
+                 :height "100px"
+                 :background-color :red}}
+   [popup-content popup]])
+
+(defn line-renderer-very-slow [{:keys [line *caret caret-here? line-selection metrics *popup]}]
+  (let [{:keys [text tokens]} line]
+    [:div
+     (when caret-here?
+       {:style {:z-index "10"}})
+     [:div {:dangerouslySetInnerHTML
+            {:__html
+             (html
+              [:div
+               (when line-selection
+                 (render-selection line-selection metrics))
+               (let [tokens (let [sel-tokens (when-let [[from to] line-selection]
+                                               [[from nil] [(subtract-offsets to from) :selected]])]
+                              (if (and (seq tokens) (some? sel-tokens))
+                                (shred-selection-with-tokens sel-tokens tokens)
+                                (map (fn [[len ttype]] [len (get theme/token-styles ttype)]) (or tokens sel-tokens [[:infinity nil]]))))]
+                 (render-text tokens text))
+               (when caret-here?
+                 (let [[_ caret-col] @*caret]
+                   (render-caret caret-col metrics)))])}}]
+     (when (and *popup @*popup) 
+       [render-popup @*popup (* (second @*caret) (:width metrics)) metrics])]))
 
 (defn line-renderer [state index metrics]
-  (let [*caret (reaction (:caret @state))]
+  (let [*caret (reaction (:caret @state))
+        *popup (reaction (:popup @state))]
     (fn [_ index metrics]
       (let [caret-here? (= index (first @*caret))
             line (nth (:lines @state) index)
             line-selection (line-selection (:selection @state) index)]
-        [line-renderer-very-slow line *caret caret-here? line-selection metrics]))))
+        [line-renderer-very-slow {:line line
+                                  :*caret *caret
+                                  :caret-here? caret-here?
+                                  :line-selection line-selection
+                                  :metrics metrics
+                                  :*popup (when caret-here? *popup)}]))))
 
 (defn on-mouse-click [line column]
   (swap! state #(set-caret % [line column])))
@@ -631,15 +680,57 @@
 (defn- bind-function! [key f & args]
   (keybind/bind! key :global (capture #(swap! state (fn [s] (apply f s args))))))
 
+(defn up-down [state direction]
+  (if-let [popup (:popup state)]
+    (update-in state [:popup :selected-index]
+               (fn [i]
+                 (if (= direction :up)
+                   (mod (dec i) (count (:content popup)))
+                   (mod (inc i) (count (:content popup))))))
+    (move-caret state direction false)))
+
+(defn on-enter [state]
+  (if-let [{:keys [filtered-content selected-index prefix]} (:popup state)]
+    (-> state
+        (type-in (subs (nth (vec filtered-content) selected-index) (count prefix)))
+        (dissoc :popup))
+    (insert-line state)))
+
+(defn show-completion [state]
+  (let [content ["jello"
+                 "my"
+                 "name"
+                 "is"]]
+    (assoc state :popup {:type :completion
+                         :selected-index 0
+                         :prefix ""
+                         :content content
+                         :filtered-content content})))
+
+(defn esc [state]
+  (dissoc state :popup))
+
+(defn left [state]
+  (-> state
+      (move-caret :left false)
+      (cond-> 
+          (:popup state) (update :popup truncate-prefix))))
+
+(defn right [state]
+  (-> state
+      (move-caret :right false)
+      (dissoc :popup)))
+
 (bind-function! "shift-left" move-caret :left true)
 (bind-function! "shift-right" move-caret :right true)
 (bind-function! "shift-up" move-caret :up true)
 (bind-function! "shift-down" move-caret :down true)
-
-(bind-function! "left" move-caret :left false)
-(bind-function! "down" move-caret :down false)
-(bind-function! "right" move-caret :right false)
-(bind-function! "up" move-caret :up false)
+(bind-function! "left" left)
+(bind-function! "right" right)
+(bind-function! "down" up-down :down)
+(bind-function! "up" up-down :up)
+(bind-function! "ctrl-space" show-completion)
+(bind-function! "esc" esc)
 
 (bind-function! "enter" on-enter)
 
