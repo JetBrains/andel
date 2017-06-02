@@ -147,7 +147,7 @@
 (defn type-in [{[line col] :caret :as state} val]
   (-> state
       (delete-insert 0 val)
-      (update :caret (fn [[line col]] [line (inc col)]))      
+      (update :caret (fn [[line col]] [line (+ col (count val))]))
       (invalidate-lines line)))
 
 (defn delete-symbol [{[line col] :caret :as state}]
@@ -178,17 +178,24 @@
         (assoc :caret [(dec line-number) (count (:text (first to-concat)))])
         (invalidate-lines (dec line-number)))))
 
+(defn indent-like [{sample-text :text :as sample} {subject-text :text :as subject}]
+  (let [prefix (re-find #"\s*" sample-text)]
+    [(assoc subject :text (str prefix (clojure.string/triml subject-text))) (count prefix)]))
+
 (defn insert-line [{:keys [next-id lines caret] :as state}]
-  (let [[line-number column] caret        
-        [before after] (split-at line-number lines)
-        current-line (first after)
-        new-lines (vec (concat before
-                               (split-line current-line column next-id)
-                               (rest after)))]
+  (let [[line-number column] caret
+        [lines-before lines-after] (split-at line-number lines)
+        current-line (first lines-after)
+        [old-line new-line] (split-line current-line column next-id)
+        [new-line indentation] (indent-like old-line new-line)
+        new-lines (vec (concat lines-before
+                               [old-line
+                                new-line]
+                               (rest lines-after)))]
     (-> state
         (update :next-id inc)
         (assoc :lines new-lines)
-        (assoc :caret [(inc line-number) 0])
+        (assoc :caret [(inc line-number) indentation])
         (invalidate-lines line-number))))
 
 (defn on-backspace [{[line col] :caret :as state}]
@@ -238,12 +245,12 @@
                          [(max 0 (dec line)) (or (some-> prev-line count) 0)]
                          [line (dec col)])
                  :right (if (= col (count current-line))
-                          [(min (count lines) (inc line)) (if (some? next-line)
-                                                            0
-                                                            col)]
+                          [(min (dec (count lines)) (inc line)) (if (some? next-line)
+                                                                  0
+                                                                  col)]
                           [line (inc col)])
                  :up [(max 0 (dec line)) (min col (or (some-> prev-line (count)) col))]
-                 :down [(min (count lines) (inc line)) (min col (or (some-> next-line (count)) col))])
+                 :down [(min (dec (count lines)) (inc line)) (min col (or (some-> next-line (count)) col))])
         selection' (cond
                      (not selection?) [caret' caret']
                      (= caret sel-from) [(min-pos caret' sel-to) (max-pos caret' sel-to)]
@@ -255,7 +262,7 @@
 
 (defn set-caret [state [line column]]
   (let [max-column (count (get-in state [:lines line :text]))
-        max-line (count (:lines state))
+        max-line (dec (count (:lines state)))
         caret [(min line max-line) (min column max-column)]]
     (-> state
         (assoc :caret caret)
@@ -587,7 +594,7 @@
                      (let [text (:body (a/<! (http/get "/EditorImpl.java")))]
                        (reset! *virtualized-state :ready)
                        (attach-lexer! @state)
-                       (swap! state set-text text)
+                       (swap! state set-text (fake-text) #_text)
                        (cb)
                        )))
                  100))))))))))
@@ -639,6 +646,7 @@
 (bind-function! "down" move-caret :down false)
 (bind-function! "right" move-caret :right false)
 (bind-function! "up" move-caret :up false)
+(bind-function! "tab" (fn [state] (type-in state "    ")))
 
 (bind-function! "enter" on-enter)
 
