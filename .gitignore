@@ -8,11 +8,8 @@ pom.xml.asc
 *.class
 /.lein-*
 /.nrepl-port
-/resources/public/js
-/resources/public/css
 /out
 /.repl
 *.log
 /.env
 /.sass-cache
-/resources/public/codemirror
