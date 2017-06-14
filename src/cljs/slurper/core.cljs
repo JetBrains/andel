@@ -9,7 +9,8 @@
               [garden.core :as g]
               [clojure.core.async :as a]
               [cljs-http.client :as http]
-              [hiccups.runtime :as hiccups])
+              [hiccups.runtime :as hiccups]
+              [slurper.tree :as tree])
     (:require-macros [reagent.interop :refer [$ $!]]
                      [reagent.ratom :refer [reaction]]
                      [cljs.core.async.macros :refer [go]]))
@@ -301,19 +302,6 @@
                             (pos= caret sel-to) [(min-pos sel-from caret') (max-pos sel-from caret')]
                             :else [(min-pos caret caret') (max-pos caret caret')])))))
 
-#_{:range [from to]
- :layer 5
- :style {}}
-
-#_[[1 nil] [5 style]]
-
-#_{:offset 5
-   :type :start
-   :layer 5
-   :style {}}
-
-#_{:type :end}
-
 (defn merge-styles [{l1 :layer :as s1 :or {l1 0}} {l2 :layer :as s2 :or {l2 0}}]
   (merge-with (fn [x y]
                 (if (< l1 l2) y x))
@@ -369,17 +357,6 @@
        :result
        (persistent!)))
 
-(comment
-
-  (shred [{:range [0 2]
-           :style {:color :green}}
-          {:range [1 5]
-           :style {:color :red}}
-          {:range [3 :infinity]
-           :style {:color :black}}
-          ])
-  )
-
 (defn style [m]
   (reduce-kv (fn [s k v]
                (str s (name k) ":" (if (keyword? v) (name v) v) ";")) nil m))
@@ -398,15 +375,6 @@
               children (map html (if (map? attrs?) children rest))
               closing-tag (str "</" (name tag) ">")]
           (apply str html-tag (concat children [closing-tag])))))) 
-
-(html [:div
-       {:style
-        (style {:background-color :red
-                :height "5px"
-                :position :absolute
-                :top 0}
-               )}
-       [:pre "fuck"]])
 
 (defn render-selection [[from to] {:keys [width height]}]
   [:div
@@ -657,6 +625,8 @@
 
 (defn fake-text [] "public static void main() {\n return 0; \n }")
 
+(defonce editor-impl (atom nil))
+
 (defn with-virtualized [cb]
   (if (= @*virtualized-state :ready)
     (cb)
@@ -683,6 +653,7 @@
                  (fn []
                    (go
                      (let [text (:body (a/<! (http/get "/EditorImpl.java")))]
+                       (reset! editor-impl text)
                        (reset! *virtualized-state :ready)
                        (attach-lexer! @state)
                        (swap! state set-text text)
@@ -844,4 +815,38 @@
      (js/console.log "FILE LEXING TIME: " (- ($ js/Date now) start-time))))
   state)
 
+(defn bench-tree [state]
+  (js/console.log "bench!")
+  
+  (js/console.log (.getTime (js/Date.)))
+
+  (def t2 (-> (tree/zipper (tree/make-node @editor-impl tree/config1)
+                           tree/config1)
+              (assoc-in [1 :changed?] true)
+              (tree/root)))
+
+  #_(js/console.log (.getTime (js/Date.)))
+
+  #_(dotimes [i 1000]
+    (-> (tree/zipper t2 tree/config1)
+        (tree/scan (tree/till-offset 50000))
+        (tree/insert-string "huj")
+        (tree/root)))
+
+  (js/console.log (.getTime (js/Date.)))
+
+  (dotimes [i 1000]
+    (-> (tree/zipper t2 tree/config1)
+        (tree/scan (tree/till-offset 50000))
+        (tree/insert-right "hujverylongstringsadfasdlkjfn sadkjlf nskdjfn sakjdfn ksjadnf kalsjdnf ljksadnf laksdjnf lasdjnf lsakjfn sadlkjfn sdaljkf nasdlkfj nsadlkjfn saldjkfn lsakdjnf lsadjfn laskdjnf lsakjdnf ljaskdnf ljsakdnf ljasdnf lsadkjfn lksdafjn sladjfnljsadf nsldjkfn saljdf nalsdkfn lkasdjnf ljsadnf lkjasdn f")
+        (tree/root)))
+  
+  (js/console.log (.getTime (js/Date.)))
+  
+  
+  state)
+
+t2
+
 (bind-function! "ctrl-l" bench)
+(bind-function! "ctrl-b" bench-tree)
