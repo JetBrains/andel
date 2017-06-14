@@ -10,7 +10,6 @@
               [clojure.core.async :as a]
               [cljs-http.client :as http]
               [hiccups.runtime :as hiccups]
-              [slurper.tree :as tree]
               [slurper.text :as text])
     (:require-macros [reagent.interop :refer [$ $!]]
                      [reagent.ratom :refer [reaction]]
@@ -816,38 +815,4 @@
      (js/console.log "FILE LEXING TIME: " (- ($ js/Date now) start-time))))
   state)
 
-(defn bench-tree [state]
-  (js/console.log "bench!")
-  
-  (js/console.log (.getTime (js/Date.)))
-
-  (def t2 (-> (tree/zipper (tree/make-node @editor-impl tree/config1)
-                           tree/config1)
-              (assoc-in [1 :changed?] true)
-              (tree/root)))
-
-  #_(js/console.log (.getTime (js/Date.)))
-
-  #_(dotimes [i 1000]
-    (-> (tree/zipper t2 tree/config1)
-        (tree/scan (tree/till-offset 50000))
-        (tree/insert-string "huj")
-        (tree/root)))
-
-  (js/console.log (.getTime (js/Date.)))
-
-  (dotimes [i 1000]
-    (-> (tree/zipper t2 tree/config1)
-        (tree/scan (tree/till-offset 50000))
-        (tree/insert-right "hujverylongstringsadfasdlkjfn sadkjlf nskdjfn sakjdfn ksjadnf kalsjdnf ljksadnf laksdjnf lasdjnf lsakjfn sadlkjfn sdaljkf nasdlkfj nsadlkjfn saldjkfn lsakdjnf lsadjfn laskdjnf lsakjdnf ljaskdnf ljsakdnf ljasdnf lsadkjfn lksdafjn sladjfnljsadf nsldjkfn saljdf nalsdkfn lkasdjnf ljsadnf lkjasdn f")
-        (tree/root)))
-  
-  (js/console.log (.getTime (js/Date.)))
-  
-  
-  state)
-
-t2
-
 (bind-function! "ctrl-l" bench)
-(bind-function! "ctrl-b" bench-tree)
