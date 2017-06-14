@@ -7,7 +7,7 @@
 (defn make-node [children {::keys [reducing-fn pack-children-fn metrics-fn]}]
   (Node. (if (string? children)
            (metrics-fn children) 
-           (persistent! (reduce (fn [acc x] (reducing-fn acc (metrics-fn x))) (reducing-fn) children)))
+           (reduce (fn [acc x] (reducing-fn acc (metrics-fn x))) (reducing-fn) children))
          (pack-children-fn children)))
  
 
@@ -27,7 +27,7 @@
                          tree)               
                merge config)))
  
-(def split-thresh 32)
+(def split-thresh 4)
 
 (defn fast-split [i s]
   (cond
@@ -72,12 +72,9 @@
         (persistent! result)))
     children))
 
-(defn per-red [f acc m]
-  (persistent! (f (transient acc) m)))
-
 (defn loc-acc [[_ {::keys [acc]} :as loc]]
   (or acc
-      (persistent! ((::reducing-fn (meta loc))))))
+      ((::reducing-fn (meta loc)))))
 
 (defn merge-needed? [children merge-thresh]
   (reduce (fn [_ c] (if (< (count (:children c)) merge-thresh)
@@ -132,7 +129,7 @@
   (when-let [r (z/right loc)]
     (let [{::keys [reducing-fn metrics-fn]} (meta loc)]
       (assoc-in r [1 ::acc] (if (some? acc)
-                              (per-red reducing-fn acc (metrics-fn node))
+                              (reducing-fn acc (metrics-fn node))
                               (metrics-fn node))))))
 
 (defn down [[_ {::keys [acc]} :as loc]]
@@ -158,28 +155,64 @@
      (and (z/branch? loc) (down loc))
      (right loc)
      (loop [p loc]
-       (if (up p)
-         (or (right (up p)) (recur (up p)))
+       (if-let [u (up p)]
+         (or (right u) (recur u))
          [(z/node p) :end])))))
 
-(defn skip [loc]
-  (or (right loc) (recur (up loc))))
+(defn skip
+  "Modified version of clojure.zip/next to work with balancing version of up"
+  [loc]
+  (if (= :end (loc 1))
+    loc
+    (or 
+     (right loc)
+     (loop [p loc]
+       (if-let [u (up p)]
+         (or (right u) (recur u))
+         [(z/node p) :end])))))
+
+(def insert-right z/insert-right)
+(def remove z/remove)
+(def children z/children)
+(def branch? z/branch?)
+(def node z/node)
+(def end? z/end?)
+(def edit z/edit)
+
+(defn reset [loc]
+  (zipper (root loc)
+          (meta loc)))
+
+(defn jump-down [[pnode _ :as loc] i]
+  (let [[node {acc ::acc :as path}] (down loc)
+        {::keys [reducing-fn metrics-fn]} (meta loc)
+        [lefts rights] (fast-split i (:children pnode))
+        acc (or acc (reducing-fn))]
+    (with-meta [(nth (:children pnode) i)
+                (assoc path
+                       ::acc (if (string? lefts)
+                               (reducing-fn acc (metrics-fn lefts))
+                               (reduce reducing-fn acc lefts))
+                       :l (vec (seq lefts))
+                       :r (drop 1 rights))]
+      (meta loc))))
 
 (defn scan [[node {rights :r lefts :l acc ::acc :as path} :as loc] pred]
-  (when loc
+  (if (end? loc)
+    loc
     (let [{::keys [reducing-fn metrics-fn]} (meta loc)
           next-loc (if (nil? lefts)
                      loc
                      (loop [l (transient lefts)
                             [n & r] (cons node rights)
-                            acc (or (some-> acc (transient)) (reducing-fn))]
+                            acc (or acc (reducing-fn))]
                        (when (some? n)
                          (let [acc' (reducing-fn acc (metrics-fn n))]
                            (if (pred acc')
                              (with-meta [n (assoc path
                                                   :l (persistent! l)
                                                   :r r
-                                                  ::acc (persistent! acc))] (meta loc))
+                                                  ::acc acc)] (meta loc))
                              (recur (conj! l n)
                                     r
                                     acc'))))))]
@@ -196,14 +229,7 @@
   (let [{::keys [reducing-fn metrics-fn]} (meta loc)]
     (-> loc
         (z/insert-left x)
-        (update-in [1 ::acc] (partial per-red reducing-fn) (metrics-fn x)))))
-
-(def insert-right z/insert-right)
-
-(def remove z/remove)
-
-
-
+        (update-in [1 ::acc] reducing-fn (metrics-fn x)))))
 
 
 (defn metrics [x]

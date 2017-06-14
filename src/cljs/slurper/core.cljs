@@ -10,7 +10,8 @@
               [clojure.core.async :as a]
               [cljs-http.client :as http]
               [hiccups.runtime :as hiccups]
-              [slurper.tree :as tree])
+              [slurper.tree :as tree]
+              [slurper.text :as text])
     (:require-macros [reagent.interop :refer [$ $!]]
                      [reagent.ratom :refer [reaction]]
                      [cljs.core.async.macros :refer [go]]))
