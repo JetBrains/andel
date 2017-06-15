@@ -4,19 +4,22 @@
 
 (defrecord Node [metrics children])
 
-(defn make-node [children {::keys [reducing-fn pack-children-fn metrics-fn]}]
+(defn pack-children [[c :as new-children]]
+  (if (char? c)
+    (apply str new-children)
+    (into-array new-children)))
+
+(defn make-node [children {::keys [reducing-fn metrics-fn]}]
   (Node. (if (string? children)
            (metrics-fn children) 
            (reduce (fn [acc x] (reducing-fn acc (metrics-fn x))) (reducing-fn) children))
-         (pack-children-fn children)))
- 
+         (pack-children children)))
 
 (defn ^boolean node? [x]
   (instance? Node x))
 
-(defn zipper [tree {::keys [reducing-fn metrics-fn pack-children-fn]}]
-  (let [config {::pack-children-fn pack-children-fn
-                ::reducing-fn reducing-fn
+(defn zipper [tree {::keys [reducing-fn metrics-fn]}]
+  (let [config {::reducing-fn reducing-fn
                 ::metrics-fn (fn [x]
                                (if (node? x)
                                  (:metrics x)
