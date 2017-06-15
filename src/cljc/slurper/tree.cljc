@@ -181,6 +181,10 @@
 (def node z/node)
 (def end? z/end?)
 (def edit z/edit)
+(def replace z/replace)
+
+(defn root? [[_ {l :l}]]
+  (nil? l))
 
 (defn reset [loc]
   (zipper (root loc)
