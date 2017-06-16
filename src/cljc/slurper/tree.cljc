@@ -84,34 +84,37 @@
                      (reduced true)
                      false)) false children))
 
+(def merge-children-args (atom []))
+
 (defn merge-children [children config]
-  (let [merge-thresh (quot split-thresh 2)]
-    (if (merge-needed? children merge-thresh)
-      (let [[result last] (reduce
-                           (fn [[result left] right]
-                             (let [left-children (:children left)
-                                   right-children (:children right)
-                                   left-c (count left-children)
-                                   right-c (count right-children)]
-                               (if (or (< left-c merge-thresh) (< right-c merge-thresh))
-                                 (if (<= split-thresh (+ left-c right-c))
-                                   (let [[children-left children-right]
-                                         (partition-binary (concat left-children right-children) split-thresh)]
-                                     [(conj! result (make-node children-left config))
-                                      (make-node children-right config)])
-                                   [result (make-node (concat left-children right-children) config)])
-                                 [(conj! result left) right])))
-                           [(transient []) (first children)]
-                           (drop 1 children))]
-        (persistent! (conj! result last)))
-      children)))
+  (if (char? (first children)) children
+      (let [merge-thresh (quot split-thresh 2)]
+        (if (merge-needed? children merge-thresh)
+          (let [[result last] (reduce
+                               (fn [[result left] right]
+                                 (let [left-children (:children left)
+                                       right-children (:children right)
+                                       left-c (count left-children)
+                                       right-c (count right-children)]
+                                   (if (or (< left-c merge-thresh) (< right-c merge-thresh))
+                                     (if (<= split-thresh (+ left-c right-c))
+                                       (let [[children-left children-right]
+                                             (partition-binary (concat left-children right-children) config split-thresh)]
+                                         [(conj! result (make-node (merge-children children-left config) config))
+                                          (make-node children-right config)])
+                                       [result (make-node (merge-children (concat left-children right-children) config) config)])
+                                     [(conj! result left) right])))
+                               [(transient []) (first children)]
+                               (drop 1 children))]
+            (swap! merge-children-args conj children)
+            (persistent! (conj! result last)))
+          children))))
 
 (defn balance-children [children config]
   (if (node? (first children))
-    (let [children' (split-children children config)]
-      (if (< (reduce + (map (comp count :children) children')) split-thresh)
-        (mapcat :children children')
-        (merge-children children' config)))
+    (-> children
+        (split-children config)
+        (merge-children config))
     children))
 
 (defn grow-tree [children config]
@@ -120,12 +123,17 @@
       (make-node balanced-children config)
       (recur [(make-node balanced-children config)] config))))
 
+(defn shrink-tree [{[c :as children] :children :as node}]
+  (if (and (not (string? children)) (= 1 (count children)))
+    (recur c)
+    node))
+
 (defn up [[node {:keys [changed?] :as path} :as loc]]
   (if changed?
     (let [config (meta loc)]
       (if-let [parent (z/up loc)]
         (z/replace parent (grow-tree (z/children parent) config))
-        (with-meta [(grow-tree [node] config) nil] (meta loc))))
+        (with-meta [(shrink-tree (grow-tree [node] config)) nil] (meta loc))))
     (z/up loc)))
 
 (defn right [[node {::keys [acc]} :as loc]]
@@ -175,7 +183,7 @@
          [(z/node p) :end])))))
 
 (def insert-right z/insert-right)
-(def remove z/remove)
+
 (def children z/children)
 (def branch? z/branch?)
 (def node z/node)
@@ -234,4 +242,19 @@
     (-> loc
         (z/insert-left x)
         (update-in [1 ::acc] reducing-fn (metrics-fn x)))))
+
+(defn remove [[node {[left] :l [right] :r :as path} :as loc]]
+  (if (some? right)
+    (with-meta
+      [right (-> path
+                 (update :r (fn [r] (drop 1 r)))
+                 (assoc :changed? true))]
+      (meta loc))
+    (if (some? left)
+      (next (z/remove loc))
+      (if (root? loc)
+        (replace loc (Node. [0 0] ""))
+        (recur (z/up loc))))))
+
+(make-node "" slurper.text/tree-config)a
 

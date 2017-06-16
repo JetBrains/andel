@@ -38,6 +38,8 @@
 (defn r-f
   ([] (array 0 0))
   ([[x1 x2 :as acc] [y1 y2]]
+   (def acc acc)
+   (def y1y2 [y1 y2])
    (array (+ x1 y1)
           (+ x2 y2))))
 
@@ -86,7 +88,7 @@
       (-> chunk
           (tree/edit (fn [{:keys [children]}]
                        (tree/make-node (str (subs children 0 rel-offset) s (subs children rel-offset)) tree-config)))
-          (tree/jump-down (+ rel-offset (count s)))))))
+          (tree/jump-down (+ rel-offset (count s))))))) ; FIXME
 
 (defn delete [loc l]
   (if (tree/branch? loc)
@@ -99,11 +101,12 @@
           end (min chunk-l (+ rel-offset l))
           next-loc  (if (and (= rel-offset 0) (= end chunk-l))
                       (if (tree/root? chunk)
-                        (tree/replace chunk (tree/make-node "" tree-config))
+                        (tree/replace chunk (tree/make-node "" tree-config))                        
                         (tree/remove chunk))
-                      (tree/edit chunk (fn [{s :children}]
-                                         (tree/make-node (str (subs s 0 rel-offset) (subs s end)) tree-config))))
-          next-loc (scan-to-offset next-loc i)
+                      (-> chunk
+                          (tree/edit (fn [{s :children}]
+                                       (tree/make-node (str (subs s 0 rel-offset) (subs s end)) tree-config)))
+                          (scan-to-offset i)))
           deleted-c (- end rel-offset)]
       (if (< deleted-c l)
         (recur next-loc (- l deleted-c))
@@ -152,13 +155,62 @@
 
 (comment
 
+  (-> (make-text "aabbccddeeffgghh")
+      (zipper)
+      (retain 4)
+      (delete (count "ccddeeffgg"))
+      (root))
+  
+  @tree/merge-children-args
+
+
+  tree/b-children
+
+  (make-text "000000000000000000000000")
+
+  (-> (make-text "1234")
+      (zipper)
+      (insert "0")
+      (delete 2)
+      (root))
+
+  (-> (make-text "12345678")
+      (zipper)
+      (insert "0")
+      (delete 8)      
+      (root))
+
+  (-> (make-text "m929E85n")
+      (zipper)
+      (delete (count "m929E85n"))
+      (insert "1"))
+  
+  (root)
+
+  tree/merge-children-args
+      
+      
+
+  (delete (count "00"))
+  (root)
+      
+
+  (-> (make-text "000000000000000000000000")
+      (zipper)
+      (delete (count "0000000000000000"))
+      (root))
+  
+  #_(delete (count "00000000"))
+  #_(retain 13)
+  (root)
+
   (-> (make-text "abcd\nefgh\nklmo\nprst")
       (play [[:retain 5] [:insert "xxx"] [:delete "efgh"] [:retain 10]])
       (debug-tree))
   
   (lines-count (make-text "abcd\nefgh\nklmo\nprst"))
 
-  [ [[:delete "000"] [:retain 13]]]
+  
   (->
    (make-text "0000000000000000")
    (zipper)
@@ -182,60 +234,7 @@
       
 
 
-  [[clojure.zip$branch_QMARK_ invokeStatic "zip.clj" 73]
-  [clojure.zip$branch_QMARK_ invoke "zip.clj" 69]
-  [slurper.text$delete invokeStatic "text.cljc" 92]
-  [slurper.text$delete invoke "text.cljc" 91]
-  [slurper.text$play$fn__46470 invoke "text.cljc" 151]
-  [clojure.lang.PersistentVector reduce "PersistentVector.java" 341]
-  [clojure.core$reduce invokeStatic "core.clj" 6703]
-  [clojure.core$reduce invoke "core.clj" 6686]
-  [slurper.text$play invokeStatic "text.cljc" 147]
-  [slurper.text$play invoke "text.cljc" 146]
-  [slurper.text_test$fn__45981 invokeStatic "text_test.clj" 56]
-  [slurper.text_test$fn__45981 invoke "text_test.clj" 55]
-  [clojure.lang.AFn applyToHelper "AFn.java" 154]
-  [clojure.lang.AFn applyTo "AFn.java" 144]
-  [clojure.core$apply invokeStatic "core.clj" 657]
-  [clojure.core$apply invoke "core.clj" 652]
-  [clojure.test.check.properties$apply_gen$fn__45341$fn__45342 invoke "properties.cljc" 16]
-  [clojure.test.check.properties$apply_gen$fn__45341 invoke "properties.cljc" 16]
-  [clojure.test.check.rose_tree$fmap invokeStatic "rose_tree.cljc" 78]
-  [clojure.test.check.rose_tree$fmap invoke "rose_tree.cljc" 74]
-  [clojure.test.check.generators$fmap$fn__44484 invoke "generators.cljc" 89]
-  [clojure.test.check.generators$gen_fmap$fn__44458 invoke "generators.cljc" 55]
-  [clojure.test.check.generators$call_gen invokeStatic "generators.cljc" 41]
-  [clojure.test.check.generators$call_gen invoke "generators.cljc" 38]
-  [clojure.test.check$quick_check invokeStatic "check.cljc" 62]
-  [clojure.test.check$quick_check doInvoke "check.cljc" 37]
-  [clojure.lang.RestFn invoke "RestFn.java" 425]
-  [slurper.text_test$eval46973 invokeStatic "form-init7761917284535158678.clj" 61]
-  [slurper.text_test$eval46973 invoke "form-init7761917284535158678.clj" 61]
-  [clojure.lang.Compiler eval "Compiler.java" 7005]
-  [clojure.lang.Compiler eval "Compiler.java" 6968]
-  [clojure.core$eval invokeStatic "core.clj" 3194]
-  [clojure.core$eval invoke "core.clj" 3190]
-  [clojure.main$repl$read_eval_print__8372$fn__8375 invoke "main.clj" 242]
-  [clojure.main$repl$read_eval_print__8372 invoke "main.clj" 242]
-  [clojure.main$repl$fn__8381 invoke "main.clj" 260]
-  [clojure.main$repl invokeStatic "main.clj" 260]
-  [clojure.main$repl doInvoke "main.clj" 176]
-  [clojure.lang.RestFn invoke "RestFn.java" 1523]
-  [clojure.tools.nrepl.middleware.interruptible_eval$evaluate$fn__30698 invoke "interruptible_eval.clj" 87]
-  [clojure.lang.AFn applyToHelper "AFn.java" 152]
-  [clojure.lang.AFn applyTo "AFn.java" 144]
-  [clojure.core$apply invokeStatic "core.clj" 657]
-  [clojure.core$with_bindings_STAR_ invokeStatic "core.clj" 1970]
-  [clojure.core$with_bindings_STAR_ doInvoke "core.clj" 1970]
-  [clojure.lang.RestFn invoke "RestFn.java" 425]
-  [clojure.tools.nrepl.middleware.interruptible_eval$evaluate invokeStatic "interruptible_eval.clj" 85]
-  [clojure.tools.nrepl.middleware.interruptible_eval$evaluate invoke "interruptible_eval.clj" 55]
-  [clojure.tools.nrepl.middleware.interruptible_eval$interruptible_eval$fn__30743$fn__30746 invoke "interruptible_eval.clj" 222]
-  [clojure.tools.nrepl.middleware.interruptible_eval$run_next$fn__30738 invoke "interruptible_eval.clj" 190]
-  [clojure.lang.AFn run "AFn.java" 22]
-  [java.util.concurrent.ThreadPoolExecutor runWorker "ThreadPoolExecutor.java" 1142]
-  [java.util.concurrent.ThreadPoolExecutor$Worker run "ThreadPoolExecutor.java" 617]
-  [java.lang.Thread run "Thread.java" 745]]
+  
 
   )
 

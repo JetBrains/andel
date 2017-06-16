@@ -53,9 +53,12 @@
 
 (def play-test
   (prop/for-all [[text operation] operation-gen]
-                (let [t (text/play (text/make-text text) operation)]
+                (def last-op [text operation])
+                (let [t (text/play (text/make-text text) operation)]                  
                   (= (text/text (text/zipper t) (text/text-length t))
                      (play-naive text operation)))))
+
+(g/sample operation-gen 100)
 
 (deftest generative
   (tc/quick-check 100 play-test))
