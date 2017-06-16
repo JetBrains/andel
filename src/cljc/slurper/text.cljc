@@ -33,7 +33,6 @@
                     (recur (inc i) (inc c))
                     (recur (inc i) c))))))))
 
-
 (defn r-f
   ([] (array 0 0))
   ([[x1 x2 :as acc] [y1 y2]]
@@ -46,9 +45,6 @@
       [[i j]]
       (let [x-h (quot x 2)]
         (concat (split-count i (+ i x-h) thresh) (split-count (+ i x-h) j thresh))))))
-
-
-
 
 (def string-thresh 4)
 (def string-merge-thresh (quot string-thresh 2))
@@ -163,19 +159,6 @@
 (defn text [loc l]
   (apply str (lazy-text loc l)))
 
-
-(comment
-
-  (-> (make-text "abcd\nefghklmo\nprsti")
-      (zipper)
-      (scan-to-line 1)
-      (text 10)
-      )
-
-
-
-  )
-
 (defn insert [loc s]
   (if (tree/branch? loc)
     (recur (tree/down loc) s)
@@ -220,127 +203,4 @@
                     :retain (retain loc arg)
                     :insert (insert loc arg)
                     :delete (delete loc (if (string? arg) (count arg) arg)))) (zipper t) operation)))
-
-(comment
-  
-  (-> 
-   (make-text "12345678")
-   (zipper)
-   (insert "00000")
-   (tree/up)
-   (tree/up))
-  tree/split-args
-
-  
-  (tree/up)
-  (root)
-  
-  (delete (count "00000"))
-  (root)
-
-  [ [[:insert "00000000"] [:delete ] [:retain 11]]]
-
-  (def t (-> (make-text "0000000")
-             (zipper)
-             (delete (count "00000"))
-             (retain 2))
-    (tree/scan (by-offset 2)))
-  
-  (retain 2)
-  [ [[:delete ] [:retain 2]]]
-  
-  (-> (make-text "aabbccddeeffgghh")
-      (zipper)
-      (retain 4)
-      (insert "111")
-      (delete 4)
-      (root))
-  
-  (delete (count "ccddeeffgg"))
-  (root)
-  
-  @tree/merge-children-args
-
-
-  tree/b-children
-
-  (make-text "000000000000000000000000")
-
-  (-> (make-text "1234")
-      (zipper)
-      (insert "0")
-      (delete 2)
-      (root))
-
-  (-> (make-text "12345678")
-      (zipper)
-      (insert "0")
-      (delete 8)      
-      (root))
-
-  (-> (make-text "m929E85n")
-      (zipper)
-      (delete (count "m929E85n"))
-      (insert "1"))
-  
-  (root)
-
-  tree/merge-children-args
-      
-      
-
-  (delete (count "00"))
-  (root)
-      
-
-  (-> (make-text "000000000000000000000000")
-      (zipper)
-      (delete (count "0000000000000000"))
-      (root))
-  
-  #_(delete (count "00000000"))
-  #_(retain 13)
-  (root)
-
-  (-> (make-text "abcd\nefgh\nklmo\nprst")
-      (play [[:retain 5] [:insert "xxx"] [:delete "efgh"] [:retain 10]])
-      (debug-tree))
-  
-  (lines-count (make-text "abcd\nefgh\nklmo\nprst"))
-
-  
-  (->
-   (make-text "1230000000000000")
-   (zipper)
-   (delete 3)
-   (retain 13))
-  
-  (offset)
-   
-  (retain 13)
-   
-  (delete 12)
-  (delete (count "Vu0006R79y9U4"))
-
-  @tree/next-locs
-
-  (array 1 2)
-
-
-  (-> (make-text "000000000000000000000000000000000000000000000000")
-      (play [[:retain 4] [:delete "0000000000000000000000000000000"] [:retain 13]]))
-  (zipper)
-  (retain 4)
-  (delete (count "0000000000000000000000000000000"))
-
-
-
-  )
-
-      
-
-
-  
-
-  
 
