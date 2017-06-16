@@ -10,17 +10,16 @@
 
 #?(:clj
    (defn metrics [x]
-     (cond
-       (string? x) (let [l (count x)]
-                     (array l
-                            (loop [i 0
-                                   c 0]
-                              (if (= i l)
-                                c
-                                (if (= (.charAt x i) \newline)
-                                  (recur (inc i) (inc c))
-                                  (recur (inc i) c))))))
-       (char? x) (array 1 (if (= x \newline) 1 0))))
+     (assert (string? x))
+     (let [l (count x)]
+       (array l
+              (loop [i 0
+                     c 0]
+                (if (= i l)
+                  c
+                  (if (= (.charAt x i) \newline)
+                    (recur (inc i) (inc c))
+                    (recur (inc i) c)))))))
    :cljs
    (defn metrics [x]
      (assert (string? x))
@@ -38,18 +37,39 @@
 (defn r-f
   ([] (array 0 0))
   ([[x1 x2 :as acc] [y1 y2]]
-   (def acc acc)
-   (def y1y2 [y1 y2])
    (array (+ x1 y1)
           (+ x2 y2))))
 
+(defn split-count [i j thresh]
+  (let [x (- j i)]
+    (if (< x thresh)
+      [[i j]]
+      (let [x-h (quot x 2)]
+        (concat (split-count i (+ i x-h) thresh) (split-count (+ i x-h) j thresh))))))
+
+
+
+
+(def string-thresh 4)
+(def string-merge-thresh (quot string-thresh 2))
+
+(defn split-string [x]
+  (assert (<= string-thresh (count x)))
+  (map (fn [[i j]] (subs x i j)) (split-count 0 (count x) string-thresh)))
+
 
 (def tree-config {::tree/reducing-fn r-f
-                  ::tree/metrics-fn metrics})
+                  ::tree/metrics-fn metrics
+                  ::tree/leaf-overflown? (fn [x] (<= string-thresh (count x)))
+                  ::tree/split-thresh 4
+                  ::tree/split-leaf split-string
+                  ::tree/leaf-underflown? (fn [s] (< (count s) string-merge-thresh))
+                  ::tree/merge-leafs (fn [s1 s2] (str s1 s2))})
+
 
 (defn make-text [s]
-  (-> (tree/zipper (tree/make-node s tree-config)
-                   tree-config)
+  (-> (tree/zipper (tree/make-node [(tree/make-leaf s tree-config)] tree-config) tree-config)
+      (tree/down)
       (assoc-in [1 :changed?] true)
       (tree/root)))
 
@@ -64,53 +84,58 @@
 (defn by-line [i]
   #(<= i (nth % 1)))
 
-(def offset (comp first tree/loc-acc))
-(def line (comp second tree/loc-acc))
+(defn offset [[node {acc ::tree/acc
+                     o-acc ::overriding-acc}]]
+  (or (first o-acc) (first acc) 0))
+
+(defn line [[node {acc ::tree/acc
+                   o-acc ::overriding-acc}]]
+  (or (second o-acc) (second acc) 0))
+
+(defn count-of [s c from to]
+  (loop [res 0
+         from from]
+    (let [i (clojure.string/index-of s c from)]
+      (if (and (some? i) (< i to))
+        (recur (inc res) (inc i))
+        res))))
+
+(defn nth-index [s c n]
+  (if (= n 0)
+    0
+    (loop [from 0
+           n n]
+      (let [i (clojure.string/index-of s c from)]
+        (if (= n 1)
+          i
+          (when (some? i)
+            (recur (inc i) (dec n))))))))
 
 (defn scan-to-offset [loc i]
-  (tree/scan loc (by-offset i)))
+  (let [loc' (tree/scan loc (by-offset i))]
+    (if (tree/end? loc')
+      loc'
+      (let [o (offset loc')
+            l (line loc')]
+        (assoc-in loc' [1 ::overriding-acc]
+                  (array i (+ l (count-of (:data (tree/node loc')) \newline o (- i o)))))))))
 
 (defn retain [loc l]
   (scan-to-offset loc (+ (offset loc) l)))
 
 (defn scan-to-line [loc i]
-  (-> loc
-      (tree/scan (by-line i))
-      (cond-> (< 0 i) (retain 1))))
+  (let [loc' (tree/scan loc (by-line i))]
+    (if (tree/end? loc')
+      loc'      
+      (let [o (offset loc')
+            l (line loc')
+            idx (nth-index (:data (tree/node loc')) \newline (- i l))]
+        (-> loc'
+            (assoc-in [1 ::overriding-acc] (array (+ o idx) i))
+            (cond-> (< 0 i) (retain 1)))))))
 
-(defn insert [loc s]
-  (if (tree/branch? loc)
-    (recur (tree/down loc) s)
-    (let [i (offset loc)
-          chunk (tree/up loc)
-          chunk-offset (offset chunk)
-          rel-offset (- i chunk-offset)]
-      (-> chunk
-          (tree/edit (fn [{:keys [children]}]
-                       (tree/make-node (str (subs children 0 rel-offset) s (subs children rel-offset)) tree-config)))
-          (tree/jump-down (+ rel-offset (count s))))))) ; FIXME
-
-(defn delete [loc l]
-  (if (tree/branch? loc)
-    (recur (tree/down loc) l)
-    (let [i (offset loc)
-          chunk (tree/up loc)
-          chunk-offset (offset chunk)
-          rel-offset (- i chunk-offset)
-          chunk-l (count (tree/children chunk))
-          end (min chunk-l (+ rel-offset l))
-          next-loc  (if (and (= rel-offset 0) (= end chunk-l))
-                      (if (tree/root? chunk)
-                        (tree/replace chunk (tree/make-node "" tree-config))                        
-                        (tree/remove chunk))
-                      (-> chunk
-                          (tree/edit (fn [{s :children}]
-                                       (tree/make-node (str (subs s 0 rel-offset) (subs s end)) tree-config)))
-                          (scan-to-offset i)))
-          deleted-c (- end rel-offset)]
-      (if (< deleted-c l)
-        (recur next-loc (- l deleted-c))
-        next-loc))))
+(defn forget-acc [loc]
+  (update loc 1 dissoc ::overriding-acc))
 
 (defn lazy-text [loc l]
   (when (< 0 l)
@@ -119,15 +144,14 @@
       (if (tree/branch? loc)
         (recur (tree/down loc) l)
         (let [i (offset loc)
-              parent (tree/up loc)
-              parent-offset (offset parent)
-              parent-s (tree/children parent)
-              start (- i parent-offset)
-              end (min (count parent-s) (+ start l))
-              s (subs parent-s start end)
+              text (:data (tree/node loc))
+              base-offset (nth (tree/loc-acc loc) 0)
+              start (- i base-offset)
+              end (min (count text) (+ start l))
+              s (subs text start end)
               s-len (count s)]
           (if (< s-len l)
-            (cons s (lazy-seq (lazy-text (tree/skip parent) (- l s-len))))
+            (cons s (lazy-seq (lazy-text (tree/next (forget-acc loc)) (- l s-len))))
             (list s)))))))
 
 (defn lines-count [t]
@@ -138,6 +162,50 @@
 
 (defn text [loc l]
   (apply str (lazy-text loc l)))
+
+
+(comment
+
+  (-> (make-text "abcd\nefghklmo\nprsti")
+      (zipper)
+      (scan-to-line 1)
+      (text 10)
+      )
+
+
+
+  )
+
+(defn insert [loc s]
+  (if (tree/branch? loc)
+    (recur (tree/down loc) s)
+    (let [i (offset loc)          
+          chunk-offset (nth (tree/loc-acc loc) 0)
+          rel-offset (- i chunk-offset)]
+      (-> loc
+          (tree/edit (fn [{:keys [data]}]
+                       (tree/make-leaf (str (subs data 0 rel-offset) s (subs data rel-offset)) tree-config)))
+          (retain (count s))))))
+
+(defn delete [loc l]
+  (if (tree/branch? loc)
+    (recur (tree/down loc) l)
+    (let [i (offset loc)
+          
+          chunk-offset (nth (tree/loc-acc loc) 0)
+          rel-offset (- i chunk-offset)
+          chunk-l (count (:data (tree/node loc)))
+          end (min chunk-l (+ rel-offset l))
+          next-loc  (if (and (= rel-offset 0) (= end chunk-l))
+                      (tree/remove (forget-acc loc))
+                      (-> loc
+                          (tree/edit (fn [{s :data}]
+                                       (tree/make-leaf (str (subs s 0 rel-offset) (subs s end)) tree-config)))
+                          (scan-to-offset i)))
+          deleted-c (- end rel-offset)]
+      (if (< deleted-c l)
+        (recur next-loc (- l deleted-c))
+        next-loc))))
 
 (def reset tree/reset)
 
@@ -154,12 +222,42 @@
                     :delete (delete loc (if (string? arg) (count arg) arg)))) (zipper t) operation)))
 
 (comment
+  
+  (-> 
+   (make-text "12345678")
+   (zipper)
+   (insert "00000")
+   (tree/up)
+   (tree/up))
+  tree/split-args
 
+  
+  (tree/up)
+  (root)
+  
+  (delete (count "00000"))
+  (root)
+
+  [ [[:insert "00000000"] [:delete ] [:retain 11]]]
+
+  (def t (-> (make-text "0000000")
+             (zipper)
+             (delete (count "00000"))
+             (retain 2))
+    (tree/scan (by-offset 2)))
+  
+  (retain 2)
+  [ [[:delete ] [:retain 2]]]
+  
   (-> (make-text "aabbccddeeffgghh")
       (zipper)
       (retain 4)
-      (delete (count "ccddeeffgg"))
+      (insert "111")
+      (delete 4)
       (root))
+  
+  (delete (count "ccddeeffgg"))
+  (root)
   
   @tree/merge-children-args
 
@@ -212,10 +310,14 @@
 
   
   (->
-   (make-text "0000000000000000")
+   (make-text "1230000000000000")
    (zipper)
    (delete 3)
    (retain 13))
+  
+  (offset)
+   
+  (retain 13)
    
   (delete 12)
   (delete (count "Vu0006R79y9U4"))
@@ -230,11 +332,15 @@
   (zipper)
   (retain 4)
   (delete (count "0000000000000000000000000000000"))
-  (retain 13)
+
+
+
+  )
+
       
 
 
   
 
-  )
+  
 

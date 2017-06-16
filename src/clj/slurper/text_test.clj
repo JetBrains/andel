@@ -61,5 +61,5 @@
 (g/sample operation-gen 100)
 
 (deftest generative
-  (tc/quick-check 100 play-test))
+  (tc/quick-check 1000 play-test))
 
