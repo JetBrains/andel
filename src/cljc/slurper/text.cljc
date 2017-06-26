@@ -46,7 +46,7 @@
       (let [x-h (quot x 2)]
         (concat (split-count i (+ i x-h) thresh) (split-count (+ i x-h) j thresh))))))
 
-(def string-thresh 4)
+(def string-thresh 64)
 (def string-merge-thresh (quot string-thresh 2))
 
 (defn split-string [x]
@@ -57,11 +57,10 @@
 (def tree-config {::tree/reducing-fn r-f
                   ::tree/metrics-fn metrics
                   ::tree/leaf-overflown? (fn [x] (<= string-thresh (count x)))
-                  ::tree/split-thresh 4
+                  ::tree/split-thresh 32
                   ::tree/split-leaf split-string
                   ::tree/leaf-underflown? (fn [s] (< (count s) string-merge-thresh))
                   ::tree/merge-leafs (fn [s1 s2] (str s1 s2))})
-
 
 (defn make-text [s]
   (-> (tree/zipper (tree/make-node [(tree/make-leaf s tree-config)] tree-config) tree-config)
@@ -81,12 +80,16 @@
   #(<= i (nth % 1)))
 
 (defn offset [[node {acc ::tree/acc
-                     o-acc ::overriding-acc}]]
-  (or (first o-acc) (first acc) 0))
+                     o-acc ::overriding-acc} :as loc]]
+  (if (tree/end? loc)
+    (first (:metrics node))
+    (or (first o-acc) (first acc) 0)))
 
 (defn line [[node {acc ::tree/acc
-                   o-acc ::overriding-acc}]]
-  (or (second o-acc) (second acc) 0))
+                   o-acc ::overriding-acc} :as loc]]
+  (if (tree/end? loc)
+    (second (:metrics node))    
+    (or (second o-acc) (second acc) 0)))
 
 (defn count-of [s c from to]
   (loop [res 0
@@ -119,24 +122,33 @@
 (defn retain [loc l]
   (scan-to-offset loc (+ (offset loc) l)))
 
+(defn forget-acc [loc]
+  (update loc 1 dissoc ::overriding-acc))
+
 (defn scan-to-line [loc i]
   (let [loc' (tree/scan loc (by-line i))]
     (if (tree/end? loc')
       loc'      
-      (let [o (offset loc')
+      (let [loc' (forget-acc loc')
+            o (offset loc')
             l (line loc')
             idx (nth-index (:data (tree/node loc')) \newline (- i l))]
         (-> loc'
             (assoc-in [1 ::overriding-acc] (array (+ o idx) i))
             (cond-> (< 0 i) (retain 1)))))))
 
-(defn forget-acc [loc]
-  (update loc 1 dissoc ::overriding-acc))
+(defn line-length [loc]
+  (let [next-loc (scan-to-line loc (inc (line loc)))
+        len (- (offset next-loc)
+               (offset loc))]
+    (if (tree/end? next-loc)
+      len
+      (dec len))))
 
 (defn lazy-text [loc l]
   (when (< 0 l)
     (if (tree/end? loc)
-      (throw (ex-info "Length is out of bounds" nil))
+      (throw (ex-info "Length is out of bounds" {:l l}))
       (if (tree/branch? loc)
         (recur (tree/down loc) l)
         (let [i (offset loc)
@@ -204,3 +216,7 @@
                     :insert (insert loc arg)
                     :delete (delete loc (if (string? arg) (count arg) arg)))) (zipper t) operation)))
 
+
+(defn line-text [t i]
+  (let [loc (scan-to-line (zipper t) i)]
+    (text loc (line-length loc))))

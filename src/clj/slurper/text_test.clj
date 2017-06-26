@@ -58,8 +58,6 @@
                   (= (text/text (text/zipper t) (text/text-length t))
                      (play-naive text operation)))))
 
-(g/sample operation-gen 100)
-
 (deftest generative
-  (tc/quick-check 1000 play-test))
+  (is (:result (tc/quick-check 3000 play-test))))
 
