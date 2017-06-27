@@ -10,7 +10,8 @@
               [clojure.core.async :as a]
               [cljs-http.client :as http]
               [hiccups.runtime :as hiccups]
-              [slurper.text :as text])
+              [slurper.text :as text]
+              [slurper.tree :as tree])
     (:require-macros [reagent.interop :refer [$ $!]]
                      [reagent.ratom :refer [reaction]]
                      [cljs.core.async.macros :refer [go]]))
@@ -45,14 +46,16 @@
 (defn measure [s]
   (let [canvas (js/document.createElement "canvas")
         ctx (.getContext canvas "2d")]
-    (set! (.-font ctx) "16px Fira Code")
+    (set! (.-font ctx) "Menlo")
     (let [res {:width (.-width (.measureText ctx s)) :height 18}]
       (js/console.log (:width res))
       res)))
 
 (defn make-editor-state []
   (let [ch (a/chan)]
-    {:text (text/make-text "")}))
+    {:text (text/make-text "")
+     :selection [49 4956]
+     :caret 49}))
 
 (defn px [x]
   (str x "px"))
@@ -82,7 +85,7 @@
               closing-tag (str "</" (name tag) ">")]
           (apply str html-tag (concat children [closing-tag]))))))
 
-(def line-h 17.78)
+(def line-h 19)
 
 (defn lines-viewport [line]
   (fn [pos size]
@@ -91,12 +94,13 @@
                       [w h] @size
                       from-idx (int (/ from-y-offset line-h))]
                   {:from-idx from-idx
-                   :to-idx (+ from-idx (/ h line-h))
+                   :to-idx (+ 5 (+ from-idx (/ h line-h)))
                    :y-shift (- (* line-h (- (/ from-y-offset line-h) from-idx)))}))]
       (fn []
         (into
          [:div {:style
-                {:transform (str "translate3d(0px, " (:y-shift @dims) "px, 0px)")}}]
+                {:background theme/background
+                 :transform (str "translate3d(0px, " (:y-shift @dims) "px, 0px)")}}]
          (map (fn [i]
                 (with-meta 
                   [line i]
@@ -132,17 +136,139 @@
                          (.preventDefault evt)))))}
        [viewport pos view-size]])))
 
-(defn line [state index]
-  (let [s (text/line-text (:text @state) index)]
-    [:pre {:style {:height line-h}} s]))
+(comment (measure "x"))
+
+(defn compare-offsets [x y]
+  (cond (= x y) 0
+        (= x :infinity) 1
+        (= y :infinity) -1
+        (< x y) -1
+        (< y x) 1))
+
+(defn subtract-offsets [x y]
+  (assert (not= y :infinity))
+  (if (= x :infinity)
+    :infinity
+    (- x y)))
+
+(defn add-offsets [x y]
+  (if (or (= x :infinity) (= y :infinity))
+    :infinity
+    (+ x y)))
+
+(defn render-selection [[from to] {:keys [width height]}]
+  [:div
+   {:style
+    (style (merge {:background-color theme/selection
+                   :height (px height)
+                   :position :absolute
+                   :top (px 0)}
+                  (if (= to :infinity)
+                    {:left 0
+                     :margin-left (px (* from width))
+                     :width "100%"}
+                    {:left (px (* from width))
+                     :width (px (* (- to from) width))})))}])
+
+(def metrics {:width 10 :height line-h})
+
+(defn render-caret [col {:keys [width height]}]
+  [:div {:style (style {:width "1px"
+                        :animation "blinker 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite"
+                        :top 0
+                        :background-color "red"
+                        :position :absolute
+                        :left (px (* col width))
+                        :height (px (inc height))})}])
+
+(defn render-line [line-text selection caret-index {:keys [height]}]
+  [:div
+   {:dangerouslySetInnerHTML
+    {:__html
+     (html
+      [:div
+       {:style (style {:height (px height)
+                       :position :relative})}
+       (render-selection selection metrics)
+       [:pre {:style (style {:position :absolute
+                             :top (px 0) 
+                             :height (px height)})} line-text]
+       (when caret-index (render-caret caret-index metrics))])}}])
+
+(defn line-selection [[from to] [line-start-offset line-end-offset]]
+  (cond (< from line-start-offset to)
+        (if (< line-end-offset to)
+          [0 :infinity]
+          [0 (- to line-start-offset)])
+        (<= line-start-offset from line-end-offset)
+        [(- from line-start-offset) (if (< to line-end-offset)
+                                      (- to line-start-offset)
+                                      :infinity)]
+        :else nil))
+
+(defn line [{:keys [text caret selection]} index]
+  (let [line-start (text/scan-to-line (text/zipper text) index)
+        next-line (text/scan-to-line line-start (inc index))
+        line-start-offset (text/offset line-start)
+        next-line-offset (text/offset next-line)
+        len (- next-line-offset
+               line-start-offset)
+        len (if (tree/end? next-line)
+              len
+              (dec len))
+        line-text (text/text line-start len)
+        line-end-offset (+ line-start-offset len)
+        line-sel (line-selection selection [line-start-offset line-end-offset])
+        line-caret (when (<= line-start-offset caret line-end-offset)
+                     (- caret line-start-offset))]
+    [render-line line-text line-sel line-caret metrics]))
+
+(defn type-in [{:keys [caret text] :as state} s]
+  (assoc state
+         :text (-> (text/zipper text)
+                   (text/scan-to-offset caret)
+                   (text/insert s)
+                   (text/root))
+         :caret (+ caret (count s))))
 
 (defn editor [state]
-  [scroll (reagent/atom [2000 30000])
-   (lines-viewport
-    (fn [index]
-      (with-meta 
-        [line state index]
-        {:key index})))])
+  (let [size (reagent/atom [2000 30000])
+        dom-input (atom nil)
+        listener (atom nil)]
+    (fn []
+      [:div {:style {:display :flex
+                     :flex 1}
+             :tab-index -1
+             :ref (fn [this]
+                    (when-let [node (reagent/dom-node this)]
+                      (reset! listener true)
+                      (.addEventListener node "focus"
+                                         (fn []
+                                           (when @dom-input
+                                             (.focus @dom-input)))))
+                    )}
+       [scroll size 
+        (lines-viewport
+         (fn [index]
+           (with-meta 
+             [line @state index]
+             {:key index})))]
+       [:textarea
+        {:ref (fn [this]
+                (when-let [dom-node (reagent/dom-node this)]
+                  (.addEventListener dom-node "focus" (fn [] (js/console.log "focus input")))
+                  (reset! dom-input dom-node)))
+         :auto-focus true
+         :style {:opacity 0
+                 :pading "0px"
+                 :border :none
+                 :height "0px"
+                 :width "0px"}
+         :on-input (fn [evt]
+                     (let [e (.-target evt)
+                           val (.-value e)]
+                       (set! (.-value e) "")
+                       (swap! state type-in val)))}]])))
 
 (defn main []
   [:div {:style {:display :flex
