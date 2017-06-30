@@ -25,12 +25,24 @@
 
            (defn ^boolean leaf? [x] (not (node? x)))))
 
-(defn zipper [tree {::keys [reducing-fn metrics-fn] :as config}]
-  (vary-meta (z/zipper node?
-                       :children
-                       (fn [node children] (make-node children config))
-                       tree)
-             merge config))
+(defn zipper [tree {::keys [reducing-fn
+                            metrics-fn
+                            leaf-overflown?
+                            split-thresh
+                            split-leaf
+                            leaf-underflown?
+                            merge-leafs] :as config}]  
+  ^{:zip/branch? node?
+    :zip/children :children
+    :zip/make-node (fn [node children] (make-node children config))
+    ::reducing-fn reducing-fn
+    ::metrics-fn metrics-fn
+    ::leaf-overflown? leaf-overflown?
+    ::split-thresh split-thresh
+    ::split-leaf split-leaf
+    ::leaf-underflown? leaf-underflown?
+    ::merge-leafs merge-leafs}
+  [tree nil])
  
 (defn partition-binary [s thresh]
   (let [cs (count s)]
@@ -200,7 +212,7 @@
 (def children z/children)
 (def branch? z/branch?)
 (def node z/node)
-(def end? z/end?)
+(defn end? [[_ p]] (keyword? p))
 (def edit z/edit)
 (def replace z/replace)
 (def insert-child z/insert-child)
@@ -224,10 +236,12 @@
                        (when (some? n)
                          (let [acc' (reducing-fn acc (:metrics n))]
                            (if (pred acc')
-                             (with-meta [n (assoc path
-                                                  :l (persistent! l)
-                                                  :r (seq r)
-                                                  ::acc acc)] (meta loc))
+                             (with-meta [n (-> path
+                                               (transient)
+                                               (assoc! :l (persistent! l))
+                                               (assoc! :r (seq r))
+                                               (assoc! ::acc acc)
+                                               (persistent!))] (meta loc))
                              (recur (conj! l n) r acc'))))))]
       
       (if (some? next-loc)

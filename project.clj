@@ -54,10 +54,11 @@
             {:source-paths ["src/cljs" "src/cljc" "env/prod/cljs"]
              :compiler
              {:output-to "target/cljsbuild/public/js/app.js"
-              :output-dir "target/uberjar"
+              :output-dir "target/cljsbuild/public/js/"
               :main "slurper.prod"
               :optimizations :advanced
-;              :pseudo-names true
+              :pseudo-names true
+              :source-map "target/cljsbuild/public/js/app.js.map"
               :pretty-print  false}}
             :app
             {:source-paths ["src/cljs" "src/cljc" "env/dev/cljs"]

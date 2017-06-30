@@ -55,7 +55,12 @@
   (let [ch (a/chan)]
     {:text (text/make-text "")
      :selection [49 4956]
-     :caret 49}))
+     :caret 49
+     :lexer-broker ch
+     :modespec "text/x-java"
+     :timestamp 0
+     :lines []
+     :first-invalid 0}))
 
 (defn px [x]
   (str x "px"))
@@ -74,16 +79,22 @@
   (reduce-kv (fn [s k v]
                (str s " " (name k) "=\"" (if (keyword? v) (name v) v) "\"")) nil m))
 
-(defn html [[tag & rest :as el]]
-  (when el
+(defn html [[tag & r :as el]]
+  (if (some? el)
     (if (string? el) (goog.string/htmlEscape el)
-        (let [[attrs? & children :as rest] (if (string? rest) nil rest)
+        (let [[attrs? & children :as r] (if (string? r) nil r)
               html-tag (str "<" (name tag) " "
                             (when (map? attrs?)
                               (render-attrs attrs?)) ">")
-              children (map html (if (map? attrs?) children rest))
-              closing-tag (str "</" (name tag) ">")]
-          (apply str html-tag (concat children [closing-tag]))))))
+              children (if (map? attrs?) children r)]
+          (loop [res html-tag
+                 children children]
+            (if (seq children)
+              (recur (+ res (html (first children)))
+                     (rest children))
+              (str res "</" (name tag) ">")))))
+    ""))
+
 
 (def line-h 19)
 
@@ -181,19 +192,57 @@
                         :left (px (* col width))
                         :height (px (inc height))})}])
 
-(defn render-line [line-text selection caret-index {:keys [height]}]
-  [:div
-   {:dangerouslySetInnerHTML
-    {:__html
-     (html
-      [:div
-       {:style (style {:height (px height)
-                       :position :relative})}
-       (render-selection selection metrics)
-       [:pre {:style (style {:position :absolute
-                             :top (px 0) 
-                             :height (px height)})} line-text]
-       (when caret-index (render-caret caret-index metrics))])}}])
+(defn infinity? [x] (keyword? x))
+
+(defn fragments [s fragments]
+  (->> fragments
+       (reduce (fn [[s res] frag]
+                 (if (infinity? frag)
+                   (reduced [nil (conj! res s)])
+                   [(subs s frag) (conj! res (subs s 0 frag))]))
+               [s (transient [])])
+       (second)
+       (persistent!)))
+
+(def token-class
+  (memoize (fn [tt]
+             (when tt
+               (let [class (name tt)]
+                 (defstyle tt [(str "." class) (theme/token-styles tt)])
+                 class)))))
+
+(defstyle :line-text [:.line-text {:position :absolute
+                                   :left 0
+                                   :top 0}])
+
+(defn render-text [text tokens {:keys [height]}]
+  (let [frags (fragments text (concat (map first tokens) [:infinity]))]
+    (into
+     [:pre {:class :line-text}]
+     (map (fn [s class]
+            [:span {:class class} s])
+          frags
+          (map token-class (concat (map second tokens) (repeat nil)))))))
+
+(.-innerHTML (js/document.getElementById "app"))
+
+(def inner-html
+  (reagent/create-class
+   {:component-will-receive-props (fn [this [_ html]]
+                                    (set! (.-innerHTML (reagent/dom-node this)) html))
+    :component-did-mount (fn [this]
+                           (let [[_ html] (reagent/argv this)]
+                             (set! (.-innerHTML (reagent/dom-node this))  html)))
+    :render (fn [_] [:div])}))
+
+(defn render-line [line-text line-tokens selection caret-index {:keys [height] :as metrics}]
+  [inner-html (html
+               [:div
+                {:style (style {:height (px height)
+                                :position :relative})}
+                (render-selection selection metrics)
+                (render-text line-text line-tokens metrics)
+                (when caret-index (render-caret caret-index metrics))])])
 
 (defn line-selection [[from to] [line-start-offset line-end-offset]]
   (cond (< from line-start-offset to)
@@ -206,7 +255,7 @@
                                       :infinity)]
         :else nil))
 
-(defn line [{:keys [text caret selection]} index]
+(defn line-impl [text caret selection line-tokens index]
   (let [line-start (text/scan-to-line (text/zipper text) index)
         next-line (text/scan-to-line line-start (inc index))
         line-start-offset (text/offset line-start)
@@ -221,15 +270,21 @@
         line-sel (line-selection selection [line-start-offset line-end-offset])
         line-caret (when (<= line-start-offset caret line-end-offset)
                      (- caret line-start-offset))]
-    [render-line line-text line-sel line-caret metrics]))
+    [render-line line-text line-tokens line-sel line-caret metrics]))
+
+(defn line [{:keys [text caret selection lines] :as state} index]
+  [line-impl text caret selection (:tokens (get lines index)) index])
 
 (defn type-in [{:keys [caret text] :as state} s]
-  (assoc state
-         :text (-> (text/zipper text)
-                   (text/scan-to-offset caret)
-                   (text/insert s)
-                   (text/root))
-         :caret (+ caret (count s))))
+  (let [loc (-> (text/zipper text)
+                (text/scan-to-offset caret))]
+    (-> state
+        (assoc :text (-> loc
+                         (text/insert s)
+                         (text/root)))
+        (update :caret + (count s))
+        (update :timestamp inc)
+        (update :first-invalid min (text/line loc)))))
 
 (defn editor [state]
   (let [size (reagent/atom [2000 30000])
@@ -245,8 +300,7 @@
                       (.addEventListener node "focus"
                                          (fn []
                                            (when @dom-input
-                                             (.focus @dom-input)))))
-                    )}
+                                             (.focus @dom-input))))))}
        [scroll size 
         (lines-viewport
          (fn [index]
@@ -297,14 +351,76 @@
 
 (defonce editor-impl (atom nil))
 
+(defonce modification-watcher
+  (do (add-watch state :lexer
+                 (fn [_ _ {old-ts :timestamp} {new-ts :timestamp
+                                              broker :lexer-broker :as s}]                   
+                   (when (not= old-ts new-ts)
+                     (a/put! broker s))))
+      true))
+
+(defn deliver-lexems! [{:keys [req-ts tokens index]}]
+  (swap! state
+         (fn [{:keys [timestamp] :as state}]
+           (if (= timestamp req-ts)
+             (-> state
+                 (assoc-in [:lines index :tokens] tokens)
+                 (assoc :first-invalid (inc index)))
+             state)))
+  (= (:timestamp @state) req-ts))
+
+(defn attach-lexer! [{:keys [modespec lexer-broker]}]
+  (let [{:keys [input output]} (lexer/new-lexer-worker modespec)]    
+    (go
+      (loop [state nil
+             line 0
+             start-time 0]
+        (let [elapsed (- (.getTime (js/Date.)) start-time)
+              next-text (when (< line (text/lines-count (:text state)))
+                          (some-> state :text (text/line-text line)))
+              [val port] (a/alts! (cond-> [lexer-broker output]
+                                    (some? next-text) (conj [input {:index line
+                                                                    :text next-text
+                                                                    :req-ts (:timestamp state)}]))
+                                  :priority true)]
+          (let [start-time' (if (< 10 elapsed)
+                              (do (a/<! (a/timeout 1))
+                                  (.getTime (js/Date.)))
+                              start-time)]            
+            (cond
+              (= port lexer-broker) (recur val (:first-invalid val) start-time')
+              (= port output) (let [delivered?  (deliver-lexems! val)]
+                                (recur state (if delivered? (inc line) line) start-time'))
+              (= port input) (recur state line start-time'))))))))
+
+(defonce *codemirror-state (atom :initial))
+
+(defn with-codemirror [cb]
+  (if (= @*codemirror-state :ready)
+    (cb)
+    (do
+      (if (= @*codemirror-state :scheduled)
+        nil
+        (do
+          (reset! *codemirror-state :scheduled)
+          (include-script "/codemirror/addon/runmode/runmode-standalone.js"
+                          (fn []
+                            (include-script "/codemirror/mode/javascript/javascript.js"
+                                            (fn [] (js/console.log "js load")))
+                            (include-script "/codemirror/mode/clike/clike.js"
+                                            (fn [] (js/console.log "clike load")))
+                            (include-script "/codemirror/mode/clojure/clojure.js"
+                                            (fn [] (js/console.log "clojure load")))
+                            (cb))))))))
+
 (defn load-text [cb]
   (go
     (let [text (:body (a/<! (http/get "/EditorImpl.java")))]
       (reset! editor-impl text)
-      (swap! state set-text text)
+      (with-codemirror (fn []
+                         (swap! state set-text text)
+                         (attach-lexer! @state)))
       (cb))))
-
-(defonce *codemirror-state (atom :initial))
 
 (defn mount-root []
   (load-text (fn []
