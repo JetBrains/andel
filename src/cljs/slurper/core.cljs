@@ -11,7 +11,8 @@
               [cljs-http.client :as http]
               [hiccups.runtime :as hiccups]
               [slurper.text :as text]
-              [slurper.tree :as tree])
+              [slurper.tree :as tree]
+              [clojure.core.reducers :as r])
     (:require-macros [reagent.interop :refer [$ $!]]
                      [reagent.ratom :refer [reaction]]
                      [cljs.core.async.macros :refer [go]]))
@@ -42,6 +43,9 @@
   [:pre {:font-family "Menlo, monospace"
          :color theme/foreground
          :margin "0px"}])
+
+(defstyle :body
+  [:body {:background theme/background}])
 
 (defn measure [s]
   (let [canvas (js/document.createElement "canvas")
@@ -95,7 +99,6 @@
               (str res "</" (name tag) ">")))))
     ""))
 
-
 (def line-h 19)
 
 (defn lines-viewport [line]
@@ -111,6 +114,7 @@
         (into
          [:div {:style
                 {:background theme/background
+                 :width "100%"
                  :transform (str "translate3d(0px, " (:y-shift @dims) "px, 0px)")}}]
          (map (fn [i]
                 (with-meta 
@@ -123,13 +127,13 @@
         view-size (reagent/atom [0 0])
         once (atom true)]
     (fn []
-      [:div {:style {:width "100%"
-                     :height "100%"
+      [:div {:style {:display :flex
+                     :flex "1"
                      :overflow :hidden}
              :ref (fn [e]
                     (when e
                       (reset! view-size [(.-clientWidth e)
-                                         (.-clientHeight e)]))
+                                         (.-clientHeight e)]) 100)
                     (when (and @once (some? e))
                       (reset! once false)
                       (.addEventListener
@@ -168,63 +172,59 @@
     (+ x y)))
 
 (defn render-selection [[from to] {:keys [width height]}]
-  [:div
-   {:style
-    (style (merge {:background-color theme/selection
-                   :height (px height)
-                   :position :absolute
-                   :top (px 0)}
-                  (if (= to :infinity)
-                    {:left 0
-                     :margin-left (px (* from width))
-                     :width "100%"}
-                    {:left (px (* from width))
-                     :width (px (* (- to from) width))})))}])
+  #js [:div
+       {:style
+        (style (merge {:background-color theme/selection
+                       :height (px height)
+                       :position :absolute
+                       :top (px 0)}
+                      (if (= to :infinity)
+                        {:left 0
+                         :margin-left (px (* from width))
+                         :width "100%"}
+                        {:left (px (* from width))
+                         :width (px (* (- to from) width))})))}])
 
 (def metrics {:width 10 :height line-h})
 
 (defn render-caret [col {:keys [width height]}]
-  [:div {:style (style {:width "1px"
-                        :animation "blinker 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite"
-                        :top 0
-                        :background-color "red"
-                        :position :absolute
-                        :left (px (* col width))
-                        :height (px (inc height))})}])
+  #js [:div {:style (style {:width "1px"
+                            :animation "blinker 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite"
+                            :top 0
+                            :background-color "red"
+                            :position :absolute
+                            :left (px (* col width))
+                            :height (px (inc height))})}])
 
 (defn infinity? [x] (keyword? x))
 
-(defn fragments [s fragments]
-  (->> fragments
-       (reduce (fn [[s res] frag]
-                 (if (infinity? frag)
-                   (reduced [nil (conj! res s)])
-                   [(subs s frag) (conj! res (subs s 0 frag))]))
-               [s (transient [])])
-       (second)
-       (persistent!)))
-
 (def token-class
-  (memoize (fn [tt]
-             (when tt
-               (let [class (name tt)]
-                 (defstyle tt [(str "." class) (theme/token-styles tt)])
-                 class)))))
+  (let [tokens-cache #js {}]
+    (fn [tt]
+      (when tt
+        (if-let [c (aget tokens-cache (name tt))]
+          c
+          (let [class (name tt)]
+            (defstyle tt [(str "." class) (theme/token-styles tt)])
+            (aset tokens-cache (name tt) class)
+            class))))))
 
 (defstyle :line-text [:.line-text {:position :absolute
                                    :left 0
                                    :top 0}])
 
-(defn render-text [text tokens {:keys [height]}]
-  (let [frags (fragments text (concat (map first tokens) [:infinity]))]
-    (into
-     [:pre {:class :line-text}]
-     (map (fn [s class]
-            [:span {:class class} s])
-          frags
-          (map token-class (concat (map second tokens) (repeat nil)))))))
+(defn push! [a x]
+  (.push a x)
+  a)
 
-(.-innerHTML (js/document.getElementById "app"))
+(defn render-text [text tokens {:keys [height]}]
+  (let [[i res] (reduce (fn [[i res] [len tt]]
+                          [(+ i len)
+                           (push! res #js [:span {:class (token-class tt)}
+                                           (subs text i (+ i len))])])
+                        [0 #js [:pre {:class :line-text}]]
+                        tokens)]
+    (push! res #js [:span (subs text i)])))
 
 (def inner-html
   (reagent/create-class
@@ -237,19 +237,19 @@
 
 (defn render-line [line-text line-tokens selection caret-index {:keys [height] :as metrics}]
   [inner-html (html
-               [:div
-                {:style (style {:height (px height)
-                                :position :relative})}
-                (render-selection selection metrics)
-                (render-text line-text line-tokens metrics)
-                (when caret-index (render-caret caret-index metrics))])])
+               #js [:div 
+                    {:style (style {:height (px height)
+                                    :position :relative})}
+                    (render-selection selection metrics)
+                    (render-text line-text line-tokens metrics)
+                    (when caret-index (render-caret caret-index metrics))])])
 
 (defn line-selection [[from to] [line-start-offset line-end-offset]]
-  (cond (< from line-start-offset to)
+  (cond (and (< from line-start-offset) (< line-start-offset to))
         (if (< line-end-offset to)
           [0 :infinity]
           [0 (- to line-start-offset)])
-        (<= line-start-offset from line-end-offset)
+        (and (<= line-start-offset from) (<= from line-end-offset))
         [(- from line-start-offset) (if (< to line-end-offset)
                                       (- to line-start-offset)
                                       :infinity)]
@@ -268,7 +268,7 @@
         line-text (text/text line-start len)
         line-end-offset (+ line-start-offset len)
         line-sel (line-selection selection [line-start-offset line-end-offset])
-        line-caret (when (<= line-start-offset caret line-end-offset)
+        line-caret (when (and (<= line-start-offset caret) (<= caret line-end-offset))
                      (- caret line-start-offset))]
     [render-line line-text line-tokens line-sel line-caret metrics]))
 
