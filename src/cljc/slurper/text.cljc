@@ -123,7 +123,7 @@
   (scan-to-offset loc (+ (offset loc) l)))
 
 (defn forget-acc [loc]
-  (update loc 1 dissoc ::overriding-acc))
+  (assoc loc 1 (dissoc (loc 1) ::overriding-acc)))
 
 (defn scan-to-line [loc i]
   (let [loc' (tree/scan loc (by-line i))]

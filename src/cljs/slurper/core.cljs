@@ -101,27 +101,6 @@
 
 (def line-h 19)
 
-(defn lines-viewport [line]
-  (fn [pos size]
-    (let [dims (reaction
-                (let [[_ from-y-offset] @pos
-                      [w h] @size
-                      from-idx (int (/ from-y-offset line-h))]
-                  {:from-idx from-idx
-                   :to-idx (+ 5 (+ from-idx (/ h line-h)))
-                   :y-shift (- (* line-h (- (/ from-y-offset line-h) from-idx)))}))]
-      (fn []
-        (into
-         [:div {:style
-                {:background theme/background
-                 :width "100%"
-                 :transform (str "translate3d(0px, " (:y-shift @dims) "px, 0px)")}}]
-         (map (fn [i]
-                (with-meta 
-                  [line i]
-                  {:key i}))
-              (range (:from-idx @dims) (:to-idx @dims))))))))
-
 (defn scroll [size viewport]
   (let [pos (reagent/atom [0 0])
         view-size (reagent/atom [0 0])
@@ -174,16 +153,17 @@
 (defn render-selection [[from to] {:keys [width height]}]
   #js [:div
        {:style
-        (style (merge {:background-color theme/selection
-                       :height (px height)
-                       :position :absolute
-                       :top (px 0)}
-                      (if (= to :infinity)
-                        {:left 0
-                         :margin-left (px (* from width))
-                         :width "100%"}
-                        {:left (px (* from width))
-                         :width (px (* (- to from) width))})))}])
+        (style {:background-color theme/selection
+                :height (px height)
+                :position :absolute
+                :top (px 0)
+                :left (if (infinity? to)
+                        0
+                        (px (* from width)))
+                :margin-left (when (infinity? to) (px (* from width)))
+                :width (if (infinity? to)
+                         "100%"
+                         (px (* (- to from) width)))})}])
 
 (def metrics {:width 10 :height line-h})
 
@@ -228,17 +208,22 @@
 
 (def inner-html
   (reagent/create-class
-   {:component-will-receive-props (fn [this [_ html]]
-                                    (set! (.-innerHTML (reagent/dom-node this)) html))
-    :component-did-mount (fn [this]
-                           (let [[_ html] (reagent/argv this)]
-                             (set! (.-innerHTML (reagent/dom-node this))  html)))
+   {:component-will-update
+    (fn [this [_ html]]
+      (set! (.-innerHTML (reagent/dom-node this)) html))
+    
+    :component-did-mount
+    (fn [this]
+      (let [[_ html] (reagent/argv this)]
+        (set! (.-innerHTML (reagent/dom-node this))  html)))
     :render (fn [_] [:div])}))
 
 (defstyle :render-line [:.render-line {:height (px line-h)
                                        :position :relative}])
 
-(defn render-line [line-text line-tokens selection caret-index {:keys [height] :as metrics}]
+(defrecord LineInfo [line-text line-tokens selection caret-index index])
+
+(defn render-line [{:keys [line-text line-tokens selection caret-index] :as line-info} {:keys [height] :as metrics}]
   [inner-html (html
                #js [:div {:class :render-line}
                     (render-selection selection metrics)
@@ -256,25 +241,46 @@
                                       :infinity)]
         :else nil))
 
-(defn line-impl [text caret selection line-tokens index]
-  (let [line-start (text/scan-to-line (text/zipper text) index)
-        next-line (text/scan-to-line line-start (inc index))
-        line-start-offset (text/offset line-start)
-        next-line-offset (text/offset next-line)
-        len (- next-line-offset
-               line-start-offset)
-        len (if (tree/end? next-line)
-              len
-              (dec len))
-        line-text (text/text line-start len)
-        line-end-offset (+ line-start-offset len)
-        line-sel (line-selection selection [line-start-offset line-end-offset])
-        line-caret (when (and (<= line-start-offset caret) (<= caret line-end-offset))
-                     (- caret line-start-offset))]
-    [render-line line-text line-tokens line-sel line-caret metrics]))
-
-(defn line [{:keys [text caret selection lines] :as state} index]
-  [line-impl text caret selection (:tokens (get lines index)) index])
+(defn editor-viewport [state]
+  (fn [pos size]
+    (let [dims (reaction
+                (let [[_ from-y-offset] @pos
+                      [w h] @size
+                      from-idx (int (/ from-y-offset line-h))]
+                  {:from-idx from-idx
+                   :to-idx (+ 5 (+ from-idx (/ h line-h)))
+                   :y-shift (- (* line-h (- (/ from-y-offset line-h) from-idx)))}))]
+      (fn []
+        (let [from (:from-idx @dims)
+              to (:to-idx @dims)
+              {:keys [text caret selection lines] :as state} @state
+              [_ hiccup] (reduce
+                              (fn [[line-start res] index]
+                                (let [next-line (text/scan-to-line line-start (inc index))
+                                      line-start-offset (text/offset line-start)
+                                      next-line-offset (text/offset next-line)
+                                      len (- next-line-offset
+                                             line-start-offset)
+                                      len (if (tree/end? next-line)
+                                            len
+                                            (dec len))
+                                      line-text (text/text line-start len)
+                                      line-end-offset (+ line-start-offset len)
+                                      line-sel (line-selection selection [line-start-offset line-end-offset])
+                                      line-caret (when (and (<= line-start-offset caret) (<= caret line-end-offset))
+                                                   (- caret line-start-offset))
+                                      line-tokens (:tokens (get lines index))
+                                      line-info (LineInfo. line-text line-tokens line-sel line-caret index)]
+                                  [next-line (conj! res
+                                                    ^{:key index}
+                                                    [render-line line-info metrics])]))
+                              [(text/scan-to-line (text/zipper text) from)
+                               (transient [:div {:style
+                                                 {:background theme/background
+                                                  :width "100%"
+                                                  :transform (str "translate3d(0px, " (:y-shift @dims) "px, 0px)")}}])]
+                              (range from to))]
+          (persistent! hiccup))))))
 
 (defn type-in [{:keys [caret text] :as state} s]
   (let [loc (-> (text/zipper text)
@@ -303,11 +309,7 @@
                                            (when @dom-input
                                              (.focus @dom-input))))))}
        [scroll size 
-        (lines-viewport
-         (fn [index]
-           (with-meta 
-             [line @state index]
-             {:key index})))]
+        (editor-viewport state)]
        [:textarea
         {:ref (fn [this]
                 (when-let [dom-node (reagent/dom-node this)]
