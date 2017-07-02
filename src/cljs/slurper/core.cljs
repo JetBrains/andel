@@ -212,7 +212,6 @@
         (when child
           (.removeChild node child))
         (.appendChild node elt)))
-    
     :component-did-mount
     (fn [this]
       (let [[_ elt] (reagent/argv this)
