@@ -57,7 +57,7 @@
               :output-dir "target/cljsbuild/public/js/"
               :main "slurper.prod"
               :optimizations :advanced
-              :pseudo-names true
+;              :pseudo-names true
               :source-map "target/cljsbuild/public/js/app.js.map"
               :pretty-print  false}}
             :app

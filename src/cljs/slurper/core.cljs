@@ -235,11 +235,12 @@
                              (set! (.-innerHTML (reagent/dom-node this))  html)))
     :render (fn [_] [:div])}))
 
+(defstyle :render-line [:.render-line {:height (px line-h)
+                                       :position :relative}])
+
 (defn render-line [line-text line-tokens selection caret-index {:keys [height] :as metrics}]
   [inner-html (html
-               #js [:div 
-                    {:style (style {:height (px height)
-                                    :position :relative})}
+               #js [:div {:class :render-line}
                     (render-selection selection metrics)
                     (render-text line-text line-tokens metrics)
                     (when caret-index (render-caret caret-index metrics))])])
