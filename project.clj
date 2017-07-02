@@ -13,7 +13,7 @@
                  [compojure "1.5.2"]
                  [hiccup "1.0.5"]
                  [yogthos/config "0.8"]
-                 [org.clojure/clojurescript "1.9.521"
+                 [org.clojure/clojurescript "1.9.671"
                   :scope "provided"]
                  [secretary "1.2.3"]
                  [cljs-http "0.1.43"]
@@ -57,7 +57,7 @@
               :output-dir "target/cljsbuild/public/js/"
               :main "slurper.prod"
               :optimizations :advanced
-;              :pseudo-names true
+              :pseudo-names true
               :source-map "target/cljsbuild/public/js/app.js.map"
               :pretty-print  false}}
             :app
