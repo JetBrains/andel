@@ -83,21 +83,34 @@
   (reduce-kv (fn [s k v]
                (str s " " (name k) "=\"" (if (keyword? v) (name v) v) "\"")) nil m))
 
-(defn html [[tag & r :as el]]
-  (if (some? el)
-    (if (string? el) (goog.string/htmlEscape el)
-        (let [[attrs? & children :as r] (if (string? r) nil r)
-              html-tag (str "<" (name tag) " "
-                            (when (map? attrs?)
-                              (render-attrs attrs?)) ">")
-              children (if (map? attrs?) children r)]
-          (loop [res html-tag
-                 children children]
-            (if (seq children)
-              (recur (+ res (html (first children)))
-                     (rest children))
-              (str res "</" (name tag) ">")))))
-    ""))
+(defn make-node [tag]
+  (js/document.createElement (name tag)))
+
+(defn make-text-node [s]
+  (js/document.createTextNode s))
+
+(defn assoc-attr! [e a v]
+  (.setAttribute e (name a) (if (keyword? v) (name v) v))
+  e)
+
+(defn conj-child! [e c]
+  (.appendChild e c)
+  e)
+
+(defn dom [[tag x & r :as el]]
+  (assert (some? el))
+  (let [[attrs-map children] (if (map? x) [x r] [nil (cons x r)])]
+    (reduce (fn [n [a v]]
+              (assoc-attr! n a v))
+            (reduce (fn [n c]
+                      (if (some? c)
+                        (conj-child! n (if (string? c)
+                                         (make-text-node c)
+                                         (dom c)))
+                        n))
+                    (make-node tag)
+                    children)
+            attrs-map)))
 
 (def line-h 19)
 
@@ -132,23 +145,7 @@
 
 (comment (measure "x"))
 
-(defn compare-offsets [x y]
-  (cond (= x y) 0
-        (= x :infinity) 1
-        (= y :infinity) -1
-        (< x y) -1
-        (< y x) 1))
-
-(defn subtract-offsets [x y]
-  (assert (not= y :infinity))
-  (if (= x :infinity)
-    :infinity
-    (- x y)))
-
-(defn add-offsets [x y]
-  (if (or (= x :infinity) (= y :infinity))
-    :infinity
-    (+ x y)))
+(defn infinity? [x] (keyword? x))
 
 (defn render-selection [[from to] {:keys [width height]}]
   #js [:div
@@ -176,7 +173,7 @@
                             :left (px (* col width))
                             :height (px (inc height))})}])
 
-(defn infinity? [x] (keyword? x))
+
 
 (def token-class
   (let [tokens-cache #js {}]
@@ -206,16 +203,21 @@
                         tokens)]
     (push! res #js [:span (subs text i)])))
 
-(def inner-html
+(def real-dom
   (reagent/create-class
    {:component-will-update
-    (fn [this [_ html]]
-      (set! (.-innerHTML (reagent/dom-node this)) html))
+    (fn [this [_ elt]]
+      (let [node (reagent/dom-node this)
+            child (.-firstChild node)]
+        (when child
+          (.removeChild node child))
+        (.appendChild node elt)))
     
     :component-did-mount
     (fn [this]
-      (let [[_ html] (reagent/argv this)]
-        (set! (.-innerHTML (reagent/dom-node this))  html)))
+      (let [[_ elt] (reagent/argv this)
+            node (reagent/dom-node this)]
+        (.appendChild node elt)))
     :render (fn [_] [:div])}))
 
 (defstyle :render-line [:.render-line {:height (px line-h)
@@ -224,7 +226,7 @@
 (defrecord LineInfo [line-text line-tokens selection caret-index index])
 
 (defn render-line [{:keys [line-text line-tokens selection caret-index] :as line-info} {:keys [height] :as metrics}]
-  [inner-html (html
+  [real-dom (dom
                #js [:div {:class :render-line}
                     (render-selection selection metrics)
                     (render-text line-text line-tokens metrics)
