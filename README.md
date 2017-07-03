@@ -31,6 +31,3 @@ Thanks to:
 * CodeMirror
 * Xi-editor
 * Reagent
-
-
-
