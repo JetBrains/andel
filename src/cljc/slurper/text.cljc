@@ -190,7 +190,6 @@
   (if (tree/branch? loc)
     (recur (tree/down loc) l)
     (let [i (offset loc)
-          
           chunk-offset (nth (tree/loc-acc loc) 0)
           rel-offset (- i chunk-offset)
           chunk-l (count (:data (tree/node loc)))
