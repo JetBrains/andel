@@ -105,7 +105,7 @@
     (loop [from 0
            n n]
       (let [i (clojure.string/index-of s c from)]
-        (if (= n 1)
+        (if (identical? n 1)
           i
           (when (some? i)
             (recur (inc i) (dec n))))))))
@@ -169,7 +169,11 @@
   (first (:metrics t)))
 
 (defn text [loc l]
-  (apply str (lazy-text loc l)))
+  (loop [s ""
+         lt (lazy-text loc l)]
+    (if-let [f (first lt)]
+      (recur (str s f) (rest lt))
+      s)))
 
 (defn insert [loc s]
   (if (tree/branch? loc)
