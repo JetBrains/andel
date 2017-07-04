@@ -2,6 +2,16 @@
 
 Current stage of the project is work in progress. It's not ready to use by any means.
 
+## Dev 
+* `lein figwheel`
+* go to http://localhost:3449
+
+## Prod
+* run  `lein cljsbuild once min && lein run`
+* go to http://localhost:3000
+
+Dev recompiles and reloads live. Prod is slow to build but resulting code is much faster.
+
 ## The goals of the project and priciples behind it are:
 * Create a universal code editor component, which could be embedded in a web application
 * Great performance
