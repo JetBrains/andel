@@ -449,7 +449,7 @@
 (defn move-caret [{:keys [caret] :as state} dir]
   (let [caret' (case dir
                  :left (if (= caret 0)
-                         (caret)
+                         caret
                          (dec caret))
                  :right (inc caret))]
     (assoc state :caret caret')))
