@@ -281,16 +281,20 @@
                               (range from to))]
           (persistent! hiccup))))))
 
-(defn type-in [{:keys [caret text] :as state} s]
-  (let [loc (-> (text/zipper text)
-                (text/scan-to-offset caret))]
+(defn edit-at [{:keys [text] :as state} offset f]
+  (let [edit-point (-> (text/zipper text)
+                       (text/scan-to-offset offset))]
     (-> state
-        (assoc :text (-> loc
-                         (text/insert s)
+        (assoc :text (-> edit-point
+                         (f)
                          (text/root)))
-        (update :caret + (count s))
         (update :timestamp inc)
-        (update :first-invalid min (text/line loc)))))
+        (update :first-invalid min (text/line edit-point)))))
+
+(defn type-in [{:keys [caret text] :as state} s]
+  (-> state
+      (edit-at caret #(text/insert % s))
+      (update :caret + (count s))))
 
 (defn editor [state]
   (let [size (reagent/atom [2000 30000])
@@ -441,16 +445,6 @@
 
 (defn- bind-function! [key f & args]
   (keybind/bind! key :global (capture #(swap! state (fn [s] (apply f s args))))))
-
-(defn edit-at [{:keys [text] :as state} offset f]
-  (let [edit-point (-> (text/zipper text)
-                       (text/scan-to-offset offset))]
-    (-> state
-        (assoc :text (-> edit-point
-                         (f)
-                         (text/root)))
-        (update :timestamp inc)
-        (update :first-invalid min (text/line edit-point)))))
 
 (defn backspace [{:keys [text caret timestamp] :as state}]
   (if (< 0 caret)
