@@ -446,6 +446,31 @@
 (defn- bind-function! [key f & args]
   (keybind/bind! key :global (capture #(swap! state (fn [s] (apply f s args))))))
 
+(defn line->offset [{:keys [text]} line]
+  (text/offset (text/scan-to-line (text/zipper text) line)))
+
+(defn offset->line [{:keys [text]} offset]
+  (text/line (text/scan-to-offset (text/zipper text) offset)))
+
+(defn move-caret [{:keys [caret] :as state} dir]
+  (let [caret' (case dir
+                 :left (if (= caret 0)
+                         (caret)
+                         (dec caret))
+                 :right (inc caret))]
+    (assoc state :caret caret')))
+
+(defn right [state]
+  (js/console.log (get state :caret))
+  (move-caret state :right))
+
+(defn left [state]
+  (js/console.log (get state :caret))
+  (move-caret state :left))
+
+(bind-function! "left" left)
+(bind-function! "right" right)
+
 (defn backspace [{:keys [text caret timestamp] :as state}]
   (if (< 0 caret)
     (-> state
@@ -461,4 +486,3 @@
 
 (bind-function! "backspace" backspace)
 (bind-function! "delete" delete)
-
