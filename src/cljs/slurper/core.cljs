@@ -39,8 +39,10 @@
 
 (defonce defstyle (memoize defstyle-impl))
 
+(def line-h 19)
+
 (defstyle :editor
-  [:pre {:font-family "Menlo, monospace"
+  [:pre {:font-family "Menlo"
          :color theme/foreground
          :margin "0px"}])
 
@@ -50,16 +52,16 @@
 (defn measure [s]
   (let [canvas (js/document.createElement "canvas")
         ctx (.getContext canvas "2d")]
-    (set! (.-font ctx) "Menlo")
-    (let [res {:width (.-width (.measureText ctx s)) :height 18}]
-      (js/console.log (:width res))
+    (set! (.-font ctx) "16px Menlo")
+    (let [res {:width (.-width (.measureText ctx s)) :height line-h}]
+      (js/console.log (:width res) " measured")
       res)))
 
 (defn make-editor-state []
   (let [ch (a/chan)]
     {:text (text/make-text "")
      :selection [49 4956]
-     :caret 49
+     :caret 0
      :lexer-broker ch
      :modespec "text/x-java"
      :timestamp 0
@@ -112,8 +114,6 @@
                     children)
             attrs-map)))
 
-(def line-h 19)
-
 (defn scroll [size viewport]
   (let [pos (reagent/atom [0 0])
         view-size (reagent/atom [0 0])
@@ -143,8 +143,6 @@
                          (.preventDefault evt)))))}
        [viewport pos view-size]])))
 
-(comment (measure "x"))
-
 (defn infinity? [x] (keyword? x))
 
 (defn render-selection [[from to] {:keys [width height]}]
@@ -162,7 +160,7 @@
                          "100%"
                          (px (* (- to from) width)))})}])
 
-(def metrics {:width 10 :height line-h})
+(def metrics (measure "x"))
 
 (defn render-caret [col {:keys [width height]}]
   #js [:div {:style (style {:width "1px"
@@ -309,7 +307,7 @@
                                          (fn []
                                            (when @dom-input
                                              (.focus @dom-input))))))}
-       [scroll size 
+       [scroll size
         (editor-viewport state)]
        [:textarea
         {:ref (fn [this]
@@ -358,7 +356,7 @@
 (defonce modification-watcher
   (do (add-watch state :lexer
                  (fn [_ _ {old-ts :timestamp} {new-ts :timestamp
-                                              broker :lexer-broker :as s}]                   
+                                              broker :lexer-broker :as s}]
                    (when (not= old-ts new-ts)
                      (a/put! broker s))))
       true))
@@ -374,7 +372,7 @@
   (= (:timestamp @state) req-ts))
 
 (defn attach-lexer! [{:keys [modespec lexer-broker]}]
-  (let [{:keys [input output]} (lexer/new-lexer-worker modespec)]    
+  (let [{:keys [input output]} (lexer/new-lexer-worker modespec)]
     (go
       (loop [state nil
              line 0
@@ -390,7 +388,7 @@
           (let [start-time' (if (< 10 elapsed)
                               (do (a/<! (a/timeout 1))
                                   (.getTime (js/Date.)))
-                              start-time)]            
+                              start-time)]
             (cond
               (= port lexer-broker) (recur val (:first-invalid val) start-time')
               (= port output) (let [delivered?  (deliver-lexems! val)]
@@ -442,5 +440,3 @@
 
 (defn- bind-function! [key f & args]
   (keybind/bind! key :global (capture #(swap! state (fn [s] (apply f s args))))))
-
-
