@@ -2,7 +2,7 @@
 
 Current stage of the project is work in progress. It's not ready to use by any means.
 
-## Dev 
+## Dev
 * `lein figwheel`
 * go to http://localhost:3449
 
@@ -37,7 +37,7 @@ Dev recompiles and reloads live. Prod is slow to build but resulting code is muc
 
 ### Credits
 Thanks to:
-* ClojureScript
-* CodeMirror
-* Xi-editor
-* Reagent
+* [ClojureScript](https://clojurescript.org/)
+* [CodeMirror](https://codemirror.net/)
+* [Xi-editor](https://github.com/google/xi-editor)
+* [Reagent](http://reagent-project.github.io/)
