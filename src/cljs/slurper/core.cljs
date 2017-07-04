@@ -442,15 +442,29 @@
 (defn- bind-function! [key f & args]
   (keybind/bind! key :global (capture #(swap! state (fn [s] (apply f s args))))))
 
-(defn backspace [{:keys [text caret] :as state}]
+(defn edit-at [{:keys [text] :as state} offset f]
+  (let [edit-point (-> (text/zipper text)
+                       (text/scan-to-offset offset))]
+    (-> state
+        (assoc :text (-> edit-point
+                         (f)
+                         (text/root)))
+        (update :timestamp inc)
+        (update :first-invalid min (text/line edit-point)))))
+
+(defn backspace [{:keys [text caret timestamp] :as state}]
   (if (< 0 caret)
-    (assoc state
-           :text (-> (text/zipper text)
-                     (text/scan-to-offset (dec caret))
-                     (text/delete 1)
-                     (text/root))
-           :caret (dec caret))
+    (-> state
+        (edit-at (dec caret) #(text/delete % 1))
+        (assoc :caret (dec caret)))
+    state))
+
+(defn delete [{:keys [text caret timestamp] :as state}]
+  (if (< caret (text/text-length text))
+    (-> state
+        (edit-at caret #(text/delete % 1)))
     state))
 
 (bind-function! "backspace" backspace)
+(bind-function! "delete" delete)
 
