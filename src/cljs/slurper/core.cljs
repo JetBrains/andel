@@ -422,9 +422,10 @@
     (let [text (:body (a/<! (http/get "/EditorImpl.java")))]
       (reset! editor-impl text)
       (with-codemirror (fn []
+                         (reset! *codemirror-state :ready)
                          (swap! state set-text text)
-                         (attach-lexer! @state)))
-      (cb))))
+                         (attach-lexer! @state)
+                         (cb))))))
 
 (defn mount-root []
   (load-text (fn []
