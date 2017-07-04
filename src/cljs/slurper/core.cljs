@@ -53,9 +53,7 @@
   (let [canvas (js/document.createElement "canvas")
         ctx (.getContext canvas "2d")]
     (set! (.-font ctx) "16px Menlo")
-    (let [res {:width (.-width (.measureText ctx s)) :height line-h}]
-      (js/console.log (:width res) " measured")
-      res)))
+    {:width (.-width (.measureText ctx s)) :height line-h}))
 
 (defn make-editor-state []
   (let [ch (a/chan)]
@@ -72,10 +70,6 @@
   (str x "px"))
 
 (defonce state (reagent/atom (make-editor-state)))
-
-(defonce on-keydown (keybind/dispatcher))
-
-(defonce keys-dispatcher (js/window.addEventListener "keydown" on-keydown true))
 
 (defn style [m]
   (reduce-kv (fn [s k v]
@@ -316,7 +310,6 @@
        [:textarea
         {:ref (fn [this]
                 (when-let [dom-node (reagent/dom-node this)]
-                  (.addEventListener dom-node "focus" (fn [] (js/console.log "focus input")))
                   (reset! dom-input dom-node)))
          :auto-focus true
          :style {:opacity 0
@@ -335,13 +328,15 @@
                  :flex "1"}}
    [editor state]])
 
-(defn include-script [src cb]
-  (let [e (js/document.createElement "script")]
-    (aset e "onload" cb)
+(defn include-script [src]
+  (let [e (js/document.createElement "script")
+        res (a/promise-chan)]
+    (aset e "onload" #(a/put! res :done))
     (doto e
           (.setAttribute "type" "text/javascript")
           (.setAttribute "src" src))
-    (.appendChild (head) e)))
+    (.appendChild (head) e)
+    res))
 
 (defn include-style [src cb]
   (let [e (js/document.createElement "link")]
@@ -353,17 +348,10 @@
     (.appendChild (head) e)))
 
 (defn set-text [state text]
-  (assoc state :text (text/make-text text)))
-
-(defonce editor-impl (atom nil))
-
-(defonce modification-watcher
-  (do (add-watch state :lexer
-                 (fn [_ _ {old-ts :timestamp} {new-ts :timestamp
-                                              broker :lexer-broker :as s}]
-                   (when (not= old-ts new-ts)
-                     (a/put! broker s))))
-      true))
+  (-> state
+      (assoc :text (text/make-text text)
+             :first-invalid 0)
+      (update :timestamp inc)))
 
 (defn deliver-lexems! [{:keys [req-ts tokens index]}]
   (swap! state
@@ -399,40 +387,40 @@
                                 (recur state (if delivered? (inc line) line) start-time'))
               (= port input) (recur state line start-time'))))))))
 
-(defonce *codemirror-state (atom :initial))
+(defn wait-for-all [cs]
+  (let [m (a/merge cs)]
+    (go (dotimes [i (count cs)] (a/<! m)))))
 
-(defn with-codemirror [cb]
-  (if (= @*codemirror-state :ready)
-    (cb)
-    (do
-      (if (= @*codemirror-state :scheduled)
-        nil
-        (do
-          (reset! *codemirror-state :scheduled)
-          (include-script "/codemirror/addon/runmode/runmode-standalone.js"
-                          (fn []
-                            (include-script "/codemirror/mode/javascript/javascript.js"
-                                            (fn [] (js/console.log "js load")))
-                            (include-script "/codemirror/mode/clike/clike.js"
-                                            (fn [] (js/console.log "clike load")))
-                            (include-script "/codemirror/mode/clojure/clojure.js"
-                                            (fn [] (js/console.log "clojure load")))
-                            (cb))))))))
+(defn load! []
+  (js/window.addEventListener "keydown" (keybind/dispatcher) true)
+  (let [loaded (a/promise-chan)]
+    (go
+      ;load CodeMirror first
+      (wait-for-all (map include-script ["/codemirror/addon/runmode/runmode-standalone.js"
+                                         "/codemirror/addon/runmode/runmode-standalone.js"
+                                         "/codemirror/mode/javascript/javascript.js"
+                                         "/codemirror/mode/clike/clike.js"
+                                         "/codemirror/mode/clojure/clojure.js"]))
+      ;run lexer worker and setup atom watcher that will run lexer on changes
+      (attach-lexer! @state)
+      (add-watch state :lexer
+                 (fn [_ _ {old-ts :timestamp} {new-ts :timestamp
+                                              broker :lexer-broker :as s}]
+                   (when (not= old-ts new-ts)
+                     (a/put! broker s))))
+      ;load sample document from the internet
+      (let [text (:body (a/<! (http/get "/EditorImpl.java")))]
+        (swap! state set-text text))
+      ;deliver promise
+      (a/>! loaded :done))
+    loaded))
 
-(defn load-text [cb]
-  (go
-    (let [text (:body (a/<! (http/get "/EditorImpl.java")))]
-      (reset! editor-impl text)
-      (with-codemirror (fn []
-                         (reset! *codemirror-state :ready)
-                         (swap! state set-text text)
-                         (attach-lexer! @state)
-                         (cb))))))
+(defonce ready (load!))
 
 (defn mount-root []
-  (load-text (fn []
-               (let [root (.getElementById js/document "app")]
-                 (reagent/render [main] root)))))
+  (go (a/<! ready)
+        (let [root (.getElementById js/document "app")]
+          (reagent/render [main] root))))
 
 (defn init! []
   (mount-root))
@@ -457,11 +445,9 @@
     (assoc state :caret caret')))
 
 (defn right [state]
-  (js/console.log (get state :caret))
   (move-caret state :right))
 
 (defn left [state]
-  (js/console.log (get state :caret))
   (move-caret state :left))
 
 (bind-function! "left" left)
