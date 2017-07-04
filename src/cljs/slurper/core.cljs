@@ -446,12 +446,14 @@
 (defn- bind-function! [key f & args]
   (keybind/bind! key :global (capture #(swap! state (fn [s] (apply f s args))))))
 
-(defn move-caret [{:keys [caret] :as state} dir]
+(defn move-caret [{:keys [caret text] :as state} dir]
   (let [caret' (case dir
                  :left (if (= caret 0)
                          caret
                          (dec caret))
-                 :right (inc caret))]
+                 :right (if (= caret (dec (text/text-length text)))
+                          caret
+                          (inc caret)))]
     (assoc state :caret caret')))
 
 (defn right [state]
