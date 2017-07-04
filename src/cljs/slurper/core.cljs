@@ -436,12 +436,12 @@
 
 (defn move-caret [{:keys [caret text] :as state} dir]
   (let [caret' (case dir
-                 :left (if (= caret 0)
-                         caret
-                         (dec caret))
-                 :right (if (= caret (dec (text/text-length text)))
-                          caret
-                          (inc caret)))]
+                 :left (if (< caret 0)
+                         (dec caret)
+                         caret)
+                 :right (if (< caret (text/text-length text))
+                          (inc caret)
+                          caret))]
     (assoc state :caret caret')))
 
 (defn right [state]
