@@ -110,20 +110,21 @@
           (when (some? i)
             (recur (inc i) (dec n))))))))
 
+(defn forget-acc [loc]
+  (assoc loc 1 (dissoc (loc 1) ::overriding-acc)))
+
 (defn scan-to-offset [loc i]
   (let [loc' (tree/scan loc (by-offset i))]
     (if (tree/end? loc')
       loc'
-      (let [o (offset loc')
+      (let [loc' (forget-acc loc')
+            o (offset loc')
             l (line loc')]
         (assoc-in loc' [1 ::overriding-acc]
                   (array i (+ l (count-of (:data (tree/node loc')) \newline 0 (- i o)))))))))
 
 (defn retain [loc l]
   (scan-to-offset loc (+ (offset loc) l)))
-
-(defn forget-acc [loc]
-  (assoc loc 1 (dissoc (loc 1) ::overriding-acc)))
 
 (defn scan-to-line [loc i]
   (let [loc' (tree/scan loc (by-line i))]
