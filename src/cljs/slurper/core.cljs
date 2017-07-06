@@ -59,7 +59,7 @@
   (let [ch (a/chan)]
     {:text (text/make-text "")
      :selection [49 4956]
-     :caret [0 0] ;[offset virutal-relative-offset]
+     ;:caret [0 0] ;[offset virutal-relative-offset]
      :lexer-broker ch
      :modespec "text/x-java"
      :timestamp 0
@@ -437,14 +437,37 @@
   (keybind/bind! key :global (capture #(swap! state (fn [s] (apply f s args))))))
 
 (defn move-caret [{:keys [caret text] :as state} dir]
-  (let [[caret-real caret-virtual] caret
+  (let [[caret-offset v-col] caret
         caret' (case dir
-                 :left (if (< 0 caret-real)
-                         [(dec caret-real) caret-virtual]
+                 :left (if (< 0 caret-offset)
+                         [(dec caret-offset) 0]
                          caret)
-                 :right (if (< caret-real (text/text-length text))
-                          [(inc caret-real) caret-virtual]
-                          caret))]
+                 :right (if (< caret-offset (text/text-length text))
+                          [(inc caret-offset) 0]
+                          caret)
+                 :up (let [cur-loc (text/scan-to-offset (text/zipper text) caret-offset)
+                           cur-line (text/line cur-loc)
+                           cur-begin (text/offset (text/scan-to-line (text/zipper text) cur-line))
+                           cur-col (- caret-offset cur-begin)
+                           prev-end (dec cur-begin)
+                           prev-line (text/line (text/scan-to-offset (text/zipper text) prev-end))
+                           prev-begin (text/offset (text/scan-to-line (text/zipper text) prev-line))
+                           new-v-col (max v-col cur-col)]
+                       (if (< 0 cur-line)
+                         [(min prev-end (+ prev-begin new-v-col)) new-v-col]
+                         caret))
+                 :down (let [zipper (text/zipper text)
+                             cur-loc (text/scan-to-offset (text/zipper text) caret-offset)
+                             cur-line (text/line cur-loc)
+                             cur-begin (text/offset (text/scan-to-line zipper cur-line))
+                             cur-col (- caret-offset cur-begin)
+                             next-line-loc (text/scan-to-line zipper (inc cur-line))
+                             next-begin (text/offset next-line-loc)
+                             next-end (+ next-begin (text/line-length next-line-loc))
+                             new-v-col (max v-col cur-col)]
+                         (if (tree/end? next-line-loc)
+                           caret
+                           [(min next-end (+ next-begin new-v-col)) new-v-col])))]
     (assoc state :caret caret')))
 
 (defn right [state]
@@ -453,8 +476,16 @@
 (defn left [state]
   (move-caret state :left))
 
+(defn up [state]
+  (move-caret state :up))
+
+(defn down [state]
+  (move-caret state :down))
+
 (bind-function! "left" left)
 (bind-function! "right" right)
+(bind-function! "up" up)
+(bind-function! "down" down)
 
 (defn backspace [{:keys [text caret timestamp] :as state}]
   (let [[caret-real caret-virtual] caret]
