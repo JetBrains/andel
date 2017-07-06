@@ -488,18 +488,19 @@
 (bind-function! "down" down)
 
 (defn backspace [{:keys [text caret timestamp] :as state}]
-  (let [[caret-real caret-virtual] caret]
-    (if (< 0 caret-real)
+  (let [{caret-offset :offset} caret]
+    (if (< 0 caret-offset)
       (-> state
-          (edit-at (dec caret-real) #(text/delete % 1))
-          (assoc :caret [(dec caret-real) caret-virtual]))
+          (edit-at (dec caret-offset) #(text/delete % 1))
+          (assoc-in [:caret :offset] (dec caret-offset))
+          (assoc-in [:caret :v-col] 0))
       state)))
 
 (defn delete [{:keys [text caret timestamp] :as state}]
-  (let [[caret-real _] caret]
-    (if (< caret-real (text/text-length text))
+  (let [{caret-offset :offset} caret]
+    (if (< caret-offset (text/text-length text))
       (-> state
-          (edit-at caret-real #(text/delete % 1)))
+          (edit-at caret-offset #(text/delete % 1)))
       state)))
 
 (bind-function! "backspace" backspace)
