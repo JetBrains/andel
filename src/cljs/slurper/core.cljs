@@ -59,7 +59,7 @@
   (let [ch (a/chan)]
     {:text (text/make-text "")
      :selection [49 4956]
-     ;:caret [0 0] ;[offset virutal-relative-offset]
+     :caret [0 0] ;[offset virutal-relative-offset]
      :lexer-broker ch
      :modespec "text/x-java"
      :timestamp 0
