@@ -88,7 +88,7 @@
 (defn line [[node {acc ::tree/acc
                    o-acc ::overriding-acc} :as loc]]
   (if (tree/end? loc)
-    (second (:metrics node))    
+    (second (:metrics node))
     (or (second o-acc) (second acc) 0)))
 
 (defn count-of [s c from to]
@@ -117,7 +117,7 @@
       (let [o (offset loc')
             l (line loc')]
         (assoc-in loc' [1 ::overriding-acc]
-                  (array i (+ l (count-of (:data (tree/node loc')) \newline o (- i o)))))))))
+                  (array i (+ l (count-of (:data (tree/node loc')) \newline 0 (- i o)))))))))
 
 (defn retain [loc l]
   (scan-to-offset loc (+ (offset loc) l)))
@@ -128,7 +128,7 @@
 (defn scan-to-line [loc i]
   (let [loc' (tree/scan loc (by-line i))]
     (if (tree/end? loc')
-      loc'      
+      loc'
       (let [loc' (forget-acc loc')
             o (offset loc')
             l (line loc')
@@ -178,7 +178,7 @@
 (defn insert [loc s]
   (if (tree/branch? loc)
     (recur (tree/down loc) s)
-    (let [i (offset loc)          
+    (let [i (offset loc)
           chunk-offset (nth (tree/loc-acc loc) 0)
           rel-offset (- i chunk-offset)]
       (-> loc
