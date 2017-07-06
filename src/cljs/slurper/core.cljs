@@ -59,7 +59,7 @@
   (let [ch (a/chan)]
     {:text (text/make-text "")
      :selection [49 4956]
-     :caret [0 0] ;[offset virutal-relative-offset]
+     :caret {:offset 0 :v-col 0}
      :lexer-broker ch
      :modespec "text/x-java"
      :timestamp 0
@@ -247,7 +247,7 @@
         (let [from (:from-idx @dims)
               to (:to-idx @dims)
               {:keys [text caret selection lines] :as state} @state
-              [caret' _] caret
+              caret-offset (:offset caret)
               [_ hiccup] (reduce
                               (fn [[line-start res] index]
                                 (let [next-line (text/scan-to-line line-start (inc index))
@@ -261,8 +261,8 @@
                                       line-text (text/text line-start len)
                                       line-end-offset (+ line-start-offset len)
                                       line-sel (line-selection selection [line-start-offset line-end-offset])
-                                      line-caret (when (and (<= line-start-offset caret') (<= caret' line-end-offset))
-                                                   (- caret' line-start-offset))
+                                      line-caret (when (and (<= line-start-offset caret-offset) (<= caret-offset line-end-offset))
+                                                   (- caret-offset line-start-offset))
                                       line-tokens (:tokens (get lines index))
                                       line-info (LineInfo. line-text line-tokens line-sel line-caret index)]
                                   [next-line (conj! res
@@ -287,10 +287,10 @@
         (update :first-invalid min (text/line edit-point)))))
 
 (defn type-in [{:keys [caret text] :as state} s]
-  (let [[caret-pos _] caret]
+  (let [caret-offset (:offset caret)]
     (-> state
-        (edit-at caret-pos #(text/insert % s))
-        (update-in [:caret 0] + (count s)))))
+        (edit-at caret-offset #(text/insert % s))
+        (update-in [:caret :offset] + (count s)))))
 
 (defn editor [state]
   (let [size (reagent/atom [2000 30000])
@@ -437,13 +437,13 @@
   (keybind/bind! key :global (capture #(swap! state (fn [s] (apply f s args))))))
 
 (defn move-caret [{:keys [caret text] :as state} dir]
-  (let [[caret-offset v-col] caret
+  (let [{caret-offset :offset v-col :v-col} caret
         caret' (case dir
                  :left (if (< 0 caret-offset)
-                         [(dec caret-offset) 0]
+                         {:offset (dec caret-offset) :v-col 0}
                          caret)
                  :right (if (< caret-offset (text/text-length text))
-                          [(inc caret-offset) 0]
+                          {:offset (inc caret-offset) :v-col 0}
                           caret)
                  :up (let [cur-loc (text/scan-to-offset (text/zipper text) caret-offset)
                            cur-line (text/line cur-loc)
@@ -454,7 +454,7 @@
                            prev-begin (text/offset (text/scan-to-line (text/zipper text) prev-line))
                            new-v-col (max v-col cur-col)]
                        (if (< 0 cur-line)
-                         [(min prev-end (+ prev-begin new-v-col)) new-v-col]
+                         {:offset (min prev-end (+ prev-begin new-v-col)) :v-col new-v-col}
                          caret))
                  :down (let [zipper (text/zipper text)
                              cur-loc (text/scan-to-offset (text/zipper text) caret-offset)
@@ -467,7 +467,7 @@
                              new-v-col (max v-col cur-col)]
                          (if (tree/end? next-line-loc)
                            caret
-                           [(min next-end (+ next-begin new-v-col)) new-v-col])))]
+                           {:offset (min next-end (+ next-begin new-v-col)) :v-col new-v-col})))]
     (assoc state :caret caret')))
 
 (defn right [state]
