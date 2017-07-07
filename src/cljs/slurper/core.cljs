@@ -291,7 +291,7 @@
     (-> state
         (edit-at caret-offset #(text/insert % s))
         (update-in [:caret :offset] + (count s))
-        (assoc :selection [caret-offset caret-offset]))))
+        (assoc :selection [(+ caret-offset (count s)) (+ caret-offset (count s))]))))
 
 (defn editor [state]
   (let [size (reagent/atom [2000 30000])
