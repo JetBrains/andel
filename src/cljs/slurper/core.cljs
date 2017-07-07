@@ -234,6 +234,32 @@
                                       :infinity)]
         :else nil))
 
+(defn absolute->line-ch [client-x client-y {:keys [:height :width]} from to]
+  (let [x client-x
+        y (- (+ client-y) (/ height 2))]
+    [(+ from (Math/round (/ y height))) (Math/round (/ x width))]))
+
+(defn set-caret [{:keys [caret selection text] :as state} line col selection?]
+  (let [[sel-from sel-to] selection
+        {caret-offset :offset} caret
+        line-loc (text/scan-to-line (text/zipper text) line)
+        line-len (text/line-length line-loc)
+        line-off (text/offset line-loc)
+        caret-offset' (+ line-off (min col line-len))]
+    (-> state
+        (assoc :caret {:offset caret-offset' :v-col 0})
+        (assoc :selection (cond (not selection?) [caret-offset' caret-offset']
+                                (= caret-offset sel-from) [(min caret-offset' sel-to) (max caret-offset' sel-to)]
+                                (= caret-offset sel-to) [(min sel-from caret-offset') (max sel-from caret-offset')]
+                                :else [(min caret-offset caret-offset') (max caret-offset' caret-offset')])))))
+
+
+;; need to debug event-listners, because they are somehow attached to
+;; multiple dom components and it causes significant lags
+(defn on-mouse-action! [[line col] selection?]
+  (do (swap! state #(set-caret % line col selection?))))
+;;    (js/console.log (str line " " col " " selection?))))
+
 (defn editor-viewport [state]
   (fn [pos size]
     (let [dims (reaction
@@ -272,7 +298,22 @@
                                (transient [:div {:style
                                                  {:background theme/background
                                                   :width "100%"
-                                                  :transform (str "translate3d(0px, " (:y-shift @dims) "px, 0px)")}}])]
+                                                  :transform (str "translate3d(0px, " (:y-shift @dims) "px, 0px)")}
+                                                 :ref (fn [this]
+                                                        (when-let [dom-node (reagent/dom-node this)]
+                                                          (.addEventListener dom-node "mousedown"
+                                                                             (fn [event]
+                                                                               (let [x ($ event :clientX)
+                                                                                     y ($ event :clientY)]
+                                                                                 (on-mouse-action! (absolute->line-ch x y metrics from to)
+                                                                                                   false))))
+                                                          (.addEventListener dom-node "mousemove"
+                                                                             (fn [event]
+                                                                               (when (= ($ event :buttons) 1)
+                                                                                 (let [x ($ event :clientX)
+                                                                                       y ($ event :clientY)]
+                                                                                   (on-mouse-action! (absolute->line-ch x y metrics from to)
+                                                                                                     true)))))))}])]
                               (range from to))]
           (persistent! hiccup))))))
 
