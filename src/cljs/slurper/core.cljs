@@ -436,9 +436,10 @@
 (defn- bind-function! [key f & args]
   (keybind/bind! key :global (capture #(swap! state (fn [s] (apply f s args))))))
 
-(defn move-caret [{:keys [caret text] :as state} dir]
+(defn move-caret [{:keys [caret text selection] :as state} dir selection?]
   (let [{caret-offset :offset v-col :v-col} caret
-        caret' (case dir
+        [sel-from sel-to] selection
+        {caret-offset' :offset :as caret'} (case dir
                  :left (if (< 0 caret-offset)
                          {:offset (dec caret-offset) :v-col 0}
                          caret)
@@ -467,25 +468,49 @@
                              new-v-col (max v-col cur-col)]
                          (if (tree/end? next-line-loc)
                            caret
-                           {:offset (min next-end (+ next-begin new-v-col)) :v-col new-v-col})))]
-    (assoc state :caret caret')))
+                           {:offset (min next-end (+ next-begin new-v-col)) :v-col new-v-col})))
+        selection' (cond
+                     (not selection?) (do (js/console.log (str caret-offset' " " caret-offset'))
+                                        [caret-offset' caret-offset'])
+                     (= caret-offset sel-from) [(min caret-offset' sel-to) (max caret-offset' sel-to)]
+                     (= caret-offset sel-to) [(min sel-from caret-offset') (max sel-from caret-offset')]
+                     :else [(min caret-offset caret-offset') (max caret-offset' caret-offset')])]
+    (-> state
+        (assoc :caret caret')
+        (assoc :selection selection'))))
 
 (defn right [state]
-  (move-caret state :right))
+  (move-caret state :right false))
 
 (defn left [state]
-  (move-caret state :left))
+  (move-caret state :left false))
 
 (defn up [state]
-  (move-caret state :up))
+  (move-caret state :up false))
 
 (defn down [state]
-  (move-caret state :down))
+  (move-caret state :down false))
+
+(defn shift-right [state]
+  (move-caret state :right true))
+
+(defn shift-left [state]
+  (move-caret state :left true))
+
+(defn shift-up [state]
+  (move-caret state :up true))
+
+(defn shift-down [state]
+  (move-caret state :down true))
 
 (bind-function! "left" left)
 (bind-function! "right" right)
 (bind-function! "up" up)
 (bind-function! "down" down)
+(bind-function! "shift-left" shift-left)
+(bind-function! "shift-right" shift-right)
+(bind-function! "shift-up" shift-up)
+(bind-function! "shift-down" shift-down)
 
 (defn backspace [{:keys [text caret timestamp] :as state}]
   (let [{caret-offset :offset} caret]
