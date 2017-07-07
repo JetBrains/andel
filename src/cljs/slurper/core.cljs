@@ -512,23 +512,41 @@
 (bind-function! "shift-up" shift-up)
 (bind-function! "shift-down" shift-down)
 
-(defn backspace [{:keys [text caret timestamp] :as state}]
-  (let [{caret-offset :offset} caret]
-    (if (< 0 caret-offset)
-      (-> state
-          (edit-at (dec caret-offset) #(text/delete % 1))
-          (assoc-in [:caret :offset] (dec caret-offset))
-          (assoc-in [:caret :v-col] 0)
-          (assoc :selection [(dec caret-offset) (dec caret-offset)]))
-      state)))
+(defn backspace [{:keys [text caret selection] :as state}]
+  (let [{caret-offset :offset} caret
+        [sel-from sel-to] selection
+        sel-len (- sel-to sel-from)]
+    (cond (< 0 sel-len)
+          (-> state
+              (edit-at sel-from #(text/delete % sel-len))
+              (assoc-in [:caret :offset] sel-from)
+              (assoc-in [:caret :v-col] 0)
+              (assoc :selection [sel-from sel-from]))
 
-(defn delete [{:keys [text caret timestamp] :as state}]
-  (let [{caret-offset :offset} caret]
-    (if (< caret-offset (text/text-length text))
-      (-> state
-          (edit-at caret-offset #(text/delete % 1))
-          (assoc :selection [caret-offset caret-offset]))
-      state)))
+          (< 0 caret-offset)
+          (-> state
+              (edit-at (dec caret-offset) #(text/delete % 1))
+              (assoc-in [:caret :offset] (dec caret-offset))
+              (assoc-in [:caret :v-col] 0)
+              (assoc selection [(dec caret-offset) (dec caret-offset)]))
+
+          :else state)))
+
+(defn delete [{:keys [text caret selection] :as state}]
+  (let [{caret-offset :offset} caret
+        [sel-from sel-to] selection
+        sel-len (- sel-to sel-from)]
+    (cond (< 0 sel-len)
+          (-> state
+              (edit-at sel-from #(text/delete % sel-len))
+              (assoc-in [:caret :offset] sel-from)
+              (assoc-in [:caret :v-col] 0)
+              (assoc :selection [sel-from sel-from]))
+
+          (< caret-offset (text/text-length text))
+          (edit-at state caret-offset #(text/delete % 1))
+
+          :else state)))
 
 (bind-function! "backspace" backspace)
 (bind-function! "delete" delete)
