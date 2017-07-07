@@ -229,7 +229,7 @@
           [0 :infinity]
           [0 (- to line-start-offset)])
         (and (<= line-start-offset from) (<= from line-end-offset))
-        [(- from line-start-offset) (if (< to line-end-offset)
+        [(- from line-start-offset) (if (<= to line-end-offset)
                                       (- to line-start-offset)
                                       :infinity)]
         :else nil))
@@ -290,7 +290,8 @@
   (let [caret-offset (:offset caret)]
     (-> state
         (edit-at caret-offset #(text/insert % s))
-        (update-in [:caret :offset] + (count s)))))
+        (update-in [:caret :offset] + (count s))
+        (assoc :selection [caret-offset caret-offset]))))
 
 (defn editor [state]
   (let [size (reagent/atom [2000 30000])
@@ -470,8 +471,7 @@
                            caret
                            {:offset (min next-end (+ next-begin new-v-col)) :v-col new-v-col})))
         selection' (cond
-                     (not selection?) (do (js/console.log (str caret-offset' " " caret-offset'))
-                                        [caret-offset' caret-offset'])
+                     (not selection?) [caret-offset' caret-offset']
                      (= caret-offset sel-from) [(min caret-offset' sel-to) (max caret-offset' sel-to)]
                      (= caret-offset sel-to) [(min sel-from caret-offset') (max sel-from caret-offset')]
                      :else [(min caret-offset caret-offset') (max caret-offset' caret-offset')])]
@@ -518,14 +518,16 @@
       (-> state
           (edit-at (dec caret-offset) #(text/delete % 1))
           (assoc-in [:caret :offset] (dec caret-offset))
-          (assoc-in [:caret :v-col] 0))
+          (assoc-in [:caret :v-col] 0)
+          (assoc :selection [(dec caret-offset) (dec caret-offset)]))
       state)))
 
 (defn delete [{:keys [text caret timestamp] :as state}]
   (let [{caret-offset :offset} caret]
     (if (< caret-offset (text/text-length text))
       (-> state
-          (edit-at caret-offset #(text/delete % 1)))
+          (edit-at caret-offset #(text/delete % 1))
+          (assoc :selection [caret-offset caret-offset]))
       state)))
 
 (bind-function! "backspace" backspace)
