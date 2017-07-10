@@ -234,9 +234,9 @@
                                       :infinity)]
         :else nil))
 
-(defn absolute->line-ch [client-x client-y {:keys [:height :width]} from to]
+(defn absolute->line-ch [client-x client-y {:keys [:height :width]} from to y-shift]
   (let [x client-x
-        y (- (+ client-y) (/ height 2))]
+        y (- (- client-y y-shift) (/ height 2))]
     [(+ from (Math/round (/ y height))) (Math/round (/ x width))]))
 
 (defn set-caret [{:keys [caret selection text] :as state} line col selection?]
@@ -299,13 +299,13 @@
                                                  :onMouseDown (fn [event]
                                                                 (let [x ($ event :clientX)
                                                                       y ($ event :clientY)]
-                                                                  (on-mouse-action! (absolute->line-ch x y metrics from to)
+                                                                  (on-mouse-action! (absolute->line-ch x y metrics from to (:y-shift @dims))
                                                                                     false)))
                                                  :onMouseMove  (fn [event]
                                                                  (when (= ($ event :buttons) 1)
                                                                    (let [x ($ event :clientX)
                                                                          y ($ event :clientY)]
-                                                                     (on-mouse-action! (absolute->line-ch x y metrics from to)
+                                                                     (on-mouse-action! (absolute->line-ch x y metrics from to (:y-shift @dims))
                                                                                        true))))}])]
                               (range from to))]
                (persistent! hiccup))))))
