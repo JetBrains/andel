@@ -254,11 +254,8 @@
                                 :else [(min caret-offset caret-offset') (max caret-offset' caret-offset')])))))
 
 
-;; need to debug event-listners, because they are somehow attached to
-;; multiple dom components and it causes significant lags
 (defn on-mouse-action! [[line col] selection?]
-  (do (swap! state #(set-caret % line col selection?))))
-;;    (js/console.log (str line " " col " " selection?))))
+  (swap! state #(set-caret % line col selection?)))
 
 (defn editor-viewport [state]
   (fn [pos size]
@@ -299,23 +296,19 @@
                                                  {:background theme/background
                                                   :width "100%"
                                                   :transform (str "translate3d(0px, " (:y-shift @dims) "px, 0px)")}
-                                                 :ref (fn [this]
-                                                        (when-let [dom-node (reagent/dom-node this)]
-                                                          (.addEventListener dom-node "mousedown"
-                                                                             (fn [event]
-                                                                               (let [x ($ event :clientX)
-                                                                                     y ($ event :clientY)]
-                                                                                 (on-mouse-action! (absolute->line-ch x y metrics from to)
-                                                                                                   false))))
-                                                          (.addEventListener dom-node "mousemove"
-                                                                             (fn [event]
-                                                                               (when (= ($ event :buttons) 1)
-                                                                                 (let [x ($ event :clientX)
-                                                                                       y ($ event :clientY)]
-                                                                                   (on-mouse-action! (absolute->line-ch x y metrics from to)
-                                                                                                     true)))))))}])]
+                                                 :onMouseDown (fn [event]
+                                                                (let [x ($ event :clientX)
+                                                                      y ($ event :clientY)]
+                                                                  (on-mouse-action! (absolute->line-ch x y metrics from to)
+                                                                                    false)))
+                                                 :onMouseMove  (fn [event]
+                                                                 (when (= ($ event :buttons) 1)
+                                                                   (let [x ($ event :clientX)
+                                                                         y ($ event :clientY)]
+                                                                     (on-mouse-action! (absolute->line-ch x y metrics from to)
+                                                                                       true))))}])]
                               (range from to))]
-          (persistent! hiccup))))))
+               (persistent! hiccup))))))
 
 (defn edit-at [{:keys [text] :as state} offset f]
   (let [edit-point (-> (text/zipper text)
