@@ -229,7 +229,7 @@
           [0 :infinity]
           [0 (- to line-start-offset)])
         (and (<= line-start-offset from) (<= from line-end-offset))
-        [(- from line-start-offset) (if (< to line-end-offset)
+        [(- from line-start-offset) (if (<= to line-end-offset)
                                       (- to line-start-offset)
                                       :infinity)]
         :else nil))
@@ -286,11 +286,24 @@
         (update :timestamp inc)
         (update :first-invalid min (text/line edit-point)))))
 
-(defn type-in [{:keys [caret text] :as state} s]
-  (let [caret-offset (:offset caret)]
+(defn delete-under-selection [state [sel-from sel-to] sel-len]
+  (-> state
+      (edit-at sel-from #(text/delete % sel-len))
+      (assoc-in [:caret :offset] sel-from)
+      (assoc-in [:caret :v-col] 0)
+      (assoc :selection [sel-from sel-from])))
+
+(defn type-in [{:keys [selection] :as state} s]
+  (let [[sel-from sel-to] selection
+        sel-len (- sel-to sel-from)
+        state (if (< 0 sel-len)
+                (delete-under-selection state selection sel-len)
+                state)
+        caret-offset (get-in state [:caret :offset])]
     (-> state
         (edit-at caret-offset #(text/insert % s))
-        (update-in [:caret :offset] + (count s)))))
+        (update-in [:caret :offset] + (count s))
+        (assoc :selection [(+ caret-offset (count s)) (+ caret-offset (count s))]))))
 
 (defn editor [state]
   (let [size (reagent/atom [2000 30000])
@@ -436,9 +449,10 @@
 (defn- bind-function! [key f & args]
   (keybind/bind! key :global (capture #(swap! state (fn [s] (apply f s args))))))
 
-(defn move-caret [{:keys [caret text] :as state} dir]
+(defn move-caret [{:keys [caret text selection] :as state} dir selection?]
   (let [{caret-offset :offset v-col :v-col} caret
-        caret' (case dir
+        [sel-from sel-to] selection
+        {caret-offset' :offset :as caret'} (case dir
                  :left (if (< 0 caret-offset)
                          {:offset (dec caret-offset) :v-col 0}
                          caret)
@@ -467,41 +481,76 @@
                              new-v-col (max v-col cur-col)]
                          (if (tree/end? next-line-loc)
                            caret
-                           {:offset (min next-end (+ next-begin new-v-col)) :v-col new-v-col})))]
-    (assoc state :caret caret')))
+                           {:offset (min next-end (+ next-begin new-v-col)) :v-col new-v-col})))
+        selection' (cond
+                     (not selection?) [caret-offset' caret-offset']
+                     (= caret-offset sel-from) [(min caret-offset' sel-to) (max caret-offset' sel-to)]
+                     (= caret-offset sel-to) [(min sel-from caret-offset') (max sel-from caret-offset')]
+                     :else [(min caret-offset caret-offset') (max caret-offset' caret-offset')])]
+    (-> state
+        (assoc :caret caret')
+        (assoc :selection selection'))))
 
 (defn right [state]
-  (move-caret state :right))
+  (move-caret state :right false))
 
 (defn left [state]
-  (move-caret state :left))
+  (move-caret state :left false))
 
 (defn up [state]
-  (move-caret state :up))
+  (move-caret state :up false))
 
 (defn down [state]
-  (move-caret state :down))
+  (move-caret state :down false))
+
+(defn shift-right [state]
+  (move-caret state :right true))
+
+(defn shift-left [state]
+  (move-caret state :left true))
+
+(defn shift-up [state]
+  (move-caret state :up true))
+
+(defn shift-down [state]
+  (move-caret state :down true))
 
 (bind-function! "left" left)
 (bind-function! "right" right)
 (bind-function! "up" up)
 (bind-function! "down" down)
+(bind-function! "shift-left" shift-left)
+(bind-function! "shift-right" shift-right)
+(bind-function! "shift-up" shift-up)
+(bind-function! "shift-down" shift-down)
 
-(defn backspace [{:keys [text caret timestamp] :as state}]
-  (let [{caret-offset :offset} caret]
-    (if (< 0 caret-offset)
-      (-> state
-          (edit-at (dec caret-offset) #(text/delete % 1))
-          (assoc-in [:caret :offset] (dec caret-offset))
-          (assoc-in [:caret :v-col] 0))
-      state)))
+(defn backspace [{:keys [text caret selection] :as state}]
+  (let [{caret-offset :offset} caret
+        [sel-from sel-to] selection
+        sel-len (- sel-to sel-from)]
+    (cond (< 0 sel-len)
+          (delete-under-selection state selection sel-len)
 
-(defn delete [{:keys [text caret timestamp] :as state}]
-  (let [{caret-offset :offset} caret]
-    (if (< caret-offset (text/text-length text))
-      (-> state
-          (edit-at caret-offset #(text/delete % 1)))
-      state)))
+          (< 0 caret-offset)
+          (-> state
+              (edit-at (dec caret-offset) #(text/delete % 1))
+              (assoc-in [:caret :offset] (dec caret-offset))
+              (assoc-in [:caret :v-col] 0)
+              (assoc selection [(dec caret-offset) (dec caret-offset)]))
+
+          :else state)))
+
+(defn delete [{:keys [text caret selection] :as state}]
+  (let [{caret-offset :offset} caret
+        [sel-from sel-to] selection
+        sel-len (- sel-to sel-from)]
+    (cond (< 0 sel-len)
+          (delete-under-selection state selection sel-len)
+
+          (< caret-offset (text/text-length text))
+          (edit-at state caret-offset #(text/delete % 1))
+
+          :else state)))
 
 (bind-function! "backspace" backspace)
 (bind-function! "delete" delete)
