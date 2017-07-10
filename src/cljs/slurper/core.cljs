@@ -570,7 +570,7 @@
               (edit-at (dec caret-offset) #(text/delete % 1))
               (assoc-in [:caret :offset] (dec caret-offset))
               (assoc-in [:caret :v-col] 0)
-              (assoc selection [(dec caret-offset) (dec caret-offset)]))
+              (assoc :selection [(dec caret-offset) (dec caret-offset)]))
 
           :else state)))
 
