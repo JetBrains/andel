@@ -115,34 +115,6 @@
                     children)
             attrs-map)))
 
-(defn scroll [viewport]
-  (let [pos (reagent/atom [0 0])
-        view-size (reagent/atom [0 0])
-        once (atom true)]
-    (fn []
-      [:div {:style {:display :flex
-                     :flex "1"
-                     :overflow :hidden}
-             :ref (fn [e]
-                    (when e
-                      (reset! view-size [(.-clientWidth e)
-                                         (.-clientHeight e)]) 100)
-                    (when (and @once (some? e))
-                      (reset! once false)
-                      (.addEventListener
-                       e
-                       "mousewheel"
-                       (fn [evt]
-                         (swap! pos
-                                (fn [[x y]]
-                                  (let [dx (/ (.-wheelDeltaX evt) 2)
-                                        dy (/ (.-wheelDeltaY evt) 2)]
-                                    (if (< (js/Math.abs dx) (js/Math.abs dy))
-                                      [x (max 0 (- y dy))]
-                                      [(max 0 (- x dx)) y]))))
-                         (.preventDefault evt)))))}
-       [viewport pos view-size]])))
-
 (defn infinity? [x] (keyword? x))
 
 (defn render-selection [[from to] {:keys [width height]}]
@@ -263,6 +235,63 @@
 (defn on-mouse-action! [[line col] selection?]
   (swap! state #(set-caret % line col selection?)))
 
+(defn edit-at [{:keys [text] :as state} offset f]
+  (let [edit-point (-> (text/zipper text)
+                       (text/scan-to-offset offset))]
+    (-> state
+        (assoc :text (-> edit-point
+                         (f)
+                         (text/root)))
+        (update :timestamp inc)
+        (update :first-invalid min (text/line edit-point)))))
+
+(defn delete-under-selection [state [sel-from sel-to] sel-len]
+  (-> state
+      (edit-at sel-from #(text/delete % sel-len))
+      (assoc-in [:caret :offset] sel-from)
+      (assoc-in [:caret :v-col] 0)
+      (assoc :selection [sel-from sel-from])))
+
+(defn type-in [{:keys [selection] :as state} s]
+  (let [[sel-from sel-to] selection
+        sel-len (- sel-to sel-from)
+        state (if (< 0 sel-len)
+                (delete-under-selection state selection sel-len)
+                state)
+        caret-offset (get-in state [:caret :offset])]
+    (-> state
+        (edit-at caret-offset #(text/insert % s))
+        (update-in [:caret :offset] + (count s))
+        (assoc :selection [(+ caret-offset (count s)) (+ caret-offset (count s))]))))
+
+(defn scroll [viewport]
+  (let [pos (reagent/atom [0 0])
+        view-size (reagent/atom [0 0])
+        once (atom true)]
+    (fn []
+      [:div {:style {:display :flex
+                     :flex "1"
+                     :overflow :hidden}
+             :ref (fn [e]
+                    (when e
+                      (reset! view-size [(.-clientWidth e)
+                                         (.-clientHeight e)]) 100)
+                    (when (and @once (some? e))
+                      (reset! once false)
+                      (.addEventListener
+                       e
+                       "mousewheel"
+                       (fn [evt]
+                         (swap! pos
+                                (fn [[x y]]
+                                  (let [dx (/ (.-wheelDeltaX evt) 2)
+                                        dy (/ (.-wheelDeltaY evt) 2)]
+                                    (if (< (js/Math.abs dx) (js/Math.abs dy))
+                                      [x (max 0 (- y dy))]
+                                      [(max 0 (- x dx)) y]))))
+                         (.preventDefault evt)))))}
+       [viewport pos view-size]])))
+
 (defn editor-viewport [state]
   (fn [pos size]
     (let [dims (reaction
@@ -315,35 +344,6 @@
                                                                                        true))))}])]
                               (range from to))]
                (persistent! hiccup))))))
-
-(defn edit-at [{:keys [text] :as state} offset f]
-  (let [edit-point (-> (text/zipper text)
-                       (text/scan-to-offset offset))]
-    (-> state
-        (assoc :text (-> edit-point
-                         (f)
-                         (text/root)))
-        (update :timestamp inc)
-        (update :first-invalid min (text/line edit-point)))))
-
-(defn delete-under-selection [state [sel-from sel-to] sel-len]
-  (-> state
-      (edit-at sel-from #(text/delete % sel-len))
-      (assoc-in [:caret :offset] sel-from)
-      (assoc-in [:caret :v-col] 0)
-      (assoc :selection [sel-from sel-from])))
-
-(defn type-in [{:keys [selection] :as state} s]
-  (let [[sel-from sel-to] selection
-        sel-len (- sel-to sel-from)
-        state (if (< 0 sel-len)
-                (delete-under-selection state selection sel-len)
-                state)
-        caret-offset (get-in state [:caret :offset])]
-    (-> state
-        (edit-at caret-offset #(text/insert % s))
-        (update-in [:caret :offset] + (count s))
-        (assoc :selection [(+ caret-offset (count s)) (+ caret-offset (count s))]))))
 
 (defn editor [state]
   (let [dom-input (atom nil)
