@@ -607,3 +607,5 @@
 
 (bind-function! "pgup" pg-move! :up false)
 (bind-function! "pgdown" pg-move! :down false)
+(bind-function! "shift-pgup" pg-move! :up true)
+(bind-function! "shift-pgdown" pg-move! :down true)
