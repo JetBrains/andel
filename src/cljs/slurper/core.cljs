@@ -590,13 +590,20 @@
 (bind-function! "backspace" backspace)
 (bind-function! "delete" delete)
 
-(defn pg-move! [{:keys [caret] :as state} selection? op]
+(defn pg-move! [{:keys [caret] :as state} dir selection?]
   (let [{:keys [pos view-size]} @viewport
-        [pos-x pos-y] pos
-        [_ view-y] view-size
-        [new-pos-x new-pos-y] [0 (max 0 (op pos-y view-y))]]
-    (swap! viewport #(assoc % :pos [new-pos-x new-pos-y])))
-  state)
+        [_ view-size] view-size
+        [_ view-init-pos] pos
+        view-new-pos (case dir
+                       :up (max 0 (- view-init-pos view-size))
+                       :down (min 1000000000 (+ view-init-pos view-size))) ;; fix-me
+        view-new-col (int (/ view-new-pos line-h))
+        caret-pos (case dir
+                    :up 0
+                    :down (/ view-size line-h))
+        [text-line text-col] (absolute->line-ch 0 view-new-pos metrics caret-pos 0 0)]
+    (swap! viewport #(assoc % :pos [0 view-new-pos]))
+    (set-caret state text-line 0 selection?)))
 
-(bind-function! "pgup" pg-move! false -)
-(bind-function! "pgdown" pg-move! false +)
+(bind-function! "pgup" pg-move! :up false)
+(bind-function! "pgdown" pg-move! :down false)
