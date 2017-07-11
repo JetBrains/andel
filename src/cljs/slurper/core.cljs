@@ -66,10 +66,17 @@
      :lines []
      :first-invalid 0}))
 
+(defn make-editor-viewport []
+  {:pos [0 0]
+   :viewsize [0 0]
+   :once true})
+
 (defn px [x]
   (str x "px"))
 
 (defonce state (reagent/atom (make-editor-state)))
+
+(defonce viewport (reagent/atom (make-editor-viewport)))
 
 (defn style [m]
   (reduce-kv (fn [s k v]
