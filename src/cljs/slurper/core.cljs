@@ -602,7 +602,7 @@
         view-new-col (int (/ view-new-pos line-h))
         caret-pos (case dir
                     :up 0
-                    :down (/ view-size line-h))
+                    :down (Math/floor (/ view-size line-h)))
         [text-line text-col] (absolute->line-ch 0 view-new-pos metrics caret-pos 0 0)]
     (swap! viewport #(assoc % :pos [0 view-new-pos]))
     (set-caret state text-line 0 selection?)))
