@@ -232,6 +232,13 @@
                                 (= caret-offset sel-to) [(min sel-from caret-offset') (max sel-from caret-offset')]
                                 :else [(min caret-offset caret-offset') (max caret-offset' caret-offset')])))))
 
+(defn set-caret-begining [state line selection?]
+  (set-caret state line 0 selection?))
+
+(defn set-caret-end [[:keys [text] :as state] line selection?]
+  (-> state
+      (set-caret-begining (inc line) selection?)
+      (update-in [:caret :offset] dec)))
 
 (defn on-mouse-action! [[line col] selection?]
   (swap! state #(set-caret % line col selection?)))
