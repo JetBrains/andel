@@ -108,7 +108,7 @@
                     children)
             attrs-map)))
 
-(defn scroll [size viewport]
+(defn scroll [viewport]
   (let [pos (reagent/atom [0 0])
         view-size (reagent/atom [0 0])
         once (atom true)]
@@ -129,8 +129,7 @@
                          (swap! pos
                                 (fn [[x y]]
                                   (let [dx (/ (.-wheelDeltaX evt) 2)
-                                        dy (/ (.-wheelDeltaY evt) 2)
-                                        [width height] @size]
+                                        dy (/ (.-wheelDeltaY evt) 2)]
                                     (if (< (js/Math.abs dx) (js/Math.abs dy))
                                       [x (max 0 (- y dy))]
                                       [(max 0 (- x dx)) y]))))
@@ -340,8 +339,7 @@
         (assoc :selection [(+ caret-offset (count s)) (+ caret-offset (count s))]))))
 
 (defn editor [state]
-  (let [size (reagent/atom [2000 30000])
-        dom-input (atom nil)
+  (let [dom-input (atom nil)
         listener (atom nil)]
     (fn []
       [:div {:style {:display :flex
@@ -354,8 +352,7 @@
                                          (fn []
                                            (when @dom-input
                                              (.focus @dom-input))))))}
-       [scroll size
-        (editor-viewport state)]
+       [scroll (editor-viewport state)]
        [:textarea
         {:ref (fn [this]
                 (when-let [dom-node (reagent/dom-node this)]
