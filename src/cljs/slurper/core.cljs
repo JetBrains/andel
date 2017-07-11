@@ -68,7 +68,7 @@
 
 (defn make-editor-viewport []
   {:pos [0 0]
-   :viewsize [0 0]
+   :view-size [0 0]
    :once true})
 
 (defn px [x]
@@ -264,33 +264,30 @@
         (update-in [:caret :offset] + (count s))
         (assoc :selection [(+ caret-offset (count s)) (+ caret-offset (count s))]))))
 
-(defn scroll [viewport]
-  (let [pos (reagent/atom [0 0])
-        view-size (reagent/atom [0 0])
-        once (atom true)]
-    (fn []
-      [:div {:style {:display :flex
-                     :flex "1"
-                     :overflow :hidden}
-             :ref (fn [e]
-                    (when e
-                      (reset! view-size [(.-clientWidth e)
-                                         (.-clientHeight e)]) 100)
-                    (when (and @once (some? e))
-                      (reset! once false)
-                      (.addEventListener
-                       e
-                       "mousewheel"
-                       (fn [evt]
-                         (swap! pos
-                                (fn [[x y]]
-                                  (let [dx (/ (.-wheelDeltaX evt) 2)
-                                        dy (/ (.-wheelDeltaY evt) 2)]
-                                    (if (< (js/Math.abs dx) (js/Math.abs dy))
-                                      [x (max 0 (- y dy))]
-                                      [(max 0 (- x dx)) y]))))
-                         (.preventDefault evt)))))}
-       [viewport pos view-size]])))
+(defn scroll [viewport-fn]
+  (fn []
+    [:div {:style {:display :flex
+                   :flex "1"
+                   :overflow :hidden}
+           :ref (fn [e]
+                  (when e
+                    (swap! viewport #(assoc % :view-size [(.-clientWidth e) (.-clientHeight e)])) 100)
+                  (when (and (:once @viewport) (some? e))
+                    (swap! viewport #(assoc % :once false))
+                    (.addEventListener
+                     e
+                     "mousewheel"
+                     (fn [evt]
+                       (swap! viewport
+                              #(update % :pos
+                                      (fn [[x y]]
+                                        (let [dx (/ (.-wheelDeltaX evt) 2)
+                                              dy (/ (.-wheelDeltaY evt) 2)]
+                                          (if (< (js/Math.abs dx) (js/Math.abs dy))
+                                            [x (max 0 (- y dy))]
+                                            [(max 0 (- x dx)) y])))))
+                       (.preventDefault evt)))))}
+     [viewport-fn (reagent/cursor viewport [:pos]) (reagent/cursor viewport [:view-size])]]))
 
 (defn editor-viewport [state]
   (fn [pos size]
