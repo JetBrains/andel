@@ -212,8 +212,9 @@
                                       :infinity)]
         :else nil))
 
-(defn absolute->line-ch [client-x client-y {:keys [:height :width]} from to y-shift]
-  (let [x client-x
+(defn absolute->line-ch [client-x client-y from to y-shift]
+  (let [{:keys [height width]} metrics
+        x client-x
         y (- (- client-y y-shift) (/ height 2))]
     [(+ from (Math/round (/ y height))) (Math/round (/ x width))]))
 
@@ -331,13 +332,13 @@
                                                  :onMouseDown (fn [event]
                                                                 (let [x ($ event :clientX)
                                                                       y ($ event :clientY)]
-                                                                  (on-mouse-action! (absolute->line-ch x y metrics from to (:y-shift @dims))
+                                                                  (on-mouse-action! (absolute->line-ch x y from to (:y-shift @dims))
                                                                                     false)))
                                                  :onMouseMove  (fn [event]
                                                                  (when (= ($ event :buttons) 1)
                                                                    (let [x ($ event :clientX)
                                                                          y ($ event :clientY)]
-                                                                     (on-mouse-action! (absolute->line-ch x y metrics from to (:y-shift @dims))
+                                                                     (on-mouse-action! (absolute->line-ch x y from to (:y-shift @dims))
                                                                                        true))))}])]
                               (range from to))]
                (persistent! hiccup))))))
@@ -590,12 +591,18 @@
 (bind-function! "backspace" backspace)
 (bind-function! "delete" delete)
 
+(defn move-view-to-line! []) ;;Todo
+
+;; edit -> move view and caret separately, except for upper page and last page.
+;; caret <- caret + #lines on page
+;; view <- view + size of page
+
 (defn pg-move! [{:keys [caret] :as state} dir selection?]
-  (let [{char-height :height} metrics
+  (let [{char-h :height} metrics
         {:keys [pos view-size]} @viewport
         [_ view-size] view-size
         [_ view-init-pos-raw] pos
-        view-init-pos (+ (/ char-height 2) (* line-h (Math/round (/ view-init-pos-raw line-h))) (- 1)) ;; -1 -> offset between lines
+        view-init-pos (+ char-h (* line-h (Math/round (/ view-init-pos-raw line-h))))
         view-new-pos (case dir
                        :up (max 0 (- view-init-pos view-size))
                        :down (min 1000000000 (+ view-init-pos view-size))) ;; fix-me
@@ -603,7 +610,7 @@
         caret-pos (case dir
                     :up 0
                     :down (Math/floor (/ view-size line-h)))
-        [text-line text-col] (absolute->line-ch 0 view-new-pos metrics caret-pos 0 0)]
+        [text-line text-col] (absolute->line-ch 0 view-new-pos caret-pos 0 0)]
     (swap! viewport #(assoc % :pos [0 view-new-pos]))
     (set-caret state text-line 0 selection?)))
 
