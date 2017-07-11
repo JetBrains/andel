@@ -589,3 +589,14 @@
 
 (bind-function! "backspace" backspace)
 (bind-function! "delete" delete)
+
+(defn pg-move! [{:keys [caret] :as state} selection? op]
+  (let [{:keys [pos view-size]} @viewport
+        [pos-x pos-y] pos
+        [_ view-y] view-size
+        [new-pos-x new-pos-y] [0 (max 0 (op pos-y view-y))]]
+    (swap! viewport #(assoc % :pos [new-pos-x new-pos-y])))
+  state)
+
+(bind-function! "pgup" pg-move! false -)
+(bind-function! "pgdown" pg-move! false +)
