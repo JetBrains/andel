@@ -591,9 +591,11 @@
 (bind-function! "delete" delete)
 
 (defn pg-move! [{:keys [caret] :as state} dir selection?]
-  (let [{:keys [pos view-size]} @viewport
+  (let [{char-height :height} metrics
+        {:keys [pos view-size]} @viewport
         [_ view-size] view-size
-        [_ view-init-pos] pos
+        [_ view-init-pos-raw] pos
+        view-init-pos (+ (/ char-height 2) (* line-h (Math/round (/ view-init-pos-raw line-h))) (- 1)) ;; -1 -> offset between lines
         view-new-pos (case dir
                        :up (max 0 (- view-init-pos view-size))
                        :down (min 1000000000 (+ view-init-pos view-size))) ;; fix-me
