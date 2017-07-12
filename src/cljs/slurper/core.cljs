@@ -493,81 +493,6 @@
 (defn- bind-function! [key f & args]
   (keybind/bind! key :global (capture #(swap! state (fn [s] (apply f s args))))))
 
-(defn move-caret [{:keys [caret text selection] :as state} dir selection?]
-  (let [{caret-offset :offset v-col :v-col} caret
-        [sel-from sel-to] selection
-        {caret-offset' :offset :as caret'} (case dir
-                 :left (if (< 0 caret-offset)
-                         {:offset (dec caret-offset) :v-col 0}
-                         caret)
-                 :right (if (< caret-offset (text/text-length text))
-                          {:offset (inc caret-offset) :v-col 0}
-                          caret)
-                 :up (let [cur-loc (text/scan-to-offset (text/zipper text) caret-offset)
-                           cur-line (text/line cur-loc)
-                           cur-begin (text/offset (text/scan-to-line (text/zipper text) cur-line))
-                           cur-col (- caret-offset cur-begin)
-                           prev-end (dec cur-begin)
-                           prev-line (text/line (text/scan-to-offset (text/zipper text) prev-end))
-                           prev-begin (text/offset (text/scan-to-line (text/zipper text) prev-line))
-                           new-v-col (max v-col cur-col)]
-                       (if (< 0 cur-line)
-                         {:offset (min prev-end (+ prev-begin new-v-col)) :v-col new-v-col}
-                         caret))
-                 :down (let [zipper (text/zipper text)
-                             cur-loc (text/scan-to-offset (text/zipper text) caret-offset)
-                             cur-line (text/line cur-loc)
-                             cur-begin (text/offset (text/scan-to-line zipper cur-line))
-                             cur-col (- caret-offset cur-begin)
-                             next-line-loc (text/scan-to-line zipper (inc cur-line))
-                             next-begin (text/offset next-line-loc)
-                             next-end (+ next-begin (text/line-length next-line-loc))
-                             new-v-col (max v-col cur-col)]
-                         (if (tree/end? next-line-loc)
-                           caret
-                           {:offset (min next-end (+ next-begin new-v-col)) :v-col new-v-col})))
-        selection' (cond
-                     (not selection?) [caret-offset' caret-offset']
-                     (= caret-offset sel-from) [(min caret-offset' sel-to) (max caret-offset' sel-to)]
-                     (= caret-offset sel-to) [(min sel-from caret-offset') (max sel-from caret-offset')]
-                     :else [(min caret-offset caret-offset') (max caret-offset' caret-offset')])]
-    (-> state
-        (assoc :caret caret')
-        (assoc :selection selection'))))
-
-(defn right [state]
-  (move-caret state :right false))
-
-(defn left [state]
-  (move-caret state :left false))
-
-(defn up [state]
-  (move-caret state :up false))
-
-(defn down [state]
-  (move-caret state :down false))
-
-(defn shift-right [state]
-  (move-caret state :right true))
-
-(defn shift-left [state]
-  (move-caret state :left true))
-
-(defn shift-up [state]
-  (move-caret state :up true))
-
-(defn shift-down [state]
-  (move-caret state :down true))
-
-(bind-function! "left" left)
-(bind-function! "right" right)
-(bind-function! "up" up)
-(bind-function! "down" down)
-(bind-function! "shift-left" shift-left)
-(bind-function! "shift-right" shift-right)
-(bind-function! "shift-up" shift-up)
-(bind-function! "shift-down" shift-down)
-
 (defn backspace [{:keys [text caret selection] :as state}]
   (let [{caret-offset :offset} caret
         [sel-from sel-to] selection
@@ -671,3 +596,91 @@
 (bind-function! "shift-end" end true)
 
 (bind-function! "tab" (fn [state] (type-in state "    ")))
+
+(defn move-view-if-needed! [{:keys [caret] :as state}]
+  (let [{caret-offset :offset} caret
+        caret-l (offset->line caret-offset)
+        [from-l to-l] (get-view-in-lines)
+        view-in-lines (- to-l from-l)]
+    (cond (and (< caret-l  from-l) (not= from-l 0))
+          (set-view-to-line! caret-l)
+
+          (< (dec to-l) caret-l)
+          (set-view-to-line! (- caret-l (dec view-in-lines)))))
+  state)
+
+(defn move-caret [{:keys [caret text selection] :as state} dir selection?]
+  (let [{caret-offset :offset v-col :v-col} caret
+        [sel-from sel-to] selection
+        {caret-offset' :offset :as caret'} (case dir
+                 :left (if (< 0 caret-offset)
+                         {:offset (dec caret-offset) :v-col 0}
+                         caret)
+                 :right (if (< caret-offset (text/text-length text))
+                          {:offset (inc caret-offset) :v-col 0}
+                          caret)
+                 :up (let [cur-loc (text/scan-to-offset (text/zipper text) caret-offset)
+                           cur-line (text/line cur-loc)
+                           cur-begin (text/offset (text/scan-to-line (text/zipper text) cur-line))
+                           cur-col (- caret-offset cur-begin)
+                           prev-end (dec cur-begin)
+                           prev-line (text/line (text/scan-to-offset (text/zipper text) prev-end))
+                           prev-begin (text/offset (text/scan-to-line (text/zipper text) prev-line))
+                           new-v-col (max v-col cur-col)]
+                       (if (< 0 cur-line)
+                         {:offset (min prev-end (+ prev-begin new-v-col)) :v-col new-v-col}
+                         caret))
+                 :down (let [zipper (text/zipper text)
+                             cur-loc (text/scan-to-offset (text/zipper text) caret-offset)
+                             cur-line (text/line cur-loc)
+                             cur-begin (text/offset (text/scan-to-line zipper cur-line))
+                             cur-col (- caret-offset cur-begin)
+                             next-line-loc (text/scan-to-line zipper (inc cur-line))
+                             next-begin (text/offset next-line-loc)
+                             next-end (+ next-begin (text/line-length next-line-loc))
+                             new-v-col (max v-col cur-col)]
+                         (if (tree/end? next-line-loc)
+                           caret
+                           {:offset (min next-end (+ next-begin new-v-col)) :v-col new-v-col})))
+        selection' (cond
+                     (not selection?) [caret-offset' caret-offset']
+                     (= caret-offset sel-from) [(min caret-offset' sel-to) (max caret-offset' sel-to)]
+                     (= caret-offset sel-to) [(min sel-from caret-offset') (max sel-from caret-offset')]
+                     :else [(min caret-offset caret-offset') (max caret-offset' caret-offset')])]
+    (-> state
+        (assoc :caret caret')
+        (assoc :selection selection')
+        (move-view-if-needed!))))
+
+(defn right [state]
+  (move-caret state :right false))
+
+(defn left [state]
+  (move-caret state :left false))
+
+(defn up [state]
+  (move-caret state :up false))
+
+(defn down [state]
+  (move-caret state :down false))
+
+(defn shift-right [state]
+  (move-caret state :right true))
+
+(defn shift-left [state]
+  (move-caret state :left true))
+
+(defn shift-up [state]
+  (move-caret state :up true))
+
+(defn shift-down [state]
+  (move-caret state :down true))
+
+(bind-function! "left" left)
+(bind-function! "right" right)
+(bind-function! "up" up)
+(bind-function! "down" down)
+(bind-function! "shift-left" shift-left)
+(bind-function! "shift-right" shift-right)
+(bind-function! "shift-up" shift-up)
+(bind-function! "shift-down" shift-down)
