@@ -239,7 +239,6 @@
   (-> state
       (set-caret-begining (inc line) selection?)
       (update-in [:caret :offset] dec)
-      (update-in [:selection 0] dec)
       (update-in [:selection 1] dec)))
 
 (defn on-mouse-action! [[line col] selection?]
@@ -655,3 +654,22 @@
 (bind-function! "pgdown" pg-move! :down false)
 (bind-function! "shift-pgup" pg-move! :up true)
 (bind-function! "shift-pgdown" pg-move! :down true)
+
+(defn home [{:keys [caret] :as state} selection?]
+  (let [{caret-offset :offset} caret
+        line (offset->line caret-offset)]
+    (do (js/console.log (str "offset: " caret-offset "\n"
+                             "selection: " selection "\n"))
+        (set-caret-begining state line selection?))))
+
+(defn end [{:keys [caret selection] :as state} selection?]
+  (let [{caret-offset :offset} caret
+        line (offset->line caret-offset)]
+    (do (js/console.log (str "offset: " caret-offset "\n"
+                             "selection: " selection "\n"))
+        (set-caret-end state line selection?))))
+
+(bind-function! "home" home false)
+(bind-function! "shift-home" home true)
+(bind-function! "end" end false)
+(bind-function! "shift-end" end true)
