@@ -598,7 +598,9 @@
 (bind-function! "backspace" backspace)
 (bind-function! "delete" delete)
 
-(defn move-view-to-line! []) ;;Todo
+(defn move-view-to-line! [line]
+  (let [{char-h :height} metrics]
+    (swap! viewport #(assoc-in % [:pos 1] (* line char-h)))))
 
 ;; edit -> move view and caret separately, except for upper page and last page.
 ;; caret <- caret + #lines on page
