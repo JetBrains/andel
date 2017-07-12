@@ -669,3 +669,5 @@
 (bind-function! "shift-home" home true)
 (bind-function! "end" end false)
 (bind-function! "shift-end" end true)
+
+(bind-function! "tab" (fn [state] (type-in state "    ")))
