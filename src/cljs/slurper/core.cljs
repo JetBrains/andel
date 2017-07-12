@@ -235,10 +235,12 @@
 (defn set-caret-begining [state line selection?]
   (set-caret state line 0 selection?))
 
-(defn set-caret-end [[:keys [text] :as state] line selection?]
+(defn set-caret-end [state line selection?]
   (-> state
       (set-caret-begining (inc line) selection?)
-      (update-in [:caret :offset] dec)))
+      (update-in [:caret :offset] dec)
+      (update-in [:selection 0] dec)
+      (update-in [:selection 1] dec)))
 
 (defn on-mouse-action! [[line col] selection?]
   (swap! state #(set-caret % line col selection?)))
@@ -598,30 +600,56 @@
 (bind-function! "backspace" backspace)
 (bind-function! "delete" delete)
 
-(defn move-view-to-line! [line]
+(defn offset->line [offset]
+  (-> (:text @state)
+      (text/zipper)
+      (text/scan-to-offset offset)
+      (text/line)))
+
+(defn set-view-to-line! [line]
   (let [{char-h :height} metrics]
     (swap! viewport #(assoc-in % [:pos 1] (* line char-h)))))
 
-;; edit -> move view and caret separately, except for upper page and last page.
-;; caret <- caret + #lines on page
-;; view <- view + size of page
+(defn count-lines-in-view []
+  (let [{:keys [view-size]} @viewport
+        [_ view-size] view-size]
+    (Math/round (/ view-size line-h))))
+
+(defn last-line? [line]
+  (-> (:text @state)
+      (text/zipper)
+      (text/scan-to-line line)
+      (tree/end?)))
+
+(defn get-view-in-lines []
+  (let [{:keys [pos]} @viewport
+        [_ pos-px] pos
+        pos-in-lines (Math/round (/ pos-px line-h))
+        pos-in-lines-end (+ pos-in-lines (count-lines-in-view))]
+    [pos-in-lines pos-in-lines-end]))
 
 (defn pg-move! [{:keys [caret] :as state} dir selection?]
-  (let [{char-h :height} metrics
-        {:keys [pos view-size]} @viewport
-        [_ view-size] view-size
-        [_ view-init-pos-raw] pos
-        view-init-pos (+ char-h (* line-h (Math/round (/ view-init-pos-raw line-h))))
-        view-new-pos (case dir
-                       :up (max 0 (- view-init-pos view-size))
-                       :down (min 1000000000 (+ view-init-pos view-size))) ;; fix-me
-        view-new-col (int (/ view-new-pos line-h))
-        caret-pos (case dir
-                    :up 0
-                    :down (Math/floor (/ view-size line-h)))
-        [text-line text-col] (absolute->line-ch 0 view-new-pos caret-pos 0 0)]
-    (swap! viewport #(assoc % :pos [0 view-new-pos]))
-    (set-caret state text-line 0 selection?)))
+  (let [[from-l to-l] (get-view-in-lines)
+        caret-line (offset->line (:offset caret))]
+    (case dir
+      :up (if (or (not= caret-line from-l) (= caret-line 0))
+            (set-caret-begining state from-l selection?)
+            (let [new-from-l (max 0 (- from-l (- (count-lines-in-view) 2)))]
+              (set-view-to-line! new-from-l)
+              (set-caret-begining state new-from-l selection?)))
+      :down (cond
+              (last-line? to-l)
+                (set-caret-end state to-l selection?)
+
+              (not= caret-line (dec to-l))
+                (set-caret-end state (- to-l 1) selection?)
+
+              :else
+                (let [delta (- (count-lines-in-view) 2)
+                    new-from-l (+ from-l delta)
+                    new-to-l (+ to-l delta (- 1))]
+                (set-view-to-line! new-from-l)
+                (set-caret-end state new-to-l selection?))))))
 
 (bind-function! "pgup" pg-move! :up false)
 (bind-function! "pgdown" pg-move! :down false)
