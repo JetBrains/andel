@@ -66,10 +66,17 @@
      :lines []
      :first-invalid 0}))
 
+(defn make-editor-viewport []
+  {:pos [0 0]
+   :view-size [0 0]
+   :once true})
+
 (defn px [x]
   (str x "px"))
 
 (defonce state (reagent/atom (make-editor-state)))
+
+(defonce viewport (reagent/atom (make-editor-viewport)))
 
 (defn style [m]
   (reduce-kv (fn [s k v]
@@ -107,35 +114,6 @@
                     (make-node tag)
                     children)
             attrs-map)))
-
-(defn scroll [size viewport]
-  (let [pos (reagent/atom [0 0])
-        view-size (reagent/atom [0 0])
-        once (atom true)]
-    (fn []
-      [:div {:style {:display :flex
-                     :flex "1"
-                     :overflow :hidden}
-             :ref (fn [e]
-                    (when e
-                      (reset! view-size [(.-clientWidth e)
-                                         (.-clientHeight e)]) 100)
-                    (when (and @once (some? e))
-                      (reset! once false)
-                      (.addEventListener
-                       e
-                       "mousewheel"
-                       (fn [evt]
-                         (swap! pos
-                                (fn [[x y]]
-                                  (let [dx (/ (.-wheelDeltaX evt) 2)
-                                        dy (/ (.-wheelDeltaY evt) 2)
-                                        [width height] @size]
-                                    (if (< (js/Math.abs dx) (js/Math.abs dy))
-                                      [x (max 0 (- y dy))]
-                                      [(max 0 (- x dx)) y]))))
-                         (.preventDefault evt)))))}
-       [viewport pos view-size]])))
 
 (defn infinity? [x] (keyword? x))
 
@@ -229,10 +207,96 @@
           [0 :infinity]
           [0 (- to line-start-offset)])
         (and (<= line-start-offset from) (<= from line-end-offset))
-        [(- from line-start-offset) (if (< to line-end-offset)
+        [(- from line-start-offset) (if (<= to line-end-offset)
                                       (- to line-start-offset)
                                       :infinity)]
         :else nil))
+
+(defn absolute->line-ch [client-x client-y from to y-shift]
+  (let [{:keys [height width]} metrics
+        x client-x
+        y (- (- client-y y-shift) (/ height 2))]
+    [(+ from (Math/round (/ y height))) (Math/round (/ x width))]))
+
+(defn set-caret [{:keys [caret selection text] :as state} line col selection?]
+  (let [[sel-from sel-to] selection
+        {caret-offset :offset} caret
+        line-loc (text/scan-to-line (text/zipper text) line)
+        line-len (text/line-length line-loc)
+        line-off (text/offset line-loc)
+        caret-offset' (+ line-off (min col line-len))]
+    (-> state
+        (assoc :caret {:offset caret-offset' :v-col 0})
+        (assoc :selection (cond (not selection?) [caret-offset' caret-offset']
+                                (= caret-offset sel-from) [(min caret-offset' sel-to) (max caret-offset' sel-to)]
+                                (= caret-offset sel-to) [(min sel-from caret-offset') (max sel-from caret-offset')]
+                                :else [(min caret-offset caret-offset') (max caret-offset' caret-offset')])))))
+
+(defn set-caret-begining [state line selection?]
+  (set-caret state line 0 selection?))
+
+(defn set-caret-end [state line selection?]
+  (-> state
+      (set-caret-begining (inc line) selection?)
+      (update-in [:caret :offset] dec)
+      (update-in [:selection 1] dec)))
+
+(defn on-mouse-action! [[line col] selection?]
+  (swap! state #(set-caret % line col selection?)))
+
+(defn edit-at [{:keys [text] :as state} offset f]
+  (let [edit-point (-> (text/zipper text)
+                       (text/scan-to-offset offset))]
+    (-> state
+        (assoc :text (-> edit-point
+                         (f)
+                         (text/root)))
+        (update :timestamp inc)
+        (update :first-invalid min (text/line edit-point)))))
+
+(defn delete-under-selection [state [sel-from sel-to] sel-len]
+  (-> state
+      (edit-at sel-from #(text/delete % sel-len))
+      (assoc-in [:caret :offset] sel-from)
+      (assoc-in [:caret :v-col] 0)
+      (assoc :selection [sel-from sel-from])))
+
+(defn type-in [{:keys [selection] :as state} s]
+  (let [[sel-from sel-to] selection
+        sel-len (- sel-to sel-from)
+        state (if (< 0 sel-len)
+                (delete-under-selection state selection sel-len)
+                state)
+        caret-offset (get-in state [:caret :offset])]
+    (-> state
+        (edit-at caret-offset #(text/insert % s))
+        (update-in [:caret :offset] + (count s))
+        (assoc :selection [(+ caret-offset (count s)) (+ caret-offset (count s))]))))
+
+(defn scroll [viewport-fn]
+  (fn []
+    [:div {:style {:display :flex
+                   :flex "1"
+                   :overflow :hidden}
+           :ref (fn [e]
+                  (when e
+                    (swap! viewport #(assoc % :view-size [(.-clientWidth e) (.-clientHeight e)])) 100)
+                  (when (and (:once @viewport) (some? e))
+                    (swap! viewport #(assoc % :once false))
+                    (.addEventListener
+                     e
+                     "mousewheel"
+                     (fn [evt]
+                       (swap! viewport
+                              #(update % :pos
+                                      (fn [[x y]]
+                                        (let [dx (/ (.-wheelDeltaX evt) 2)
+                                              dy (/ (.-wheelDeltaY evt) 2)]
+                                          (if (< (js/Math.abs dx) (js/Math.abs dy))
+                                            [x (max 0 (- y dy))]
+                                            [(max 0 (- x dx)) y])))))
+                       (.preventDefault evt)))))}
+     [viewport-fn (reagent/cursor viewport [:pos]) (reagent/cursor viewport [:view-size])]]))
 
 (defn editor-viewport [state]
   (fn [pos size]
@@ -272,29 +336,23 @@
                                (transient [:div {:style
                                                  {:background theme/background
                                                   :width "100%"
-                                                  :transform (str "translate3d(0px, " (:y-shift @dims) "px, 0px)")}}])]
+                                                  :transform (str "translate3d(0px, " (:y-shift @dims) "px, 0px)")}
+                                                 :onMouseDown (fn [event]
+                                                                (let [x ($ event :clientX)
+                                                                      y ($ event :clientY)]
+                                                                  (on-mouse-action! (absolute->line-ch x y from to (:y-shift @dims))
+                                                                                    false)))
+                                                 :onMouseMove  (fn [event]
+                                                                 (when (= ($ event :buttons) 1)
+                                                                   (let [x ($ event :clientX)
+                                                                         y ($ event :clientY)]
+                                                                     (on-mouse-action! (absolute->line-ch x y from to (:y-shift @dims))
+                                                                                       true))))}])]
                               (range from to))]
-          (persistent! hiccup))))))
-
-(defn edit-at [{:keys [text] :as state} offset f]
-  (let [edit-point (-> (text/zipper text)
-                       (text/scan-to-offset offset))]
-    (-> state
-        (assoc :text (-> edit-point
-                         (f)
-                         (text/root)))
-        (update :timestamp inc)
-        (update :first-invalid min (text/line edit-point)))))
-
-(defn type-in [{:keys [caret text] :as state} s]
-  (let [caret-offset (:offset caret)]
-    (-> state
-        (edit-at caret-offset #(text/insert % s))
-        (update-in [:caret :offset] + (count s)))))
+               (persistent! hiccup))))))
 
 (defn editor [state]
-  (let [size (reagent/atom [2000 30000])
-        dom-input (atom nil)
+  (let [dom-input (atom nil)
         listener (atom nil)]
     (fn []
       [:div {:style {:display :flex
@@ -307,8 +365,7 @@
                                          (fn []
                                            (when @dom-input
                                              (.focus @dom-input))))))}
-       [scroll size
-        (editor-viewport state)]
+       [scroll (editor-viewport state)]
        [:textarea
         {:ref (fn [this]
                 (when-let [dom-node (reagent/dom-node this)]
@@ -436,9 +493,126 @@
 (defn- bind-function! [key f & args]
   (keybind/bind! key :global (capture #(swap! state (fn [s] (apply f s args))))))
 
-(defn move-caret [{:keys [caret text] :as state} dir]
+(defn backspace [{:keys [text caret selection] :as state}]
+  (let [{caret-offset :offset} caret
+        [sel-from sel-to] selection
+        sel-len (- sel-to sel-from)]
+    (cond (< 0 sel-len)
+          (delete-under-selection state selection sel-len)
+
+          (< 0 caret-offset)
+          (-> state
+              (edit-at (dec caret-offset) #(text/delete % 1))
+              (assoc-in [:caret :offset] (dec caret-offset))
+              (assoc-in [:caret :v-col] 0)
+              (assoc :selection [(dec caret-offset) (dec caret-offset)]))
+
+          :else state)))
+
+(defn delete [{:keys [text caret selection] :as state}]
+  (let [{caret-offset :offset} caret
+        [sel-from sel-to] selection
+        sel-len (- sel-to sel-from)]
+    (cond (< 0 sel-len)
+          (delete-under-selection state selection sel-len)
+
+          (< caret-offset (text/text-length text))
+          (edit-at state caret-offset #(text/delete % 1))
+
+          :else state)))
+
+(bind-function! "backspace" backspace)
+(bind-function! "delete" delete)
+
+(defn offset->line [offset]
+  (-> (:text @state)
+      (text/zipper)
+      (text/scan-to-offset offset)
+      (text/line)))
+
+(defn set-view-to-line! [line]
+  (let [{char-h :height} metrics]
+    (swap! viewport #(assoc-in % [:pos 1] (* line char-h)))))
+
+(defn count-lines-in-view []
+  (let [{:keys [view-size]} @viewport
+        [_ view-size] view-size]
+    (Math/round (/ view-size line-h))))
+
+(defn last-line? [line]
+  (-> (:text @state)
+      (text/zipper)
+      (text/scan-to-line line)
+      (tree/end?)))
+
+(defn get-view-in-lines []
+  (let [{:keys [pos]} @viewport
+        [_ pos-px] pos
+        pos-in-lines (Math/round (/ pos-px line-h))
+        pos-in-lines-end (+ pos-in-lines (count-lines-in-view))]
+    [pos-in-lines pos-in-lines-end]))
+
+(defn pg-move! [{:keys [caret] :as state} dir selection?]
+  (let [[from-l to-l] (get-view-in-lines)
+        caret-line (offset->line (:offset caret))]
+    (case dir
+      :up (if (or (not= caret-line from-l) (= caret-line 0))
+            (set-caret-begining state from-l selection?)
+            (let [new-from-l (max 0 (- from-l (- (count-lines-in-view) 2)))]
+              (set-view-to-line! new-from-l)
+              (set-caret-begining state new-from-l selection?)))
+      :down (cond
+              (last-line? to-l)
+                (set-caret-end state to-l selection?)
+
+              (not= caret-line (dec to-l))
+                (set-caret-end state (- to-l 1) selection?)
+
+              :else
+                (let [delta (- (count-lines-in-view) 2)
+                    new-from-l (+ from-l delta)
+                    new-to-l (+ to-l delta (- 1))]
+                (set-view-to-line! new-from-l)
+                (set-caret-end state new-to-l selection?))))))
+
+(bind-function! "pgup" pg-move! :up false)
+(bind-function! "pgdown" pg-move! :down false)
+(bind-function! "shift-pgup" pg-move! :up true)
+(bind-function! "shift-pgdown" pg-move! :down true)
+
+(defn home [{:keys [caret] :as state} selection?]
+  (let [{caret-offset :offset} caret
+        line (offset->line caret-offset)]
+        (set-caret-begining state line selection?)))
+
+(defn end [{:keys [caret selection] :as state} selection?]
+  (let [{caret-offset :offset} caret
+        line (offset->line caret-offset)]
+        (set-caret-end state line selection?)))
+
+(bind-function! "home" home false)
+(bind-function! "shift-home" home true)
+(bind-function! "end" end false)
+(bind-function! "shift-end" end true)
+
+(bind-function! "tab" (fn [state] (type-in state "    ")))
+
+(defn move-view-if-needed! [{:keys [caret] :as state}]
+  (let [{caret-offset :offset} caret
+        caret-l (offset->line caret-offset)
+        [from-l to-l] (get-view-in-lines)
+        view-in-lines (- to-l from-l)]
+    (cond (and (< caret-l  from-l) (not= from-l 0))
+          (set-view-to-line! caret-l)
+
+          (< (dec to-l) caret-l)
+          (set-view-to-line! (- caret-l (dec view-in-lines)))))
+  state)
+
+(defn move-caret [{:keys [caret text selection] :as state} dir selection?]
   (let [{caret-offset :offset v-col :v-col} caret
-        caret' (case dir
+        [sel-from sel-to] selection
+        {caret-offset' :offset :as caret'} (case dir
                  :left (if (< 0 caret-offset)
                          {:offset (dec caret-offset) :v-col 0}
                          caret)
@@ -467,41 +641,46 @@
                              new-v-col (max v-col cur-col)]
                          (if (tree/end? next-line-loc)
                            caret
-                           {:offset (min next-end (+ next-begin new-v-col)) :v-col new-v-col})))]
-    (assoc state :caret caret')))
+                           {:offset (min next-end (+ next-begin new-v-col)) :v-col new-v-col})))
+        selection' (cond
+                     (not selection?) [caret-offset' caret-offset']
+                     (= caret-offset sel-from) [(min caret-offset' sel-to) (max caret-offset' sel-to)]
+                     (= caret-offset sel-to) [(min sel-from caret-offset') (max sel-from caret-offset')]
+                     :else [(min caret-offset caret-offset') (max caret-offset' caret-offset')])]
+    (-> state
+        (assoc :caret caret')
+        (assoc :selection selection')
+        (move-view-if-needed!))))
 
 (defn right [state]
-  (move-caret state :right))
+  (move-caret state :right false))
 
 (defn left [state]
-  (move-caret state :left))
+  (move-caret state :left false))
 
 (defn up [state]
-  (move-caret state :up))
+  (move-caret state :up false))
 
 (defn down [state]
-  (move-caret state :down))
+  (move-caret state :down false))
+
+(defn shift-right [state]
+  (move-caret state :right true))
+
+(defn shift-left [state]
+  (move-caret state :left true))
+
+(defn shift-up [state]
+  (move-caret state :up true))
+
+(defn shift-down [state]
+  (move-caret state :down true))
 
 (bind-function! "left" left)
 (bind-function! "right" right)
 (bind-function! "up" up)
 (bind-function! "down" down)
-
-(defn backspace [{:keys [text caret timestamp] :as state}]
-  (let [{caret-offset :offset} caret]
-    (if (< 0 caret-offset)
-      (-> state
-          (edit-at (dec caret-offset) #(text/delete % 1))
-          (assoc-in [:caret :offset] (dec caret-offset))
-          (assoc-in [:caret :v-col] 0))
-      state)))
-
-(defn delete [{:keys [text caret timestamp] :as state}]
-  (let [{caret-offset :offset} caret]
-    (if (< caret-offset (text/text-length text))
-      (-> state
-          (edit-at caret-offset #(text/delete % 1)))
-      state)))
-
-(bind-function! "backspace" backspace)
-(bind-function! "delete" delete)
+(bind-function! "shift-left" shift-left)
+(bind-function! "shift-right" shift-right)
+(bind-function! "shift-up" shift-up)
+(bind-function! "shift-down" shift-down)
