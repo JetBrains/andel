@@ -1,5 +1,6 @@
 (ns andel.utils
-  (:require [andel.text :as text]))
+  (:require [andel.text :as text]
+            [andel.tree :as tree]))
 
 (defn pixels->line-col
   "transforms relative position in pixels into absolute [line col] value"
@@ -88,3 +89,7 @@
   (let [line-loc (line->loc line state)
         line-offset (loc->offset line-loc)]
     (text/scan-to-offset line-loc (+ line-offset col))))
+
+(defn last-line? [line state]
+  (-> (line->loc line state)
+      (tree/end?)))
