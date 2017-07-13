@@ -2,6 +2,8 @@
     (:require [andel.lexer :as lexer]
               [andel.theme :as theme]
               [andel.throttling :as throttling]
+              [andel.operators :as ops]
+              [andel.editor :as editor]
               [reagent.core :as reagent]
               [reagent.ratom :refer [track]]
               [reagent.session :as session]
@@ -493,194 +495,22 @@
 (defn- bind-function! [key f & args]
   (keybind/bind! key :global (capture #(swap! state (fn [s] (apply f s args))))))
 
-(defn backspace [{:keys [text caret selection] :as state}]
-  (let [{caret-offset :offset} caret
-        [sel-from sel-to] selection
-        sel-len (- sel-to sel-from)]
-    (cond (< 0 sel-len)
-          (delete-under-selection state selection sel-len)
-
-          (< 0 caret-offset)
-          (-> state
-              (edit-at (dec caret-offset) #(text/delete % 1))
-              (assoc-in [:caret :offset] (dec caret-offset))
-              (assoc-in [:caret :v-col] 0)
-              (assoc :selection [(dec caret-offset) (dec caret-offset)]))
-
-          :else state)))
-
-(defn delete [{:keys [text caret selection] :as state}]
-  (let [{caret-offset :offset} caret
-        [sel-from sel-to] selection
-        sel-len (- sel-to sel-from)]
-    (cond (< 0 sel-len)
-          (delete-under-selection state selection sel-len)
-
-          (< caret-offset (text/text-length text))
-          (edit-at state caret-offset #(text/delete % 1))
-
-          :else state)))
-
-(bind-function! "backspace" backspace)
-(bind-function! "delete" delete)
-
-(defn offset->line [offset]
-  (-> (:text @state)
-      (text/zipper)
-      (text/scan-to-offset offset)
-      (text/line)))
-
-(defn set-view-to-line! [line]
-  (let [{char-h :height} metrics]
-    (swap! viewport #(assoc-in % [:pos 1] (* line char-h)))))
-
-(defn count-lines-in-view []
-  (let [{:keys [view-size]} @viewport
-        [_ view-size] view-size]
-    (Math/round (/ view-size line-h))))
-
-(defn last-line? [line]
-  (-> (:text @state)
-      (text/zipper)
-      (text/scan-to-line line)
-      (tree/end?)))
-
-(defn get-view-in-lines []
-  (let [{:keys [pos]} @viewport
-        [_ pos-px] pos
-        pos-in-lines (Math/round (/ pos-px line-h))
-        pos-in-lines-end (+ pos-in-lines (count-lines-in-view))]
-    [pos-in-lines pos-in-lines-end]))
-
-(defn pg-move! [{:keys [caret] :as state} dir selection?]
-  (let [[from-l to-l] (get-view-in-lines)
-        caret-line (offset->line (:offset caret))]
-    (case dir
-      :up (if (or (not= caret-line from-l) (= caret-line 0))
-            (set-caret-begining state from-l selection?)
-            (let [new-from-l (max 0 (- from-l (- (count-lines-in-view) 2)))]
-              (set-view-to-line! new-from-l)
-              (set-caret-begining state new-from-l selection?)))
-      :down (cond
-              (last-line? to-l)
-                (set-caret-end state to-l selection?)
-
-              (not= caret-line (dec to-l))
-                (set-caret-end state (- to-l 1) selection?)
-
-              :else
-                (let [delta (- (count-lines-in-view) 2)
-                    new-from-l (+ from-l delta)
-                    new-to-l (+ to-l delta (- 1))]
-                (set-view-to-line! new-from-l)
-                (set-caret-end state new-to-l selection?))))))
-
-(bind-function! "pgup" pg-move! :up false)
-(bind-function! "pgdown" pg-move! :down false)
-(bind-function! "shift-pgup" pg-move! :up true)
-(bind-function! "shift-pgdown" pg-move! :down true)
-
-(defn home [{:keys [caret] :as state} selection?]
-  (let [{caret-offset :offset} caret
-        line (offset->line caret-offset)]
-        (set-caret-begining state line selection?)))
-
-(defn end [{:keys [caret selection] :as state} selection?]
-  (let [{caret-offset :offset} caret
-        line (offset->line caret-offset)]
-        (set-caret-end state line selection?)))
-
-(bind-function! "home" home false)
-(bind-function! "shift-home" home true)
-(bind-function! "end" end false)
-(bind-function! "shift-end" end true)
-
-(bind-function! "tab" (fn [state] (type-in state "    ")))
-
-(defn move-view-if-needed! [{:keys [caret] :as state}]
-  (let [{caret-offset :offset} caret
-        caret-l (offset->line caret-offset)
-        [from-l to-l] (get-view-in-lines)
-        view-in-lines (- to-l from-l)]
-    (cond (and (< caret-l  from-l) (not= from-l 0))
-          (set-view-to-line! caret-l)
-
-          (< (dec to-l) caret-l)
-          (set-view-to-line! (- caret-l (dec view-in-lines)))))
-  state)
-
-(defn move-caret [{:keys [caret text selection] :as state} dir selection?]
-  (let [{caret-offset :offset v-col :v-col} caret
-        [sel-from sel-to] selection
-        {caret-offset' :offset :as caret'} (case dir
-                 :left (if (< 0 caret-offset)
-                         {:offset (dec caret-offset) :v-col 0}
-                         caret)
-                 :right (if (< caret-offset (text/text-length text))
-                          {:offset (inc caret-offset) :v-col 0}
-                          caret)
-                 :up (let [cur-loc (text/scan-to-offset (text/zipper text) caret-offset)
-                           cur-line (text/line cur-loc)
-                           cur-begin (text/offset (text/scan-to-line (text/zipper text) cur-line))
-                           cur-col (- caret-offset cur-begin)
-                           prev-end (dec cur-begin)
-                           prev-line (text/line (text/scan-to-offset (text/zipper text) prev-end))
-                           prev-begin (text/offset (text/scan-to-line (text/zipper text) prev-line))
-                           new-v-col (max v-col cur-col)]
-                       (if (< 0 cur-line)
-                         {:offset (min prev-end (+ prev-begin new-v-col)) :v-col new-v-col}
-                         caret))
-                 :down (let [zipper (text/zipper text)
-                             cur-loc (text/scan-to-offset (text/zipper text) caret-offset)
-                             cur-line (text/line cur-loc)
-                             cur-begin (text/offset (text/scan-to-line zipper cur-line))
-                             cur-col (- caret-offset cur-begin)
-                             next-line-loc (text/scan-to-line zipper (inc cur-line))
-                             next-begin (text/offset next-line-loc)
-                             next-end (+ next-begin (text/line-length next-line-loc))
-                             new-v-col (max v-col cur-col)]
-                         (if (tree/end? next-line-loc)
-                           caret
-                           {:offset (min next-end (+ next-begin new-v-col)) :v-col new-v-col})))
-        selection' (cond
-                     (not selection?) [caret-offset' caret-offset']
-                     (= caret-offset sel-from) [(min caret-offset' sel-to) (max caret-offset' sel-to)]
-                     (= caret-offset sel-to) [(min sel-from caret-offset') (max sel-from caret-offset')]
-                     :else [(min caret-offset caret-offset') (max caret-offset' caret-offset')])]
-    (-> state
-        (assoc :caret caret')
-        (assoc :selection selection')
-        (move-view-if-needed!))))
-
-(defn right [state]
-  (move-caret state :right false))
-
-(defn left [state]
-  (move-caret state :left false))
-
-(defn up [state]
-  (move-caret state :up false))
-
-(defn down [state]
-  (move-caret state :down false))
-
-(defn shift-right [state]
-  (move-caret state :right true))
-
-(defn shift-left [state]
-  (move-caret state :left true))
-
-(defn shift-up [state]
-  (move-caret state :up true))
-
-(defn shift-down [state]
-  (move-caret state :down true))
-
-(bind-function! "left" left)
-(bind-function! "right" right)
-(bind-function! "up" up)
-(bind-function! "down" down)
-(bind-function! "shift-left" shift-left)
-(bind-function! "shift-right" shift-right)
-(bind-function! "shift-up" shift-up)
-(bind-function! "shift-down" shift-down)
+(bind-function! "backspace" editor/backspace)
+(bind-function! "delete" editor/delete)
+(bind-function! "pgup" editor/pg-move! :up false viewport metrics)
+(bind-function! "pgdown" editor/pg-move! :down false viewport metrics)
+(bind-function! "shift-pgup" editor/pg-move! :up true viewport metrics)
+(bind-function! "shift-pgdown" editor/pg-move! :down true viewport metrics)
+(bind-function! "home" editor/home false)
+(bind-function! "shift-home" editor/home true)
+(bind-function! "end" editor/end false)
+(bind-function! "shift-end" editor/end true)
+(bind-function! "tab" (fn [state] (ops/type-in state "    ")))
+(bind-function! "left" editor/move-caret :left false viewport metrics)
+(bind-function! "right" editor/move-caret :right false viewport metrics)
+(bind-function! "up" editor/move-caret :up false viewport metrics)
+(bind-function! "down" editor/move-caret :down false viewport metrics)
+(bind-function! "shift-left" editor/move-caret :left true viewport metrics)
+(bind-function! "shift-right" editor/move-caret :right true viewport metrics)
+(bind-function! "shift-up" editor/move-caret :up true viewport metrics)
+(bind-function! "shift-down" editor/move-caret :down true viewport metrics)
