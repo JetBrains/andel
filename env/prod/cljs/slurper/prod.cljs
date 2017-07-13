@@ -1,5 +1,5 @@
-(ns slurper.prod
-  (:require [slurper.core :as core]))
+(ns andel.prod
+  (:require [andel.core :as core]))
 
 ;;ignore println statements in prod
 (set! *print-fn* (fn [& _]))

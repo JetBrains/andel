@@ -1,5 +1,5 @@
-(ns slurper.server
-  (:require [slurper.handler :refer [app]]
+(ns andel.server
+  (:require [andel.handler :refer [app]]
             [config.core :refer [env]]
             [ring.adapter.jetty :refer [run-jetty]])
   (:gen-class))

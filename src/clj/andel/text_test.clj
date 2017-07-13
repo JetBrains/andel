@@ -1,11 +1,11 @@
-(ns slurper.text-test
+(ns andel.text-test
   (:require [clojure.spec.alpha :as s]
             [clojure.test.check.generators :as g]
             [clojure.test.check.properties :as prop]
             [clojure.spec.test.alpha :as stest]
             [clojure.test :refer :all]
             [clojure.test.check :as tc]
-            [slurper.text :as text]))
+            [andel.text :as text]))
 
 (def op-frames-gen (g/vector
                     (g/one-of [(g/tuple
@@ -54,10 +54,9 @@
 (def play-test
   (prop/for-all [[text operation] operation-gen]
                 (def last-op [text operation])
-                (let [t (text/play (text/make-text text) operation)]                  
+                (let [t (text/play (text/make-text text) operation)]
                   (= (text/text (text/zipper t) (text/text-length t))
                      (play-naive text operation)))))
 
 (deftest generative
   (is (:result (tc/quick-check 3000 play-test))))
-

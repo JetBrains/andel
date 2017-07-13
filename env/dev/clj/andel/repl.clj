@@ -1,5 +1,5 @@
-(ns slurper.repl
-  (:use slurper.handler
+(ns andel.repl
+  (:use andel.handler
         figwheel-sidecar.repl-api
         ring.server.standalone
         [ring.middleware file-info file]))

@@ -1,4 +1,4 @@
-(ns slurper.keybind)
+(ns andel.keybind)
 
 ;; Definitions
 

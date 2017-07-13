@@ -1,5 +1,5 @@
-(ns slurper.text
-  (:require [slurper.tree :as tree]))
+(ns andel.text
+  (:require [andel.tree :as tree]))
 
 #?(:clj
    (do
