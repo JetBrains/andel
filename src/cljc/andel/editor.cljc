@@ -46,9 +46,9 @@
         pos-in-lines-end (+ pos-in-lines (count-lines-in-view viewport metrics))]
     [pos-in-lines pos-in-lines-end]))
 
-(defn pg-move! [{:keys [caret] :as state} dir selection? viewport metrics]
+(defn pg-move! [{:keys [caret text] :as state} dir selection? viewport metrics]
   (let [[from-l to-l] (get-view-in-lines viewport metrics)
-        caret-line (utils/offset->line (:offset caret) state)]
+        caret-line (utils/offset->line (:offset caret) text)]
     (case dir
       :up (if (or (not= caret-line from-l) (= caret-line 0))
             (ops/set-caret-line-begining state from-l selection?)
@@ -56,7 +56,7 @@
               (set-view-to-line! new-from-l viewport metrics)
               (ops/set-caret-line-begining state new-from-l selection?)))
       :down (cond
-              (utils/last-line? to-l state)
+              (utils/last-line? to-l text)
                 (ops/set-caret-line-end state to-l selection?)
 
               (not= caret-line (dec to-l))
@@ -69,19 +69,19 @@
                 (set-view-to-line! new-from-l viewport metrics)
                 (ops/set-caret-line-end state new-to-l selection?))))))
 
-(defn home [{:keys [caret] :as state} selection?]
+(defn home [{:keys [caret text] :as state} selection?]
   (let [{caret-offset :offset} caret
-        line (utils/offset->line caret-offset state)]
+        line (utils/offset->line caret-offset text)]
         (ops/set-caret-line-begining state line selection?)))
 
-(defn end [{:keys [caret selection] :as state} selection?]
+(defn end [{:keys [caret text selection] :as state} selection?]
   (let [{caret-offset :offset} caret
-        line (utils/offset->line caret-offset state)]
+        line (utils/offset->line caret-offset text)]
     (ops/set-caret-line-end state line selection?)))
 
-(defn move-view-if-needed! [{:keys [caret] :as state} viewport metrics]
+(defn move-view-if-needed! [{:keys [caret text] :as state} viewport metrics]
   (let [{caret-offset :offset} caret
-        caret-l (utils/offset->line caret-offset state)
+        caret-l (utils/offset->line caret-offset text)
         [from-l to-l] (get-view-in-lines viewport metrics)
         view-in-lines (- to-l from-l)]
     (cond (and (< caret-l  from-l) (not= from-l 0))
@@ -98,25 +98,25 @@
                  :left (if (< 0 caret-offset)
                          {:offset (dec caret-offset) :v-col 0}
                          caret)
-                 :right (if (< caret-offset (text/text-length text))
+                 :right (if (< caret-offset (dec (text/text-length text)))
                           {:offset (inc caret-offset) :v-col 0}
                           caret)
-                 :up (let [[cur-line cur-col] (utils/offset->line-col caret-offset state)
-                           cur-begin (utils/line->offset cur-line state)
+                 :up (let [[cur-line cur-col] (utils/offset->line-col caret-offset text)
+                           cur-begin (utils/line->offset cur-line text)
                            prev-end (dec cur-begin)
                            prev-line (dec cur-line)
-                           prev-begin (utils/line->offset prev-line state)
+                           prev-begin (utils/line->offset prev-line text)
                            new-v-col (max v-col cur-col)]
                        (if (< 0 cur-line)
                          {:offset (min prev-end (+ prev-begin new-v-col)) :v-col new-v-col}
                          caret))
-                 :down (let [[cur-line cur-col] (utils/offset->line-col caret-offset state)
-                             next-line-loc (utils/next-line-loc cur-line state)
+                 :down (let [[cur-line cur-col] (utils/offset->line-col caret-offset text)
+                             next-line-loc (utils/next-line-loc cur-line text)
                              next-begin (utils/loc->offset next-line-loc)
                              next-end (+ next-begin (text/line-length next-line-loc))
                              new-v-col (max v-col cur-col)]
-                         (if (utils/last-line? cur-line state)
-                           caret
+                         (if (utils/last-line? (inc cur-line) text)
+                             caret
                            {:offset (min next-end (+ next-begin new-v-col)) :v-col new-v-col})))
         selection' (cond
                      (not selection?) [caret-offset' caret-offset']

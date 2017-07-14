@@ -14,7 +14,7 @@
 
 (defn line-col->offset
   "transforms absolute [line col] value into absolute offset value"
-  [[line col] {:keys [text] :as state}]
+  [[line col] text]
   (-> text
       (text/zipper)
       (text/scan-to-line line)
@@ -23,19 +23,19 @@
 
 (defn line->offset
   "transforms line value into absolute offset value"
-  [line {:keys [text] :as state}]
-  (line-col->offset [line 0] state))
+  [line text]
+  (line-col->offset [line 0] text))
 
 (defn pixels->offset
   "transforms relative position in pixels into absolute offset value"
-  [[pix-x pix-y] start-line shift metrics state]
+  [[pix-x pix-y] start-line shift metrics text]
   (-> [pix-x pix-y]
       (pixels->line-col start-line shift metrics)
-      (line-col->offset state)))
+      (line-col->offset text)))
 
 (defn offset->line
   "transforms absolute offset into absolute line value ignoring col"
-  [offset {:keys [text] :as state}]
+  [offset text]
   (-> text
       (text/zipper)
       (text/scan-to-offset offset)
@@ -43,9 +43,9 @@
 
 (defn offset->line-col
   "transforms absolute offset into absolute [line col] value"
-  [offset {:keys [text] :as state}]
-  (let [line (offset->line offset state)
-        line-offset (line-col->offset [line 0] state)
+  [offset text]
+  (let [line (offset->line offset text)
+        line-offset (line-col->offset [line 0] text)
         col (- offset line-offset)]
     [line col]))
 
@@ -59,14 +59,14 @@
 
 (defn offset->pixels
   "transforms absolute offset value into relative poisition in pixels"
-  [offset start-line shift metrics state]
+  [offset start-line shift metrics text]
    (-> offset
-       (offset->line-col state)
+       (offset->line-col text)
        (line-col->pixels start-line shift metrics)))
 
 (defn offset->loc
   "transforms absolute offset into zipper pointer"
-  [offset {:keys [text] :as state}]
+  [offset text]
   (-> text
       (text/zipper)
       (text/scan-to-offset offset)))
@@ -83,36 +83,37 @@
 
 (defn line->loc
   "transforms absolute line into zipper pointer"
-  [line {:keys [text] :as state}]
+  [line text]
    (-> text
        (text/zipper)
        (text/scan-to-line line)))
 
 (defn line-col->loc
   "transforms absolute [line col] into zipper pointer"
-  [[line col] {:keys [text] :as state}]
-  (let [line-loc (line->loc line state)
+  [[line col] text]
+  (let [line-loc (line->loc line text)
         line-offset (loc->offset line-loc)]
     (text/scan-to-offset line-loc (+ line-offset col))))
 
-(defn last-line? [line state]
-  (-> (line->loc line state)
+(defn last-line?
+  [line text]
+  (-> (line->loc line text)
       (tree/end?)))
 
 (defn next-line-loc
-  [line state]
-  (if (last-line? line state)
-    line
-    (let [line-loc (line->loc line state)
+  [line text]
+  (if (last-line? line text)
+    (line->loc line text)
+    (let [line-loc (line->loc line text)
           offset (loc->offset line-loc)
           line-length (text/line-length line-loc)
-          next-line-loc (text/scan-to-offset (+ offset line-length 1) line-loc)]
+          next-line-loc (text/scan-to-offset line-loc (+ offset line-length 1))]
       next-line-loc)))
 
 (defn prev-line-loc
-  [line state]
+  [line text]
   (if (= line 0)
     0
-    (let [prev-line-end (- (line->offset line state) 1)
-          prev-line-loc (line->loc (offset->line prev-line-end state) state)]
+    (let [prev-line-end (- (line->offset line text) 1)
+          prev-line-loc (line->loc (offset->line prev-line-end text) text)]
       prev-line-loc)))

@@ -20,8 +20,8 @@
         (update :first-invalid min (utils/loc->line edit-point)))))
 
 (defn edit-at-line-col
-  [state [line col] f]
-  (let [offset (utils/line-col->offset [line col] state)]
+  [{:keys [text] :as state} [line col] f]
+  (let [offset (utils/line-col->offset [line col] text)]
     (edit-at-offset state offset f)))
 
 (defn delete-under-selection [state [sel-from sel-to] sel-len]
@@ -47,7 +47,7 @@
   [{:keys [caret selection text] :as state} line col selection?]
   (let [[sel-from sel-to] selection
         {caret-offset :offset} caret
-        line-loc (utils/line->loc line state)
+        line-loc (utils/line->loc line text)
         line-len (text/line-length line-loc)
         line-off (utils/loc->offset line-loc)
         caret-offset' (+ line-off (min col line-len))]
@@ -69,8 +69,8 @@
                                                             caret-offset')])))))
 
 (defn set-caret-offset
-  [state offset selection?]
-  (let [[line col] (utils/offset->line-col offset state)]
+  [{:keys [text] :as state} offset selection?]
+  (let [[line col] (utils/offset->line-col offset text)]
     (set-caret-line-col state line col selection?)))
 
 (defn set-caret-line-begining
