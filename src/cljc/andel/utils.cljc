@@ -21,6 +21,11 @@
       (text/offset)
       (+ col)))
 
+(defn line->offset
+  "transforms line value into absolute offset value"
+  [line {:keys [text] :as state}]
+  (line-col->offset [line 0] state))
+
 (defn pixels->offset
   "transforms relative position in pixels into absolute offset value"
   [[pix-x pix-y] start-line shift metrics state]
@@ -93,3 +98,21 @@
 (defn last-line? [line state]
   (-> (line->loc line state)
       (tree/end?)))
+
+(defn next-line-loc
+  [line state]
+  (if (last-line? line state)
+    line
+    (let [line-loc (line->loc line state)
+          offset (loc->offset line-loc)
+          line-length (text/line-length line-loc)
+          next-line-loc (text/scan-to-offset (+ offset line-length 1) line-loc)]
+      next-line-loc)))
+
+(defn prev-line-loc
+  [line state]
+  (if (= line 0)
+    0
+    (let [prev-line-end (- (line->offset line state) 1)
+          prev-line-loc (line->loc (offset->line prev-line-end state) state)]
+      prev-line-loc)))

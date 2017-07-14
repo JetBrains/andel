@@ -1,8 +1,7 @@
 (ns andel.editor
   (:require [andel.text :as text]
             [andel.utils :as utils]
-            [andel.operators :as ops]
-            [andel.tree :as tree])) ;; Todo: remove!
+            [andel.operators :as ops]))
 
 (defn backspace [{:keys [text caret selection] :as state}]
   (let [{caret-offset :offset} caret
@@ -92,7 +91,6 @@
           (set-view-to-line! (- caret-l (dec view-in-lines)) viewport metrics)))
   state)
 
-;; Todo: refactor :up :down
 (defn move-caret [{:keys [caret text selection] :as state} dir selection? viewport metrics]
   (let [{caret-offset :offset v-col :v-col} caret
         [sel-from sel-to] selection
@@ -103,27 +101,21 @@
                  :right (if (< caret-offset (text/text-length text))
                           {:offset (inc caret-offset) :v-col 0}
                           caret)
-                 :up (let [cur-loc (text/scan-to-offset (text/zipper text) caret-offset)
-                           cur-line (text/line cur-loc)
-                           cur-begin (text/offset (text/scan-to-line (text/zipper text) cur-line))
-                           cur-col (- caret-offset cur-begin)
+                 :up (let [[cur-line cur-col] (utils/offset->line-col caret-offset state)
+                           cur-begin (utils/line->offset cur-line state)
                            prev-end (dec cur-begin)
-                           prev-line (text/line (text/scan-to-offset (text/zipper text) prev-end))
-                           prev-begin (text/offset (text/scan-to-line (text/zipper text) prev-line))
+                           prev-line (dec cur-line)
+                           prev-begin (utils/line->offset prev-line state)
                            new-v-col (max v-col cur-col)]
                        (if (< 0 cur-line)
                          {:offset (min prev-end (+ prev-begin new-v-col)) :v-col new-v-col}
                          caret))
-                 :down (let [zipper (text/zipper text)
-                             cur-loc (text/scan-to-offset (text/zipper text) caret-offset)
-                             cur-line (text/line cur-loc)
-                             cur-begin (text/offset (text/scan-to-line zipper cur-line))
-                             cur-col (- caret-offset cur-begin)
-                             next-line-loc (text/scan-to-line zipper (inc cur-line))
-                             next-begin (text/offset next-line-loc)
+                 :down (let [[cur-line cur-col] (utils/offset->line-col caret-offset state)
+                             next-line-loc (utils/next-line-loc cur-line state)
+                             next-begin (utils/loc->offset next-line-loc)
                              next-end (+ next-begin (text/line-length next-line-loc))
                              new-v-col (max v-col cur-col)]
-                         (if (tree/end? next-line-loc)
+                         (if (utils/last-line? cur-line state)
                            caret
                            {:offset (min next-end (+ next-begin new-v-col)) :v-col new-v-col})))
         selection' (cond
