@@ -4,6 +4,7 @@
               [andel.throttling :as throttling]
               [andel.controller :as contr]
               [andel.editor :as editor]
+              [andel.utils :as utils]
               [reagent.core :as reagent]
               [reagent.ratom :refer [track]]
               [reagent.session :as session]
@@ -70,8 +71,7 @@
 
 (defn make-editor-viewport []
   {:pos [0 0]
-   :view-size [0 0]
-   :once true})
+   :view-size [0 0]})
 
 (defn px [x]
   (str x "px"))
@@ -214,12 +214,6 @@
                                       :infinity)]
         :else nil))
 
-(defn absolute->line-ch [client-x client-y from to y-shift]
-  (let [{:keys [height width]} metrics
-        x client-x
-        y (- (- client-y y-shift) (/ height 2))]
-    [(+ from (Math/round (/ y height))) (Math/round (/ x width))]))
-
 (defn set-caret [{:keys [caret selection text] :as state} line col selection?]
   (let [[sel-from sel-to] selection
         {caret-offset :offset} caret
@@ -276,15 +270,16 @@
         (assoc :selection [(+ caret-offset (count s)) (+ caret-offset (count s))]))))
 
 (defn scroll [viewport-fn]
-  (fn []
+  (let [once (atom true)]
+    (fn []
     [:div {:style {:display :flex
                    :flex "1"
                    :overflow :hidden}
            :ref (fn [e]
                   (when e
                     (swap! viewport #(assoc % :view-size [(.-clientWidth e) (.-clientHeight e)])) 100)
-                  (when (and (:once @viewport) (some? e))
-                    (swap! viewport #(assoc % :once false))
+                  (when (and @once (some? e))
+                    (reset! once false)
                     (.addEventListener
                      e
                      "mousewheel"
@@ -298,7 +293,7 @@
                                             [x (max 0 (- y dy))]
                                             [(max 0 (- x dx)) y])))))
                        (.preventDefault evt)))))}
-     [viewport-fn (reagent/cursor viewport [:pos]) (reagent/cursor viewport [:view-size])]]))
+     [viewport-fn (reagent/cursor viewport [:pos]) (reagent/cursor viewport [:view-size])]])))
 
 (defn editor-viewport [state]
   (fn [pos size]
@@ -342,13 +337,13 @@
                                                  :onMouseDown (fn [event]
                                                                 (let [x ($ event :clientX)
                                                                       y ($ event :clientY)]
-                                                                  (on-mouse-action! (absolute->line-ch x y from to (:y-shift @dims))
+                                                                  (on-mouse-action! (utils/pixels->line-col [x y] from (:y-shift @dims) metrics)
                                                                                     false)))
                                                  :onMouseMove  (fn [event]
                                                                  (when (= ($ event :buttons) 1)
                                                                    (let [x ($ event :clientX)
                                                                          y ($ event :clientY)]
-                                                                     (on-mouse-action! (absolute->line-ch x y from to (:y-shift @dims))
+                                                                     (on-mouse-action! (utils/pixels->line-col [x y] from (:y-shift @dims) metrics)
                                                                                        true))))}])]
                               (range from to))]
                (persistent! hiccup))))))

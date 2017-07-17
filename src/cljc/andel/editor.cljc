@@ -8,7 +8,7 @@
         [sel-from sel-to] selection
         sel-len (- sel-to sel-from)]
     (cond (< 0 sel-len)
-          (contr/delete-under-selection state selection sel-len)
+          (contr/delete-under-selection state)
 
           (< 0 caret-offset)
           (-> state
@@ -24,7 +24,7 @@
         [sel-from sel-to] selection
         sel-len (- sel-to sel-from)]
     (cond (< 0 sel-len)
-          (contr/delete-under-selection state selection sel-len)
+          (contr/delete-under-selection state)
 
           (< caret-offset (text/text-length text))
           (contr/edit-at-offset state caret-offset #(text/delete % 1))

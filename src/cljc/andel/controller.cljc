@@ -11,7 +11,7 @@
 
 (defn edit-at-offset
   [{:keys [text] :as state} offset f]
-  (let [edit-point (utils/offset->loc offset state)]
+  (let [edit-point (utils/offset->loc offset text)]
     (-> state
         (assoc :text (-> edit-point
                          (f)
@@ -24,21 +24,21 @@
   (let [offset (utils/line-col->offset [line col] text)]
     (edit-at-offset state offset f)))
 
-(defn delete-under-selection [state [sel-from sel-to] sel-len]
-  (-> state
-      (edit-at-offset sel-from #(text/delete % sel-len))
-      (assoc-in [:caret :offset] sel-from)
-      (assoc-in [:caret :v-col] 0)
-      (assoc :selection [sel-from sel-from])))
+(defn delete-under-selection [{:keys [selection] :as state}]
+  (let [[sel-from sel-to] selection
+        sel-len (- sel-to sel-from)]
+      (-> state
+          (edit-at-offset sel-from #(text/delete % sel-len))
+          (assoc-in [:caret :offset] sel-from)
+          (assoc-in [:caret :v-col] 0)
+          (assoc :selection [sel-from sel-from]))))
 
 (defn type-in [{:keys [selection] :as state} s]
   (let [[sel-from sel-to] selection
         sel-len (- sel-to sel-from)
-        state (if (< 0 sel-len)
-                (delete-under-selection state selection sel-len)
-                state)
         caret-offset (get-in state [:caret :offset])]
     (-> state
+        (delete-under-selection)
         (edit-at-offset caret-offset #(text/insert % s))
         (update-in [:caret :offset] + (count s))
         (assoc :selection [(+ caret-offset (count s)) (+ caret-offset (count s))]))))
