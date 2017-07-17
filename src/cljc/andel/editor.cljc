@@ -1,18 +1,18 @@
 (ns andel.editor
   (:require [andel.text :as text]
             [andel.utils :as utils]
-            [andel.operators :as ops]))
+            [andel.controller :as contr]))
 
 (defn backspace [{:keys [text caret selection] :as state}]
   (let [{caret-offset :offset} caret
         [sel-from sel-to] selection
         sel-len (- sel-to sel-from)]
     (cond (< 0 sel-len)
-          (ops/delete-under-selection state selection sel-len)
+          (contr/delete-under-selection state selection sel-len)
 
           (< 0 caret-offset)
           (-> state
-              (ops/edit-at-offset (dec caret-offset) #(text/delete % 1))
+              (contr/edit-at-offset (dec caret-offset) #(text/delete % 1))
               (assoc-in [:caret :offset] (dec caret-offset))
               (assoc-in [:caret :v-col] 0)
               (assoc :selection [(dec caret-offset) (dec caret-offset)]))
@@ -24,10 +24,10 @@
         [sel-from sel-to] selection
         sel-len (- sel-to sel-from)]
     (cond (< 0 sel-len)
-          (ops/delete-under-selection state selection sel-len)
+          (contr/delete-under-selection state selection sel-len)
 
           (< caret-offset (text/text-length text))
-          (ops/edit-at-offset state caret-offset #(text/delete % 1))
+          (contr/edit-at-offset state caret-offset #(text/delete % 1))
 
           :else state)))
 
@@ -51,33 +51,33 @@
         caret-line (utils/offset->line (:offset caret) text)]
     (case dir
       :up (if (or (not= caret-line from-l) (= caret-line 0))
-            (ops/set-caret-line-begining state from-l selection?)
+            (contr/set-caret-line-begining state from-l selection?)
             (let [new-from-l (max 0 (- from-l (- (count-lines-in-view viewport metrics) 2)))]
               (set-view-to-line! new-from-l viewport metrics)
-              (ops/set-caret-line-begining state new-from-l selection?)))
+              (contr/set-caret-line-begining state new-from-l selection?)))
       :down (cond
               (utils/last-line? to-l text)
-                (ops/set-caret-line-end state to-l selection?)
+                (contr/set-caret-line-end state to-l selection?)
 
               (not= caret-line (dec to-l))
-                (ops/set-caret-line-end state (- to-l 1) selection?)
+                (contr/set-caret-line-end state (- to-l 1) selection?)
 
               :else
                 (let [delta (- (count-lines-in-view viewport metrics) 2)
                     new-from-l (+ from-l delta)
                     new-to-l (+ to-l delta (- 1))]
                 (set-view-to-line! new-from-l viewport metrics)
-                (ops/set-caret-line-end state new-to-l selection?))))))
+                (contr/set-caret-line-end state new-to-l selection?))))))
 
 (defn home [{:keys [caret text] :as state} selection?]
   (let [{caret-offset :offset} caret
         line (utils/offset->line caret-offset text)]
-        (ops/set-caret-line-begining state line selection?)))
+        (contr/set-caret-line-begining state line selection?)))
 
 (defn end [{:keys [caret text selection] :as state} selection?]
   (let [{caret-offset :offset} caret
         line (utils/offset->line caret-offset text)]
-    (ops/set-caret-line-end state line selection?)))
+    (contr/set-caret-line-end state line selection?)))
 
 (defn move-view-if-needed! [{:keys [caret text] :as state} viewport metrics]
   (let [{caret-offset :offset} caret

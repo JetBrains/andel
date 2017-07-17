@@ -1,4 +1,4 @@
-(ns andel.operators
+(ns andel.controller
   (:require [andel.utils :as utils]
             [andel.text :as text]))
 

@@ -2,7 +2,7 @@
     (:require [andel.lexer :as lexer]
               [andel.theme :as theme]
               [andel.throttling :as throttling]
-              [andel.operators :as ops]
+              [andel.controller :as contr]
               [andel.editor :as editor]
               [reagent.core :as reagent]
               [reagent.ratom :refer [track]]
@@ -505,7 +505,7 @@
 (bind-function! "shift-home" editor/home true)
 (bind-function! "end" editor/end false)
 (bind-function! "shift-end" editor/end true)
-(bind-function! "tab" (fn [state] (ops/type-in state "    ")))
+(bind-function! "tab" (fn [state] (contr/type-in state "    ")))
 (bind-function! "left" editor/move-caret :left false viewport metrics)
 (bind-function! "right" editor/move-caret :right false viewport metrics)
 (bind-function! "up" editor/move-caret :up false viewport metrics)
