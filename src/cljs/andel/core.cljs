@@ -59,26 +59,23 @@
     {:width (.-width (.measureText ctx s)) :height line-h}))
 
 (defn make-editor-state []
-  (let [ch (a/chan)]
-    {:text (text/make-text "")
-     :selection [49 4956]
-     :caret {:offset 0 :v-col 0}
-     :lexer-broker ch
-     :modespec "text/x-java"
-     :timestamp 0
-     :lines []
-     :first-invalid 0}))
+  {:document {:text (text/make-text "")
+              :lexer-broker (a/chan)
+              :modespec "text/x-java"
+              :timestamp 0
+              :lines []
+              :first-invalid 0}
+   :editor {:caret {:offset 0 :v-col 0}
+            :selection [0 0]}
+   :viewport {:pos [0 0]
+              :view-size [0 0]}})
 
-(defn make-editor-viewport []
-  {:pos [0 0]
-   :view-size [0 0]})
+(def swap-editor! swap!)
 
 (defn px [x]
   (str x "px"))
 
 (defonce state (reagent/atom (make-editor-state)))
-
-(defonce viewport (reagent/atom (make-editor-viewport)))
 
 (defn style [m]
   (reduce-kv (fn [s k v]
@@ -214,60 +211,8 @@
                                       :infinity)]
         :else nil))
 
-(defn set-caret [{:keys [caret selection text] :as state} line col selection?]
-  (let [[sel-from sel-to] selection
-        {caret-offset :offset} caret
-        line-loc (text/scan-to-line (text/zipper text) line)
-        line-len (text/line-length line-loc)
-        line-off (text/offset line-loc)
-        caret-offset' (+ line-off (min col line-len))]
-    (-> state
-        (assoc :caret {:offset caret-offset' :v-col 0})
-        (assoc :selection (cond (not selection?) [caret-offset' caret-offset']
-                                (= caret-offset sel-from) [(min caret-offset' sel-to) (max caret-offset' sel-to)]
-                                (= caret-offset sel-to) [(min sel-from caret-offset') (max sel-from caret-offset')]
-                                :else [(min caret-offset caret-offset') (max caret-offset' caret-offset')])))))
-
-(defn set-caret-begining [state line selection?]
-  (set-caret state line 0 selection?))
-
-(defn set-caret-end [state line selection?]
-  (-> state
-      (set-caret-begining (inc line) selection?)
-      (update-in [:caret :offset] dec)
-      (update-in [:selection 1] dec)))
-
 (defn on-mouse-action! [[line col] selection?]
-  (swap! state #(set-caret % line col selection?)))
-
-(defn edit-at [{:keys [text] :as state} offset f]
-  (let [edit-point (-> (text/zipper text)
-                       (text/scan-to-offset offset))]
-    (-> state
-        (assoc :text (-> edit-point
-                         (f)
-                         (text/root)))
-        (update :timestamp inc)
-        (update :first-invalid min (text/line edit-point)))))
-
-(defn delete-under-selection [state [sel-from sel-to] sel-len]
-  (-> state
-      (edit-at sel-from #(text/delete % sel-len))
-      (assoc-in [:caret :offset] sel-from)
-      (assoc-in [:caret :v-col] 0)
-      (assoc :selection [sel-from sel-from])))
-
-(defn type-in [{:keys [selection] :as state} s]
-  (let [[sel-from sel-to] selection
-        sel-len (- sel-to sel-from)
-        state (if (< 0 sel-len)
-                (delete-under-selection state selection sel-len)
-                state)
-        caret-offset (get-in state [:caret :offset])]
-    (-> state
-        (edit-at caret-offset #(text/insert % s))
-        (update-in [:caret :offset] + (count s))
-        (assoc :selection [(+ caret-offset (count s)) (+ caret-offset (count s))]))))
+  (swap-editor! state #(contr/set-caret-line-col % line col selection?)))
 
 (defn scroll [viewport-fn]
   (let [once (atom true)]
@@ -277,15 +222,15 @@
                    :overflow :hidden}
            :ref (fn [e]
                   (when e
-                    (swap! viewport #(assoc % :view-size [(.-clientWidth e) (.-clientHeight e)])) 100)
+                    (swap-editor! state #(assoc-in % [:viewport :view-size] [(.-clientWidth e) (.-clientHeight e)])) 100)
                   (when (and @once (some? e))
                     (reset! once false)
                     (.addEventListener
                      e
                      "mousewheel"
                      (fn [evt]
-                       (swap! viewport
-                              #(update % :pos
+                       (swap-editor! state
+                              #(update-in % [:viewport :pos]
                                       (fn [[x y]]
                                         (let [dx (/ (.-wheelDeltaX evt) 2)
                                               dy (/ (.-wheelDeltaY evt) 2)]
@@ -293,7 +238,7 @@
                                             [x (max 0 (- y dy))]
                                             [(max 0 (- x dx)) y])))))
                        (.preventDefault evt)))))}
-     [viewport-fn (reagent/cursor viewport [:pos]) (reagent/cursor viewport [:view-size])]])))
+     [viewport-fn (reagent/cursor state [:viewport :pos]) (reagent/cursor state [:viewport :view-size])]])))
 
 (defn editor-viewport [state]
   (fn [pos size]
@@ -307,8 +252,10 @@
       (fn []
         (let [from (:from-idx @dims)
               to (:to-idx @dims)
-              {:keys [text caret selection lines] :as state} @state
-              caret-offset (:offset caret)
+              {:keys [document editor] :as state} @state
+              {:keys [text lines]} document
+              {:keys [caret selection]} editor
+              caret-offset (get caret :offset)
               [_ hiccup] (reduce
                               (fn [[line-start res] index]
                                 (let [next-line (text/scan-to-line line-start (inc index))
@@ -377,7 +324,7 @@
                      (let [e (.-target evt)
                            val (.-value e)]
                        (set! (.-value e) "")
-                       (swap! state type-in val)))}]])))
+                       (swap-editor! state contr/type-in val)))}]])))
 
 (defn main []
   [:div {:style {:display :flex
@@ -403,42 +350,38 @@
       (.setAttribute "href" src))
     (.appendChild (head) e)))
 
-(defn set-text [state text]
-  (-> state
-      (assoc :text (text/make-text text)
-             :first-invalid 0)
-      (update :timestamp inc)))
-
 (defn deliver-lexems! [{:keys [req-ts tokens index]}]
-  (swap! state
-         (fn [{:keys [timestamp] :as state}]
-           (if (= timestamp req-ts)
-             (-> state
-                 (assoc-in [:lines index :tokens] tokens)
-                 (assoc :first-invalid (inc index)))
-             state)))
-  (= (:timestamp @state) req-ts))
+  (swap-editor! state
+                (fn [{:keys [document] :as state}]
+                  (let [{:keys [timestamp]} document]
+                    (if (= timestamp req-ts)
+                      (-> state
+                          (assoc-in [:document :lines index :tokens] tokens)
+                          (assoc-in [:document :first-invalid] (inc index)))
+                      state))))
+  (= (get-in @state [:document :timestamp]) req-ts))
 
-(defn attach-lexer! [{:keys [modespec lexer-broker]}]
-  (let [{:keys [input output]} (lexer/new-lexer-worker modespec)]
+(defn attach-lexer! [{:keys [document]}]
+  (let [{:keys [modespec lexer-broker]} document
+        {:keys [input output]} (lexer/new-lexer-worker modespec)]
     (go
       (loop [state nil
              line 0
              start-time 0]
         (let [elapsed (- (.getTime (js/Date.)) start-time)
-              next-text (when (< line (text/lines-count (:text state)))
-                          (some-> state :text (text/line-text line)))
+              next-text (when (< line (text/lines-count (get-in state [:document :text])))
+                          (some-> state :document :text (text/line-text line)))
               [val port] (a/alts! (cond-> [lexer-broker output]
                                     (some? next-text) (conj [input {:index line
                                                                     :text next-text
-                                                                    :req-ts (:timestamp state)}]))
+                                                                    :req-ts (get-in state [:document :timestamp])}]))
                                   :priority true)]
           (let [start-time' (if (< 10 elapsed)
                               (do (a/<! (a/timeout 1))
                                   (.getTime (js/Date.)))
                               start-time)]
             (cond
-              (= port lexer-broker) (recur val (:first-invalid val) start-time')
+              (= port lexer-broker) (recur val (get-in val [:document :first-invalid]) start-time')
               (= port output) (let [delivered?  (deliver-lexems! val)]
                                 (recur state (if delivered? (inc line) line) start-time'))
               (= port input) (recur state line start-time'))))))))
@@ -460,13 +403,15 @@
       ;run lexer worker and setup atom watcher that will run lexer on changes
       (attach-lexer! @state)
       (add-watch state :lexer
-                 (fn [_ _ {old-ts :timestamp} {new-ts :timestamp
-                                              broker :lexer-broker :as s}]
-                   (when (not= old-ts new-ts)
-                     (a/put! broker s))))
+                 (fn [_ _ old-s new-s]
+                   (let [old-ts (get-in old-s [:document :timestamp])
+                         new-ts (get-in new-s [:document :timestamp])
+                         broker (get-in new-s [:document :lexer-broker])]
+                     (when (not= old-ts new-ts)
+                       (a/put! broker new-s)))))
       ;load sample document from the internet
       (let [text (:body (a/<! (http/get "/EditorImpl.java")))]
-        (swap! state set-text text))
+        (swap-editor! state contr/set-text text))
       ;deliver promise
       (a/>! loaded :done))
     loaded))
@@ -488,24 +433,24 @@
     (.preventDefault evt)))
 
 (defn- bind-function! [key f & args]
-  (keybind/bind! key :global (capture #(swap! state (fn [s] (apply f s args))))))
+  (keybind/bind! key :global (capture #(swap-editor! state (fn [s] (apply f s args))))))
 
 (bind-function! "backspace" editor/backspace)
 (bind-function! "delete" editor/delete)
-(bind-function! "pgup" editor/pg-move! :up false viewport metrics)
-(bind-function! "pgdown" editor/pg-move! :down false viewport metrics)
-(bind-function! "shift-pgup" editor/pg-move! :up true viewport metrics)
-(bind-function! "shift-pgdown" editor/pg-move! :down true viewport metrics)
+(bind-function! "pgup" editor/pg-move :up false metrics)
+(bind-function! "pgdown" editor/pg-move :down false metrics)
+(bind-function! "shift-pgup" editor/pg-move :up true metrics)
+(bind-function! "shift-pgdown" editor/pg-move :down true metrics)
 (bind-function! "home" editor/home false)
 (bind-function! "shift-home" editor/home true)
 (bind-function! "end" editor/end false)
 (bind-function! "shift-end" editor/end true)
 (bind-function! "tab" (fn [state] (contr/type-in state "    ")))
-(bind-function! "left" editor/move-caret :left false viewport metrics)
-(bind-function! "right" editor/move-caret :right false viewport metrics)
-(bind-function! "up" editor/move-caret :up false viewport metrics)
-(bind-function! "down" editor/move-caret :down false viewport metrics)
-(bind-function! "shift-left" editor/move-caret :left true viewport metrics)
-(bind-function! "shift-right" editor/move-caret :right true viewport metrics)
-(bind-function! "shift-up" editor/move-caret :up true viewport metrics)
-(bind-function! "shift-down" editor/move-caret :down true viewport metrics)
+(bind-function! "left" editor/move-caret :left false metrics)
+(bind-function! "right" editor/move-caret :right false metrics)
+(bind-function! "up" editor/move-caret :up false metrics)
+(bind-function! "down" editor/move-caret :down false  metrics)
+(bind-function! "shift-left" editor/move-caret :left true metrics)
+(bind-function! "shift-right" editor/move-caret :right true metrics)
+(bind-function! "shift-up" editor/move-caret :up true  metrics)
+(bind-function! "shift-down" editor/move-caret :down true  metrics)
