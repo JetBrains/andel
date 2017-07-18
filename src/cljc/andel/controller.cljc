@@ -30,11 +30,11 @@
         {:keys [document]} editor
         [sel-from sel-to] selection
         sel-len (- sel-to sel-from)]
-      (-> state
-          (edit-at-offset sel-from #(text/delete % sel-len))
-          (assoc-in [:editor :caret :offset] sel-from)
-          (assoc-in [:editor :caret :v-col] 0)
-          (assoc-in [:editor :selection] [sel-from sel-from]))))
+    (-> state
+        (edit-at-offset sel-from #(text/delete % sel-len))
+        (assoc-in [:editor :caret :offset] sel-from)
+        (assoc-in [:editor :caret :v-col] 0)
+        (assoc-in [:editor :selection] [sel-from sel-from]))))
 
 
 (defn type-in [{:keys [editor] :as state} s]
@@ -57,25 +57,20 @@
         caret-offset' (+ line-off (min col line-len))]
     (-> state
         (assoc-in [:editor :caret]
-               {:offset caret-offset' :v-col 0})
+                  {:offset caret-offset' :v-col 0})
         (assoc-in [:editor :selection]
-               (cond (not selection?)
-                     [caret-offset' caret-offset']
+                  (cond (not selection?)
+                        [caret-offset' caret-offset']
 
-                     (= caret-offset sel-from)
-                     [(min caret-offset' sel-to) (max caret-offset' sel-to)]
+                        (= caret-offset sel-from)
+                        [(min caret-offset' sel-to) (max caret-offset' sel-to)]
 
-                     (= caret-offset sel-to)
-                     [(min sel-from caret-offset') (max sel-from caret-offset')]
+                        (= caret-offset sel-to)
+                        [(min sel-from caret-offset') (max sel-from caret-offset')]
 
-                     :else
-                     [(min caret-offset caret-offset') (max caret-offset'
-                                                            caret-offset')])))))
-
-;(defn set-caret-offset
-;  [{:keys [editor] :as state} offset selection?]
-;  (let [[line col] (utils/offset->line-col offset text)]
-;    (set-caret-line-col state line col selection?)))
+                        :else
+                        [(min caret-offset caret-offset') (max caret-offset'
+                                                               caret-offset')])))))
 
 (defn set-caret-line-begining
   [state line selection?]

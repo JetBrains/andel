@@ -217,28 +217,28 @@
 (defn scroll [viewport-fn]
   (let [once (atom true)]
     (fn []
-    [:div {:style {:display :flex
-                   :flex "1"
-                   :overflow :hidden}
-           :ref (fn [e]
-                  (when e
-                    (swap-editor! state #(assoc-in % [:viewport :view-size] [(.-clientWidth e) (.-clientHeight e)])) 100)
-                  (when (and @once (some? e))
-                    (reset! once false)
-                    (.addEventListener
-                     e
-                     "mousewheel"
-                     (fn [evt]
-                       (swap-editor! state
-                              #(update-in % [:viewport :pos]
-                                      (fn [[x y]]
-                                        (let [dx (/ (.-wheelDeltaX evt) 2)
-                                              dy (/ (.-wheelDeltaY evt) 2)]
-                                          (if (< (js/Math.abs dx) (js/Math.abs dy))
-                                            [x (max 0 (- y dy))]
-                                            [(max 0 (- x dx)) y])))))
-                       (.preventDefault evt)))))}
-     [viewport-fn (reagent/cursor state [:viewport :pos]) (reagent/cursor state [:viewport :view-size])]])))
+      [:div {:style {:display :flex
+                     :flex "1"
+                     :overflow :hidden}
+             :ref (fn [e]
+                    (when e
+                      (swap-editor! state #(assoc-in % [:viewport :view-size] [(.-clientWidth e) (.-clientHeight e)])) 100)
+                    (when (and @once (some? e))
+                      (reset! once false)
+                      (.addEventListener
+                       e
+                       "mousewheel"
+                       (fn [evt]
+                         (swap-editor! state
+                                       #(update-in % [:viewport :pos]
+                                                   (fn [[x y]]
+                                                     (let [dx (/ (.-wheelDeltaX evt) 2)
+                                                           dy (/ (.-wheelDeltaY evt) 2)]
+                                                       (if (< (js/Math.abs dx) (js/Math.abs dy))
+                                                         [x (max 0 (- y dy))]
+                                                         [(max 0 (- x dx)) y])))))
+                         (.preventDefault evt)))))}
+       [viewport-fn (reagent/cursor state [:viewport :pos]) (reagent/cursor state [:viewport :view-size])]])))
 
 (defn editor-viewport [state]
   (fn [pos size]
@@ -257,43 +257,43 @@
               {:keys [caret selection]} editor
               caret-offset (get caret :offset)
               [_ hiccup] (reduce
-                              (fn [[line-start res] index]
-                                (let [next-line (text/scan-to-line line-start (inc index))
-                                      line-start-offset (text/offset line-start)
-                                      next-line-offset (text/offset next-line)
-                                      len (- next-line-offset
-                                             line-start-offset)
-                                      len (if (tree/end? next-line)
-                                            len
-                                            (dec len))
-                                      line-text (text/text line-start len)
-                                      line-end-offset (+ line-start-offset len)
-                                      line-sel (line-selection selection [line-start-offset line-end-offset])
-                                      line-caret (when (and (<= line-start-offset caret-offset) (<= caret-offset line-end-offset))
-                                                   (- caret-offset line-start-offset))
-                                      line-tokens (:tokens (get lines index))
-                                      line-info (LineInfo. line-text line-tokens line-sel line-caret index)]
-                                  [next-line (conj! res
-                                                    ^{:key index}
-                                                    [render-line line-info metrics])]))
-                              [(text/scan-to-line (text/zipper text) from)
-                               (transient [:div {:style
-                                                 {:background theme/background
-                                                  :width "100%"
-                                                  :transform (str "translate3d(0px, " (:y-shift @dims) "px, 0px)")}
-                                                 :onMouseDown (fn [event]
-                                                                (let [x ($ event :clientX)
-                                                                      y ($ event :clientY)]
-                                                                  (on-mouse-action! (utils/pixels->line-col [x y] from (:y-shift @dims) metrics)
-                                                                                    false)))
-                                                 :onMouseMove  (fn [event]
-                                                                 (when (= ($ event :buttons) 1)
-                                                                   (let [x ($ event :clientX)
-                                                                         y ($ event :clientY)]
-                                                                     (on-mouse-action! (utils/pixels->line-col [x y] from (:y-shift @dims) metrics)
-                                                                                       true))))}])]
-                              (range from to))]
-               (persistent! hiccup))))))
+                          (fn [[line-start res] index]
+                            (let [next-line (text/scan-to-line line-start (inc index))
+                                  line-start-offset (text/offset line-start)
+                                  next-line-offset (text/offset next-line)
+                                  len (- next-line-offset
+                                         line-start-offset)
+                                  len (if (tree/end? next-line)
+                                        len
+                                        (dec len))
+                                  line-text (text/text line-start len)
+                                  line-end-offset (+ line-start-offset len)
+                                  line-sel (line-selection selection [line-start-offset line-end-offset])
+                                  line-caret (when (and (<= line-start-offset caret-offset) (<= caret-offset line-end-offset))
+                                               (- caret-offset line-start-offset))
+                                  line-tokens (:tokens (get lines index))
+                                  line-info (LineInfo. line-text line-tokens line-sel line-caret index)]
+                              [next-line (conj! res
+                                                ^{:key index}
+                                                [render-line line-info metrics])]))
+                          [(text/scan-to-line (text/zipper text) from)
+                           (transient [:div {:style
+                                             {:background theme/background
+                                              :width "100%"
+                                              :transform (str "translate3d(0px, " (:y-shift @dims) "px, 0px)")}
+                                             :onMouseDown (fn [event]
+                                                            (let [x ($ event :clientX)
+                                                                  y ($ event :clientY)]
+                                                              (on-mouse-action! (utils/pixels->line-col [x y] from (:y-shift @dims) metrics)
+                                                                                false)))
+                                             :onMouseMove  (fn [event]
+                                                             (when (= ($ event :buttons) 1)
+                                                               (let [x ($ event :clientX)
+                                                                     y ($ event :clientY)]
+                                                                 (on-mouse-action! (utils/pixels->line-col [x y] from (:y-shift @dims) metrics)
+                                                                                   true))))}])]
+                          (range from to))]
+          (persistent! hiccup))))))
 
 (defn editor [state]
   (let [dom-input (atom nil)
@@ -336,8 +336,8 @@
         res (a/promise-chan)]
     (aset e "onload" #(a/put! res :done))
     (doto e
-          (.setAttribute "type" "text/javascript")
-          (.setAttribute "src" src))
+      (.setAttribute "type" "text/javascript")
+      (.setAttribute "src" src))
     (.appendChild (head) e)
     res))
 
@@ -420,8 +420,8 @@
 
 (defn mount-root []
   (go (a/<! ready)
-        (let [root (.getElementById js/document "app")]
-          (reagent/render [main] root))))
+      (let [root (.getElementById js/document "app")]
+        (reagent/render [main] root))))
 
 (defn init! []
   (mount-root))
