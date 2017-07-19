@@ -84,11 +84,6 @@
       (update-in [:editor :selection 0] - 1)
       (update-in [:editor :selection 1] - 1)))
 
-(defn is-valid-caret-offset
-  [offset {:keys [text] :as state}]
-  (and (< 0 offset)
-       (< offset (text/text-length text))))
-
 (defn backspace [{:keys [document editor] :as state}]
   (let [{:keys [text]} document
         {:keys [caret selection]} editor
