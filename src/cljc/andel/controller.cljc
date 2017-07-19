@@ -21,8 +21,8 @@
         (update-in [:document :first-invalid] min (utils/loc->line edit-point)))))
 
 (defn edit-at-line-col
-  [{:keys [text] :as state} [line col] f]
-  (let [offset (utils/line-col->offset [line col] text)]
+  [{:keys [text] :as state} line-col f]
+  (let [offset (utils/line-col->offset line-col text)]
     (edit-at-offset state offset f)))
 
 (defn delete-under-selection [{:keys [document editor] :as state}]
@@ -46,7 +46,7 @@
         (assoc-in [:editor :selection] [(+ caret-offset (count s)) (+ caret-offset (count s))]))))
 
 (defn set-caret-at-line-col
-  [{:keys [editor document] :as state} line col selection?]
+  [{:keys [editor document] :as state} {:keys [line col]} selection?]
   (let [{:keys [caret selection]} editor
         {:keys [text]} document
         [sel-from sel-to] selection
@@ -74,7 +74,7 @@
 
 (defn set-caret-at-line-begining
   [state line selection?]
-  (set-caret-at-line-col state line 0 selection?))
+  (set-caret-at-line-col state {:line line :col 0} selection?))
 
 (defn set-caret-at-line-end
   [state line selection?]
@@ -199,7 +199,7 @@
                                              :right (if (< caret-offset (dec (text/text-length text)))
                                                       {:offset (inc caret-offset) :v-col 0}
                                                       caret)
-                                             :up (let [[cur-line cur-col] (utils/offset->line-col caret-offset text)
+                                             :up (let [{cur-line :line cur-col :col} (utils/offset->line-col caret-offset text)
                                                        cur-begin (utils/line->offset cur-line text)
                                                        prev-end (dec cur-begin)
                                                        prev-line (dec cur-line)
@@ -208,7 +208,7 @@
                                                    (if (< 0 cur-line)
                                                      {:offset (min prev-end (+ prev-begin new-v-col)) :v-col new-v-col}
                                                      caret))
-                                             :down (let [[cur-line cur-col] (utils/offset->line-col caret-offset text)
+                                             :down (let [{cur-line :line cur-col :col} (utils/offset->line-col caret-offset text)
                                                          next-line-loc (utils/next-line-loc cur-line text)
                                                          next-begin (utils/loc->offset next-line-loc)
                                                          next-end (+ next-begin (text/line-length next-line-loc))

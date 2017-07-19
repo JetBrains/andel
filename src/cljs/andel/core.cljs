@@ -210,8 +210,8 @@
                                       :infinity)]
         :else nil))
 
-(defn on-mouse-action! [[line col] selection?]
-  (swap-editor! state #(contr/set-caret-at-line-col % line col selection?)))
+(defn on-mouse-action! [line-col selection?]
+  (swap-editor! state #(contr/set-caret-at-line-col % line-col selection?)))
 
 (defn scroll [viewport-fn]
   (let [once (atom true)]

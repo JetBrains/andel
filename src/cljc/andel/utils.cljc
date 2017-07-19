@@ -10,11 +10,12 @@
         rel-line (Math/round (/ y height))
         abs-line (+ start-line rel-line)
         abs-col (Math/round (/ x width))]
-  [abs-line abs-col]))
+    {:line abs-line
+     :col abs-col}))
 
 (defn line-col->offset
   "transforms absolute [line col] value into absolute offset value"
-  [[line col] text]
+  [{:keys [line col]} text]
   (-> text
       (text/zipper)
       (text/scan-to-line line)
@@ -24,7 +25,7 @@
 (defn line->offset
   "transforms line value into absolute offset value"
   [line text]
-  (line-col->offset [line 0] text))
+  (line-col->offset {:line line :col 0} text))
 
 (defn pixels->offset
   "transforms relative position in pixels into absolute offset value"
@@ -45,13 +46,14 @@
   "transforms absolute offset into absolute [line col] value"
   [offset text]
   (let [line (offset->line offset text)
-        line-offset (line-col->offset [line 0] text)
+        line-offset (line-col->offset {:line line :col 0} text)
         col (- offset line-offset)]
-    [line col]))
+    {:line line
+     :col col}))
 
 (defn line-col->pixels
   "transforms absolute [line col] value into relative poisition in pixels"
-  [[line col] start-line shift {:keys [height width] :as metrics}]
+  [{:keys [line col]} start-line shift {:keys [height width] :as metrics}]
   (let [rel-line (- line start-line)
         pix-x (* col width)
         pix-y (+ shift (/ height 2) (* line height))]
@@ -90,7 +92,7 @@
 
 (defn line-col->loc
   "transforms absolute [line col] into zipper pointer"
-  [[line col] text]
+  [{:keys [line col]} text]
   (let [line-loc (line->loc line text)
         line-offset (loc->offset line-loc)]
     (text/scan-to-offset line-loc (+ line-offset col))))
