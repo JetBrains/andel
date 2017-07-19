@@ -355,19 +355,20 @@
       (.setAttribute "href" src))
     (.appendChild (head) e)))
 
-(defn deliver-lexems! [{:keys [req-ts tokens index]}]
-  (swap-editor! state
-                (fn [{:keys [document] :as state}]
-                  (let [{:keys [timestamp]} document]
-                    (if (= timestamp req-ts)
-                      (-> state
-                          (assoc-in [:document :lines index :tokens] tokens)
-                          (assoc-in [:document :first-invalid] (inc index)))
-                      state))))
-  (= (get-in @state [:document :timestamp]) req-ts))
+(defn deliver-lexems! [{:keys [req-ts tokens index]} state-ref]
+  (let [res (swap-editor! state-ref
+                         (fn [{:keys [document] :as state}]
+                           (let [{:keys [timestamp]} document]
+                             (if (= timestamp req-ts)
+                               (-> state
+                                   (assoc-in [:document :lines index :tokens] tokens)
+                                   (assoc-in [:document :first-invalid] (inc index)))
+                               state))))]
+       (= (get-in res [:document :timestamp]) req-ts)))
 
-(defn attach-lexer! [{:keys [document]}]
-  (let [{:keys [modespec lexer-broker]} document
+(defn attach-lexer! [state-ref]
+  (let [{:keys [document] :as state} @state-ref
+        {:keys [modespec lexer-broker]} document
         {:keys [input output]} (lexer/new-lexer-worker modespec)]
     (go
       (loop [state nil
@@ -387,7 +388,7 @@
                               start-time)]
             (cond
               (= port lexer-broker) (recur val (get-in val [:document :first-invalid]) start-time')
-              (= port output) (let [delivered?  (deliver-lexems! val)]
+              (= port output) (let [delivered?  (deliver-lexems! val state-ref)]
                                 (recur state (if delivered? (inc line) line) start-time'))
               (= port input) (recur state line start-time'))))))))
 
@@ -406,7 +407,7 @@
                                          "/codemirror/mode/clike/clike.js"
                                          "/codemirror/mode/clojure/clojure.js"]))
       ;run lexer worker and setup atom watcher that will run lexer on changes
-      (attach-lexer! @state)
+      (attach-lexer! state)
       (add-watch state :lexer
                  (fn [_ _ old-s new-s]
                    (let [old-ts (get-in old-s [:document :timestamp])
