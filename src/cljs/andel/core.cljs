@@ -41,8 +41,6 @@
 
 (defonce defstyle (memoize defstyle-impl))
 
-(def line-h 19)
-
 (defstyle :editor
   [:pre {:font-family "Menlo"
          :color theme/foreground
@@ -55,7 +53,9 @@
   (let [canvas (js/document.createElement "canvas")
         ctx (.getContext canvas "2d")]
     (set! (.-font ctx) "16px Menlo")
-    {:width (.-width (.measureText ctx s)) :height line-h}))
+    (let [width (.-width (.measureText ctx s))
+          height (* 1.98 width)]
+        {:width width :height height})))
 
 (defn make-editor-state []
   {:document {:text (text/make-text "")
@@ -67,7 +67,8 @@
    :editor {:caret {:offset 0 :v-col 0}
             :selection [0 0]}
    :viewport {:pos [0 0]
-              :view-size [0 0]}})
+              :view-size [0 0]
+              :metrics (measure "x")}})
 
 (def swap-editor! swap!)
 
@@ -130,8 +131,6 @@
                          "100%"
                          (px (* (- to from) width)))})}])
 
-(def metrics (measure "x"))
-
 (defn render-caret [col {:keys [width height]}]
   #js [:div {:style (style {:width "1px"
                             :animation "blinker 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite"
@@ -187,6 +186,10 @@
         (.appendChild node elt)))
     :render (fn [_] [:div])}))
 
+
+;; Todo: think how to pass metrics from state to render-line style
+(defonce line-h 19)
+
 (defstyle :render-line [:.render-line {:height (px line-h)
                                        :position :relative}])
 
@@ -194,7 +197,7 @@
 
 (defn render-line [{:keys [line-text line-tokens selection caret-index] :as line-info} {:keys [height] :as metrics}]
   [real-dom (dom
-               #js [:div {:class :render-line}
+             #js [:div {:class :render-line}
                     (render-selection selection metrics)
                     (render-text line-text line-tokens metrics)
                     (when caret-index (render-caret caret-index metrics))])])
@@ -241,13 +244,16 @@
 
 (defn editor-viewport [state]
   (fn [pos size]
-    (let [dims (reaction
+    (let [{:keys [viewport]} @state
+          {:keys [metrics]} viewport
+          {:keys [height]} metrics
+          dims (reaction
                 (let [[_ from-y-offset] @pos
                       [w h] @size
-                      from-idx (int (/ from-y-offset line-h))]
+                      from-idx (int (/ from-y-offset height))]
                   {:from-idx from-idx
-                   :to-idx (+ 5 (+ from-idx (/ h line-h)))
-                   :y-shift (- (* line-h (- (/ from-y-offset line-h) from-idx)))}))]
+                   :to-idx (+ 5 (+ from-idx (/ h height)))
+                   :y-shift (- (* height (- (/ from-y-offset height) from-idx)))}))]
       (fn []
         (let [from (:from-idx @dims)
               to (:to-idx @dims)
@@ -436,20 +442,20 @@
 
 (bind-function! "backspace" contr/backspace)
 (bind-function! "delete" contr/delete)
-(bind-function! "pgup" contr/pg-move :up false metrics)
-(bind-function! "pgdown" contr/pg-move :down false metrics)
-(bind-function! "shift-pgup" contr/pg-move :up true metrics)
-(bind-function! "shift-pgdown" contr/pg-move :down true metrics)
+(bind-function! "pgup" contr/pg-move :up false)
+(bind-function! "pgdown" contr/pg-move :down false)
+(bind-function! "shift-pgup" contr/pg-move :up true)
+(bind-function! "shift-pgdown" contr/pg-move :down true)
 (bind-function! "home" contr/home false)
 (bind-function! "shift-home" contr/home true)
 (bind-function! "end" contr/end false)
 (bind-function! "shift-end" contr/end true)
 (bind-function! "tab" (fn [state] (contr/type-in state "    ")))
-(bind-function! "left" contr/move-caret :left false metrics)
-(bind-function! "right" contr/move-caret :right false metrics)
-(bind-function! "up" contr/move-caret :up false metrics)
-(bind-function! "down" contr/move-caret :down false  metrics)
-(bind-function! "shift-left" contr/move-caret :left true metrics)
-(bind-function! "shift-right" contr/move-caret :right true metrics)
-(bind-function! "shift-up" contr/move-caret :up true  metrics)
-(bind-function! "shift-down" contr/move-caret :down true  metrics)
+(bind-function! "left" contr/move-caret :left false)
+(bind-function! "right" contr/move-caret :right false)
+(bind-function! "up" contr/move-caret :up false)
+(bind-function! "down" contr/move-caret :down false)
+(bind-function! "shift-left" contr/move-caret :left true)
+(bind-function! "shift-right" contr/move-caret :right true)
+(bind-function! "shift-up" contr/move-caret :up true)
+(bind-function! "shift-down" contr/move-caret :down true)

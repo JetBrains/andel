@@ -131,9 +131,10 @@
         pos-in-lines-end (+ pos-in-lines (count-lines-in-view viewport metrics))]
     [pos-in-lines pos-in-lines-end]))
 
-(defn pg-move [{:keys [document editor viewport] :as state} dir selection? metrics]
+(defn pg-move [{:keys [document editor viewport] :as state} dir selection?]
   (let [{:keys [text]} document
         {:keys [caret]} editor
+        {:keys [metrics]} viewport
         [from-l to-l] (get-view-in-lines viewport metrics)
         caret-line (utils/offset->line (:offset caret) text)]
     (case dir
@@ -172,9 +173,10 @@
         line (utils/offset->line caret-offset text)]
     (set-caret-at-line-end state line selection?)))
 
-(defn move-view-if-needed [{:keys [document editor viewport] :as state}  metrics]
+(defn move-view-if-needed [{:keys [document editor viewport] :as state}]
   (let [{:keys [text]} document
         {:keys [caret]} editor
+        {:keys [metrics]} viewport
         {caret-offset :offset} caret
         caret-l (utils/offset->line caret-offset text)
         [from-l to-l] (get-view-in-lines viewport metrics)
@@ -224,4 +226,4 @@
     (-> state
         (assoc-in [:editor :caret] caret')
         (assoc-in [:editor :selection] selection')
-        (move-view-if-needed metrics))))
+        (move-view-if-needed))))
