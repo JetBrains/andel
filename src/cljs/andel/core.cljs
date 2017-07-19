@@ -3,7 +3,6 @@
               [andel.theme :as theme]
               [andel.throttling :as throttling]
               [andel.controller :as contr]
-              [andel.editor :as editor]
               [andel.utils :as utils]
               [reagent.core :as reagent]
               [reagent.ratom :refer [track]]
@@ -435,22 +434,22 @@
 (defn- bind-function! [key f & args]
   (keybind/bind! key :global (capture #(swap-editor! state (fn [s] (apply f s args))))))
 
-(bind-function! "backspace" editor/backspace)
-(bind-function! "delete" editor/delete)
-(bind-function! "pgup" editor/pg-move :up false metrics)
-(bind-function! "pgdown" editor/pg-move :down false metrics)
-(bind-function! "shift-pgup" editor/pg-move :up true metrics)
-(bind-function! "shift-pgdown" editor/pg-move :down true metrics)
-(bind-function! "home" editor/home false)
-(bind-function! "shift-home" editor/home true)
-(bind-function! "end" editor/end false)
-(bind-function! "shift-end" editor/end true)
+(bind-function! "backspace" contr/backspace)
+(bind-function! "delete" contr/delete)
+(bind-function! "pgup" contr/pg-move :up false metrics)
+(bind-function! "pgdown" contr/pg-move :down false metrics)
+(bind-function! "shift-pgup" contr/pg-move :up true metrics)
+(bind-function! "shift-pgdown" contr/pg-move :down true metrics)
+(bind-function! "home" contr/home false)
+(bind-function! "shift-home" contr/home true)
+(bind-function! "end" contr/end false)
+(bind-function! "shift-end" contr/end true)
 (bind-function! "tab" (fn [state] (contr/type-in state "    ")))
-(bind-function! "left" editor/move-caret :left false metrics)
-(bind-function! "right" editor/move-caret :right false metrics)
-(bind-function! "up" editor/move-caret :up false metrics)
-(bind-function! "down" editor/move-caret :down false  metrics)
-(bind-function! "shift-left" editor/move-caret :left true metrics)
-(bind-function! "shift-right" editor/move-caret :right true metrics)
-(bind-function! "shift-up" editor/move-caret :up true  metrics)
-(bind-function! "shift-down" editor/move-caret :down true  metrics)
+(bind-function! "left" contr/move-caret :left false metrics)
+(bind-function! "right" contr/move-caret :right false metrics)
+(bind-function! "up" contr/move-caret :up false metrics)
+(bind-function! "down" contr/move-caret :down false  metrics)
+(bind-function! "shift-left" contr/move-caret :left true metrics)
+(bind-function! "shift-right" contr/move-caret :right true metrics)
+(bind-function! "shift-up" contr/move-caret :up true  metrics)
+(bind-function! "shift-down" contr/move-caret :down true  metrics)
