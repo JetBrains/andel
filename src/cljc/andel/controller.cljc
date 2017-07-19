@@ -45,7 +45,7 @@
         (update-in [:editor :caret :offset] + (count s))
         (assoc-in [:editor :selection] [(+ caret-offset (count s)) (+ caret-offset (count s))]))))
 
-(defn set-caret-line-col
+(defn set-caret-at-line-col
   [{:keys [editor document] :as state} line col selection?]
   (let [{:keys [caret selection]} editor
         {:keys [text]} document
@@ -72,16 +72,17 @@
                         [(min caret-offset caret-offset') (max caret-offset'
                                                                caret-offset')])))))
 
-(defn set-caret-line-begining
+(defn set-caret-at-line-begining
   [state line selection?]
-  (set-caret-line-col state line 0 selection?))
+  (set-caret-at-line-col state line 0 selection?))
 
-(defn set-caret-line-end
+(defn set-caret-at-line-end
   [state line selection?]
   (-> state
-      (set-caret-line-begining (inc line) selection?)
-      (update-in [:editor :caret :offset] dec)
-      (update-in [:editor :selection 1] dec)))
+      (set-caret-at-line-begining (inc line) selection?)
+      (update-in [:editor :caret :offset] - 1)
+      (update-in [:editor :selection 0] - 1)
+      (update-in [:editor :selection 1] - 1)))
 
 (defn is-valid-caret-offset
   [offset {:keys [text] :as state}]
@@ -142,17 +143,17 @@
         caret-line (utils/offset->line (:offset caret) text)]
     (case dir
       :up (if (or (not= caret-line from-l) (= caret-line 0))
-            (set-caret-line-begining state from-l selection?)
+            (set-caret-at-line-begining state from-l selection?)
             (let [new-from-l (max 0 (- from-l (- (count-lines-in-view viewport metrics) 2)))]
               (-> state
                   (set-view-to-line new-from-l metrics)
-                  (set-caret-line-begining new-from-l selection?))))
+                  (set-caret-at-line-begining new-from-l selection?))))
       :down (cond
               (utils/last-line? to-l text)
-              (set-caret-line-end state to-l selection?)
+              (set-caret-at-line-end state to-l selection?)
 
               (not= caret-line (dec to-l))
-              (set-caret-line-end state (- to-l 1) selection?)
+              (set-caret-at-line-end state (- to-l 1) selection?)
 
               :else
               (let [delta (- (count-lines-in-view viewport metrics) 2)
@@ -160,21 +161,21 @@
                     new-to-l (+ to-l delta (- 1))]
                 (-> state
                     (set-view-to-line new-from-l metrics)
-                    (set-caret-line-end new-to-l selection?)))))))
+                    (set-caret-at-line-end new-to-l selection?)))))))
 
 (defn home [{:keys [document editor] :as state} selection?]
   (let [{:keys [text]} document
         {:keys [caret]} editor
         {caret-offset :offset} caret
         line (utils/offset->line caret-offset text)]
-    (set-caret-line-begining state line selection?)))
+    (set-caret-at-line-begining state line selection?)))
 
 (defn end [{:keys [document editor] :as state} selection?]
   (let [{:keys [text]} document
         {:keys [caret]} editor
         {caret-offset :offset} caret
         line (utils/offset->line caret-offset text)]
-    (set-caret-line-end state line selection?)))
+    (set-caret-at-line-end state line selection?)))
 
 (defn move-view-if-needed [{:keys [document editor viewport] :as state}  metrics]
   (let [{:keys [text]} document
