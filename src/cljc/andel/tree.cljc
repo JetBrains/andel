@@ -1,4 +1,4 @@
-(ns slurper.tree
+(ns andel.tree
   (:require [clojure.zip :as z])
   (:refer-clojure :exclude (replace remove next)))
 
@@ -31,7 +31,7 @@
                             split-thresh
                             split-leaf
                             leaf-underflown?
-                            merge-leafs] :as config}]  
+                            merge-leafs] :as config}]
   ^{:zip/branch? node?
     :zip/children :children
     :zip/make-node (fn [node children] (make-node children config))
@@ -43,7 +43,7 @@
     ::leaf-underflown? leaf-underflown?
     ::merge-leafs merge-leafs}
   [tree nil])
- 
+
 (defn partition-binary [s thresh]
   (let [cs (count s)]
     (if (< cs thresh)
@@ -80,10 +80,10 @@
         (cond (and (node? node) (<= split-thresh (count (:children node))))
               (reduce conj! result (map #(make-node % config)
                                         (partition-binary (:children node) split-thresh)))
-              
+
               (and (leaf? node) (leaf-overflown? (:data node)))
               (reduce conj! result (map #(make-leaf % config) (split-leaf (:data node))))
-              
+
               :else (conj! result node)))
       (transient [])
       children))
@@ -187,7 +187,7 @@
   [loc]
   (if (= :end (loc 1))
     loc
-    (or 
+    (or
      (and (z/branch? loc) (down loc))
      (right loc)
      (loop [p loc]
@@ -200,7 +200,7 @@
   [loc]
   (if (= :end (loc 1))
     loc
-    (or 
+    (or
      (right loc)
      (loop [p loc]
        (if-let [u (up p)]
@@ -243,7 +243,7 @@
                                                (assoc! ::acc acc)
                                                (persistent!))] (meta loc))
                              (recur (conj! l n) r acc'))))))]
-      
+
       (if (some? next-loc)
         (if (z/branch? next-loc)
           (recur (down next-loc) pred)

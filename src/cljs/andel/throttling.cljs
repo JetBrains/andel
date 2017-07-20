@@ -1,4 +1,4 @@
-(ns slurper.throttling
+(ns andel.throttling
   (:require-macros [cljs.core.async.macros :refer [go go-loop]])
   (:require [cljs.core.async :refer [chan >! <! timeout alts! put! close!]]))
 

@@ -1,4 +1,4 @@
-(ns slurper.lexer
+(ns andel.lexer
   (:require [cljs.core.async :as core.async])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]
                    [reagent.interop :refer [$]]))
@@ -36,7 +36,7 @@
          (.push tokens [(.-length text) (style->keyword style)])
          (reset! *state state))
        #js {:state (copy-state mode initial-state)})
-    
+
     {:tokens (vec tokens)
      :state @*state}))
 

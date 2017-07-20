@@ -1,1 +1,1 @@
-web: java $JVM_OPTS -cp target/slurper.jar clojure.main -m slurper.server
+web: java $JVM_OPTS -cp target/andel.jar clojure.main -m andel.server

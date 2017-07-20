@@ -1,8 +1,8 @@
-(ns slurper.handler
+(ns andel.handler
   (:require [compojure.core :refer [GET defroutes]]
             [compojure.route :refer [not-found resources]]
             [hiccup.page :refer [include-js include-css html5]]
-            [slurper.middleware :refer [wrap-middleware]]
+            [andel.middleware :refer [wrap-middleware]]
             [config.core :refer [env]]))
 
 (def mount-target
@@ -34,7 +34,7 @@
 (defroutes routes
   (GET "/" [] (loading-page))
   (GET "/about" [] (loading-page))
-  
+
   (resources "/")
   (not-found "Not Found"))
 

@@ -1,4 +1,4 @@
-(ns slurper.theme)
+(ns andel.theme)
 
 (def zenburn
   {:fg+1      "#FFFFEF"
@@ -43,7 +43,7 @@
                    :def {:color (zenburn :blue-1)}
                    :operator {:color (zenburn :cyan)}
                    :variable {:color (zenburn :fg)}
-                   
+
                    :variable-3 {:color (zenburn :blue+1)}
                    :meta {:color (zenburn :green+4)}
                    :number {:color (zenburn :blue-1)}

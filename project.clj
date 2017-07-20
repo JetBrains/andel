@@ -1,4 +1,4 @@
-(defproject slurper "0.1.0-SNAPSHOT"
+(defproject andel "0.1.0-SNAPSHOT"
   :description "FIXME: write description"
   :url "http://example.com/FIXME"
   :license {:name "Eclipse Public License"
@@ -29,14 +29,14 @@
             [lein-asset-minifier "0.2.7"
              :exclusions [org.clojure/clojure]]]
 
-  :ring {:handler slurper.handler/app
-         :uberwar-name "slurper.war"}
+  :ring {:handler andel.handler/app
+         :uberwar-name "andel.war"}
 
   :min-lein-version "2.5.0"
 
-  :uberjar-name "slurper.jar"
+  :uberjar-name "andel.jar"
 
-  :main slurper.server
+  :main andel.server
 
   :clean-targets ^{:protect false}
   [:target-path
@@ -55,16 +55,16 @@
              :compiler
              {:output-to "target/cljsbuild/public/js/app.js"
               :output-dir "target/cljsbuild/public/js/"
-              :main "slurper.prod"
+              :main "andel.prod"
               :optimizations :advanced
               :pseudo-names true
               :source-map "target/cljsbuild/public/js/app.js.map"
               :pretty-print  false}}
             :app
             {:source-paths ["src/cljs" "src/cljc" "env/dev/cljs"]
-             :figwheel {:on-jsload "slurper.core/mount-root"}
+             :figwheel {:on-jsload "andel.core/mount-root"}
              :compiler
-             {:main "slurper.dev"
+             {:main "andel.dev"
               :asset-path "/js/out"
               :output-to "target/cljsbuild/public/js/app.js"
               :output-dir "target/cljsbuild/public/js/out"
@@ -85,11 +85,11 @@
    :nrepl-middleware ["cemerick.piggieback/wrap-cljs-repl"
                       ]
    :css-dirs ["resources/public/css"]
-   :ring-handler slurper.handler/app}
+   :ring-handler andel.handler/app}
 
 
 
-  :profiles {:dev {:repl-options {:init-ns slurper.repl
+  :profiles {:dev {:repl-options {:init-ns andel.repl
                                   :nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]}
 
                    :dependencies [[ring/ring-mock "0.3.0"]
