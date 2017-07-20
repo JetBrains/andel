@@ -1,13 +1,12 @@
 (ns andel.intervals
-  (:require [andel.tree :as tree]
-            #?(:clj [andel.utils :as utils :refer [array]])))
+  (:require [andel.tree :as tree]))
 
 (defrecord Interval [offset len end-pos])
 
 (defn reducing-fn
   ([] (Interval. nil 0 0))
   ([acc {:keys [offset len] :as i}]
-   (let [acc-offset (or (:offset acc) offset)
+     (let [acc-offset (or (:offset acc) offset)
          end-pos' (+ (:end-pos acc) offset len)
          len' (max (:len acc) (- (+ (:end-pos acc) offset len) acc-offset))]
      (Interval. acc-offset len' end-pos'))))
@@ -69,17 +68,22 @@
               :data fixed-interval)))))
 
 
-(def is (intervals [[-2 2] [1 4] [2 3] [10 11]]))
+(def is (intervals [[2 4] [7 9] [11 12]]))
 
 (def tr (make-intervals is))
 
-(reductions reducing-fn (reducing-fn) (map metrics is))
+(-> tr
+    (zipper)
+    (tree/next)
+    (tree/next)
+    (tree/next)
+    (tree/next)
+    (tree/next))
 
 (def i {:from 5
         :to 6})
 
-(def insert-loc (tree/scan (zipper tr) (by-offset (:from i))))
-
+;(def insert-loc (tree/scan (zipper tr) (by-offset (:from i))))
 
 (defn insert-one [loc i]
   (let [loc-from-to (from-to loc)]
@@ -94,13 +98,13 @@
                 (tree/right))
        :updated-base (:to i)})))
 
-(root (:loc (insert-one insert-loc {:from 5 :to 6})))
+;(root (:loc (insert-one insert-loc {:from 5 :to 6})))
 
 (defn insert [it is]
   (->> is
        (reduce (fn [{:keys [loc updated-base]} i]
                  (if (some? updated-base)
-                   (let [next-leaf (tree/next-leaf loc)
+                   (let [next-leaf (tree/next loc)
                          next-leaf-from-to (from-to next-leaf)
                          loc-fixed (if (<from-to next-leaf-from-to i)
                                      (fix-offset next-leaf
@@ -112,4 +116,4 @@
        (:loc)
        (root)))
 
-(insert-bulk tr [{:from 3 :to 5} {:from 5 :to 6}])
+;(insert-bulk tr [{:from 3 :to 5} {:from 5 :to 6}])

@@ -164,9 +164,7 @@
 (defn right [[node {::keys [acc]} :as loc]]
   (when-let [r (z/right loc)]
     (let [{::keys [reducing-fn]} (meta loc)]
-      (assoc-in r [1 ::acc] (if (some? acc)
-                              (reducing-fn acc (:metrics node))
-                              (:metrics node))))))
+      (assoc-in r [1 ::acc] (reducing-fn (or acc (reducing-fn)) (:metrics node))))))
 
 (defn down [[_ {::keys [acc]} :as loc]]
   (some-> (z/down loc)
@@ -185,7 +183,7 @@
 (defn next
   "Modified version of clojure.zip/next to work with balancing version of up"
   [loc]
-  (if (= :end (loc 1))
+    (if (= :end (loc 1))
     loc
     (or
      (and (z/branch? loc) (down loc))
