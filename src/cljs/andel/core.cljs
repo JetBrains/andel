@@ -19,6 +19,12 @@
                      [reagent.ratom :refer [reaction]]
                      [cljs.core.async.macros :refer [go]]))
 
+(defn after-fonts-loaded [callback]
+  (.. js/document
+    -fonts
+    -ready
+    (then callback)))
+
 (defn head []
   (aget (js/document.getElementsByTagName "head") 0))
 
@@ -42,7 +48,7 @@
 (defonce defstyle (memoize defstyle-impl))
 
 (defstyle :editor
-  [:pre {:font-family "Menlo"
+  [:pre {:font-family "16px Fira Code"
          :color theme/foreground
          :margin "0px"}])
 
@@ -52,9 +58,9 @@
 (defn measure [s]
   (let [canvas (js/document.createElement "canvas")
         ctx (.getContext canvas "2d")]
-    (set! (.-font ctx) "16px Menlo")
+    (set! (.-font ctx) "16px Fira Code")
     (let [width (.-width (.measureText ctx s))
-          height (* 1.98 width)]
+          height  (* 1.98 width)]
         {:width width :height height})))
 
 (defn make-editor-state []
@@ -68,7 +74,7 @@
             :selection [0 0]}
    :viewport {:pos [0 0]
               :view-size [0 0]
-              :metrics (measure "x")}})
+              :metrics {:width 0 :height 0}}})
 
 (def swap-editor! swap!)
 
@@ -76,6 +82,10 @@
   (str x "px"))
 
 (defonce state (reagent/atom (make-editor-state)))
+
+(after-fonts-loaded #(swap-editor! state
+                      (fn [editor]
+                        (assoc-in editor [:viewport :metrics] (measure "x")))))
 
 (defn style [m]
   (reduce-kv (fn [s k v]
