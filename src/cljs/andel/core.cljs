@@ -423,11 +423,11 @@
   (let [loaded (a/promise-chan)]
     (go
       ;load CodeMirror first
-      (wait-for-all (map include-script ["/codemirror/addon/runmode/runmode-standalone.js"
-                                         "/codemirror/addon/runmode/runmode-standalone.js"
-                                         "/codemirror/mode/javascript/javascript.js"
-                                         "/codemirror/mode/clike/clike.js"
-                                         "/codemirror/mode/clojure/clojure.js"]))
+      (a/<! (wait-for-all (map include-script ["/codemirror/addon/runmode/runmode-standalone.js"
+                                               "/codemirror/addon/runmode/runmode-standalone.js"
+                                               "/codemirror/mode/javascript/javascript.js"
+                                               "/codemirror/mode/clike/clike.js"
+                                               "/codemirror/mode/clojure/clojure.js"])))
       ;run lexer worker and setup atom watcher that will run lexer on changes
       (attach-lexer! state)
       (add-watch state :lexer
