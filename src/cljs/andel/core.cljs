@@ -41,21 +41,29 @@
 
 (defonce defstyle (memoize defstyle-impl))
 
-(defstyle :editor
-  [:pre {:font-family "Menlo"
-         :color theme/foreground
-         :margin "0px"}])
-
 (defstyle :body
   [:body {:background theme/background}])
 
-(defn measure [s]
+(defn px [x]
+  (str x "px"))
+
+(defn font->str [font-name height]
+  (str height "px " font-name))
+
+(defn measure [font-name height]
   (let [canvas (js/document.createElement "canvas")
         ctx (.getContext canvas "2d")]
-    (set! (.-font ctx) "16px Menlo")
-    (let [width (.-width (.measureText ctx s))
-          height (* 1.98 width)]
+    (set! (.-font ctx) (font->str font-name height))
+    (let [width (.-width (.measureText ctx "X"))]
         {:width width :height height})))
+
+(defn after-font-loaded [font-name size callback]
+  (measure font-name size)
+  (if (.. js/document
+          -fonts
+          (check (font->str font-name size)))
+    (callback)
+    (js/setTimeout #(after-font-loaded font-name size callback) 100)))
 
 (defn make-editor-state []
   {:document {:text (text/make-text "")
@@ -66,16 +74,31 @@
               :first-invalid 0}
    :editor {:caret {:offset 0 :v-col 0}
             :selection [0 0]}
-   :viewport {:pos [0 0]
+   :viewport {:ready? false
+              :pos [0 0]
               :view-size [0 0]
-              :metrics (measure "x")}})
+              :metrics {:height 0 :width 0}}})
 
 (def swap-editor! swap!)
 
-(defn px [x]
-  (str x "px"))
-
 (defonce state (reagent/atom (make-editor-state)))
+
+(let [font {:type "Fira Code"
+            :size 14}]
+  (after-font-loaded (:type font) (:size font)
+                     (fn []
+                       (swap-editor! state
+                                     (fn [editor]
+                                       (let [{:keys [width height] :as metrics} (measure (:type font) (:size font))]
+                                         (defstyle :editor
+                                           [:pre
+                                            {:font-family (:type font)
+                                             :font-size   (px height)
+                                             :color       theme/foreground
+                                             :margin      "0px"}])
+                                         (-> editor
+                                             (assoc-in [:viewport :ready?] true)
+                                             (assoc-in [:viewport :metrics] metrics))))))))
 
 (defn style [m]
   (reduce-kv (fn [s k v]
@@ -186,21 +209,16 @@
         (.appendChild node elt)))
     :render (fn [_] [:div])}))
 
-
-;; Todo: think how to pass metrics from state to render-line style
-(defonce line-h 19)
-
-(defstyle :render-line [:.render-line {:height (px line-h)
-                                       :position :relative}])
-
 (defrecord LineInfo [line-text line-tokens selection caret-index index])
 
 (defn render-line [{:keys [line-text line-tokens selection caret-index] :as line-info} {:keys [height] :as metrics}]
-  [real-dom (dom
-             #js [:div {:class :render-line}
-                    (render-selection selection metrics)
-                    (render-text line-text line-tokens metrics)
-                    (when caret-index (render-caret caret-index metrics))])])
+  (let [_ (defstyle :render-line [:.render-line {:height (px height)
+                                                 :position :relative}])]
+    [real-dom (dom
+                #js [:div {:class :render-line}
+                     (render-selection selection metrics)
+                     (render-text line-text line-tokens metrics)
+                     (when caret-index (render-caret caret-index metrics))])]))
 
 (defn line-selection [[from to] [line-start-offset line-end-offset]]
   (cond (and (< from line-start-offset) (< line-start-offset to))
@@ -303,35 +321,37 @@
       (persistent! hiccup))))
 
 (defn editor [state]
-  (let [dom-input (atom nil)
-        listener (atom nil)]
-    (fn []
-      [:div {:style {:display :flex
-                     :flex 1}
-             :tab-index -1
-             :ref (fn [this]
-                    (when-let [node (reagent/dom-node this)]
-                      (reset! listener true)
-                      (.addEventListener node "focus"
-                                         (fn []
-                                           (when @dom-input
-                                             (.focus @dom-input))))))}
-       [scroll (editor-viewport state) (init-viewport state) (scroll-on-event state)]
-       [:textarea
-        {:ref (fn [this]
-                (when-let [dom-node (reagent/dom-node this)]
-                  (reset! dom-input dom-node)))
-         :auto-focus true
-         :style {:opacity 0
-                 :pading "0px"
-                 :border :none
-                 :height "0px"
-                 :width "0px"}
-         :on-input (fn [evt]
-                     (let [e (.-target evt)
-                           val (.-value e)]
-                       (set! (.-value e) "")
-                       (swap-editor! state contr/type-in val)))}]])))
+  (if-not (get-in @state [:viewport :ready?])
+    [:h1 "Font not loaded yet..."]
+    (let [dom-input (atom nil)
+          listener (atom nil)]
+      (fn []
+        [:div {:style {:display :flex
+                       :flex 1}
+               :tab-index -1
+               :ref (fn [this]
+                      (when-let [node (reagent/dom-node this)]
+                        (reset! listener true)
+                        (.addEventListener node "focus"
+                                           (fn []
+                                             (when @dom-input
+                                               (.focus @dom-input))))))}
+         [scroll (editor-viewport state) (init-viewport state) (scroll-on-event state)]
+         [:textarea
+          {:ref (fn [this]
+                  (when-let [dom-node (reagent/dom-node this)]
+                    (reset! dom-input dom-node)))
+           :auto-focus true
+           :style {:opacity 0
+                   :pading "0px"
+                   :border :none
+                   :height "0px"
+                   :width "0px"}
+           :on-input (fn [evt]
+                       (let [e (.-target evt)
+                             val (.-value e)]
+                         (set! (.-value e) "")
+                         (swap-editor! state contr/type-in val)))}]]))))
 
 (defn main []
   [:div {:style {:display :flex
