@@ -183,7 +183,7 @@
 (defn next
   "Modified version of clojure.zip/next to work with balancing version of up"
   [loc]
-    (if (= :end (loc 1))
+  (if (= :end (loc 1))
     loc
     (or
      (and (z/branch? loc) (down loc))

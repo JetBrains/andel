@@ -22,22 +22,6 @@
 
 (defn root [loc] (tree/root loc))
 
-(defn make-intervals [is]
-  (-> (map #(tree/make-leaf % tree-config) is)
-      (tree/make-node tree-config)
-      (zipper)
-      (assoc-in [1 :changed?] true)
-      (root)))
-
-(defn intervals [is]
-  (first (reduce (fn [[res base] [from to]]
-                   [(conj res (Interval. (- from base)
-                                         (- to from)
-                                         nil))
-                    to])
-                 [[] 0]
-                 is)))
-
 (defn by-offset [i]
   #(< i (:end-pos %)))
 
@@ -67,23 +51,68 @@
               :metrics fixed-interval
               :data fixed-interval)))))
 
+(defn from-to->intervals [is]
+  (first (reduce (fn [[res base] [from to]]
+                   [(conj res (Interval. (- from base)
+                                         (- to from)
+                                         nil))
+                    to])
+                 [[] 0]
+                 is)))
 
-(def is (intervals [[2 4] [7 9] [11 12]]))
+(defn intervals->tree [is]
+  (-> (map #(tree/make-leaf % tree-config) is)
+      (tree/make-node tree-config)
+      (zipper)
+      (assoc-in [1 :changed?] true)
+      (root)))
 
-(def tr (make-intervals is))
+(def from-to->tree
+  (comp intervals->tree from-to->intervals))
 
-(-> tr
-    (zipper)
-    (tree/next)
-    (tree/next)
-    (tree/next)
-    (tree/next)
-    (tree/next))
+(defn tree->intervals [tr]
+  (loop [loc (zipper tr)
+         acc []]
+    (cond (tree/end? loc)
+          acc
+
+          (tree/leaf? loc)
+          (recur (tree/next loc)
+                 (let [data (get-in loc [0 :data])]
+                   (when-not (nil? data)
+                     (conj acc (get-in loc [0 :data])))))
+          :else
+          (recur (tree/next loc)
+                 acc))))
+
+(defn intervals->from-to [is]
+  (first (reduce (fn [[res base] {:keys [offset len end-pos]}]
+                   [(conj res [(+ offset base)
+                               (+ offset base len)])
+                    (+ offset base len)])
+                 [[] 0]
+                 (reverse is))))
+
+(def tree->from-to
+  (comp intervals->from-to tree->intervals))
+
+(defn get-insert-loc [tr i]
+  (tree/scan (zipper tr)
+             (by-offset (:from i))))
+
+(defn insert-in [insert-loc i]
+  (root (:loc (insert-one insert-loc i))))
+
+(def interval {:from 50 :to 100})
+
+(-> [[1 3] [20 24]]
+    from-to->tree
+    (get-insert-loc interval)
+    (insert-in interval)
+    tree->from-to)
 
 (def i {:from 5
         :to 6})
-
-;(def insert-loc (tree/scan (zipper tr) (by-offset (:from i))))
 
 (defn insert-one [loc i]
   (let [loc-from-to (from-to loc)]
@@ -97,8 +126,6 @@
                 (tree/insert-right (make-leaf (:to loc-from-to) i))
                 (tree/right))
        :updated-base (:to i)})))
-
-;(root (:loc (insert-one insert-loc {:from 5 :to 6})))
 
 (defn insert [it is]
   (->> is
