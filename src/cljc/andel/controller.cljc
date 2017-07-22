@@ -36,14 +36,18 @@
         (assoc-in [:editor :caret :v-col] 0)
         (assoc-in [:editor :selection] [sel-from sel-from]))))
 
+(defn set-selection-under-caret [editor]
+  (let [caret-offset (get-in editor [:caret :offset])]
+    (assoc editor :selection [caret-offset caret-offset])))
 
-(defn type-in [{:keys [editor] :as state} s]
-  (let [caret-offset (get-in state [:editor :caret :offset])]
+(defn type-in [{:keys [editor] :as state} str]
+  (let [caret-offset (get-in editor [:caret :offset])
+        str-len (count str)]
     (-> state
         (delete-under-selection)
-        (edit-at-offset caret-offset #(text/insert % s))
-        (update-in [:editor :caret :offset] + (count s))
-        (assoc-in [:editor :selection] [(+ caret-offset (count s)) (+ caret-offset (count s))]))))
+        (edit-at-offset caret-offset #(text/insert % str))
+        (update-in [:editor :caret :offset] + str-len)
+        (update-in [:editor] set-selection-under-caret))))
 
 (defn set-caret-at-line-col
   [{:keys [editor document] :as state} {:keys [line col]} selection?]
@@ -80,9 +84,8 @@
   [state line selection?]
   (-> state
       (set-caret-at-line-begining (inc line) selection?)
-      (update-in [:editor :caret :offset] - 1)
-      (update-in [:editor :selection 0] - 1)
-      (update-in [:editor :selection 1] - 1)))
+      (update-in [:editor :caret :offset] dec)
+      (update-in [:editor :selection 1] dec)))
 
 (defn backspace [{:keys [document editor] :as state}]
   (let [{:keys [text]} document
