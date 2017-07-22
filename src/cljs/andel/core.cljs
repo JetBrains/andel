@@ -482,3 +482,4 @@
 (bind-function! "shift-right" contr/move-caret :right true)
 (bind-function! "shift-up" contr/move-caret :up true)
 (bind-function! "shift-down" contr/move-caret :down true)
+(bind-function! "esc" contr/drop-selection)

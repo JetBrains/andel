@@ -227,3 +227,7 @@
         (assoc-in [:editor :caret] caret')
         (assoc-in [:editor :selection] selection')
         (move-view-if-needed))))
+
+(defn drop-selection [state]
+  (let [caret-offset (get-in state [:editor :caret :offset])]
+    (assoc-in state [:editor :selection] [caret-offset caret-offset])))
