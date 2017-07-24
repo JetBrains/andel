@@ -241,7 +241,6 @@
 (defn scroll-on-event [state]
   (fn [evt]
     (let [{:keys [viewport document]} @state
-          from (get-in viewport [:pos 1])
           screen-height (get-in viewport [:view-size 1])
           line-height (get-in viewport [:metrics :height])
           lines-count (text/lines-count (get document :text))
