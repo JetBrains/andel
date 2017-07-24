@@ -25,6 +25,10 @@
   (let [offset (utils/line-col->offset line-col text)]
     (edit-at-offset state offset f)))
 
+(defn edit-at-caret [state fn]
+  (let [caret-offset (get-in state [:editor :caret :offset])]
+    (edit-at-offset state caret-offset fn)))
+
 (defn delete-under-selection [{:keys [document editor] :as state}]
   (let [{:keys [selection]} editor
         {:keys [document]} editor
@@ -41,11 +45,10 @@
     (assoc editor :selection [caret-offset caret-offset])))
 
 (defn type-in [{:keys [editor] :as state} str]
-  (let [caret-offset (get-in editor [:caret :offset])
-        str-len (count str)]
+  (let [str-len (count str)]
     (-> state
         (delete-under-selection)
-        (edit-at-offset caret-offset #(text/insert % str))
+        (edit-at-caret #(text/insert % str))
         (update-in [:editor :caret :offset] + str-len)
         (update-in [:editor] set-selection-under-caret))))
 
