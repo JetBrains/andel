@@ -2,10 +2,13 @@
   (:require [andel.text :as text]
             [andel.tree :as tree]))
 
+(defn line-height [{:keys [height spacing] :as metrics}]
+  (+ height spacing))
+
 (defn pixels->line-col
   "transforms relative position in pixels into absolute [line col] value"
-  [[pix-x pix-y] start-line shift {:keys [height width spacing] :as metrics}]
-  (let [line-height (+ height spacing)
+  [[pix-x pix-y] start-line shift {:keys [width] :as metrics}]
+  (let [line-height (line-height metrics)
         x pix-x
         y (- (- pix-y shift) (/ line-height 2))
         rel-line (Math/round (/ y line-height))
