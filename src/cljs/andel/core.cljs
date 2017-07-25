@@ -55,7 +55,9 @@
               :lines []
               :first-invalid 0}
    :editor {:caret {:offset 0 :v-col 0}
-            :selection [0 0]}
+            :selection [0 0]
+            ;; :carets [{:caret 0 :virtual-col 0 :selection {:from 0 :to 0}}]
+            }
    :viewport {:pos [0 0]
               :view-size [0 0]
               :metrics {:height 0 :width 0 :spacing 0}}})
@@ -200,9 +202,6 @@
                                       :infinity)]
         :else nil))
 
-(defn on-mouse-action [state line-col selection?]
-  (swap-editor! state #(contr/set-caret-at-line-col % line-col selection?)))
-
 (defn init-viewport [state]
   (fn [width height]
     (swap-editor! state #(assoc-in % [:viewport :view-size] [width height]))))
@@ -282,15 +281,15 @@
                                           :width "100%"}
                                          :onMouseDown (fn [event]
                                                         (let [x ($ event :clientX)
-                                                              y ($ event :clientY)]
-                                                          (on-mouse-action state (utils/pixels->line-col [x y] from y-shift metrics)
-                                                                            false)))
+                                                              y ($ event :clientY)
+                                                              line-col (utils/pixels->grid-position [x y] from y-shift metrics)]
+                                                          (swap-editor! state #(contr/set-caret-at-grid-pos % line-col false))))
                                          :onMouseMove  (fn [event]
                                                          (when (= ($ event :buttons) 1)
                                                            (let [x ($ event :clientX)
-                                                                 y ($ event :clientY)]
-                                                             (on-mouse-action state (utils/pixels->line-col [x y] from y-shift metrics)
-                                                                               true))))}])]
+                                                                 y ($ event :clientY)
+                                                                 line-col (utils/pixels->grid-position [x y] from y-shift metrics)]
+                                                             (swap-editor! state #(contr/set-caret-at-grid-pos % line-col true)))))}])]
                       (range from to))]
       (persistent! hiccup))))
 
@@ -492,4 +491,4 @@
 (bind-function! "shift-right" contr/move-caret :right true)
 (bind-function! "shift-up" contr/move-caret :up true)
 (bind-function! "shift-down" contr/move-caret :down true)
-(bind-function! "esc" contr/drop-selection)
+(bind-function! "esc" contr/drop-selection-on-esc)

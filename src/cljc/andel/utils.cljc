@@ -5,8 +5,9 @@
 (defn line-height [{:keys [height spacing] :as metrics}]
   (+ height spacing))
 
-(defn pixels->line-col
-  "transforms relative position in pixels into absolute [line col] value"
+(defn pixels->grid-position
+  "transforms relative position in pixels into absolute [line col] value
+   CAUTION! col might be bigger, than length of line."
   [[pix-x pix-y] start-line shift {:keys [width] :as metrics}]
   (let [line-height (line-height metrics)
         x pix-x
@@ -18,13 +19,14 @@
      :col abs-col}))
 
 (defn line-col->offset
-  "transforms absolute [line col] value into absolute offset value"
+  "transforms [line col] value into absolute offset value"
   [{:keys [line col]} text]
-  (-> text
-      (text/zipper)
-      (text/scan-to-line line)
-      (text/offset)
-      (+ col)))
+  (let [line-loc (text/scan-to-line (text/zipper text) line)
+        line-len (text/line-length line-loc)
+        line-offset (text/offset line-loc)
+        text-length (text/text-length text)
+        offset (min (dec text-length) (max 0 (+ line-offset (min line-len col))))]
+    offset))
 
 (defn line->offset
   "transforms line value into absolute offset value"
@@ -35,7 +37,7 @@
   "transforms relative position in pixels into absolute offset value"
   [[pix-x pix-y] start-line shift metrics text]
   (-> [pix-x pix-y]
-      (pixels->line-col start-line shift metrics)
+      (pixels->grid-position start-line shift metrics)
       (line-col->offset text)))
 
 (defn offset->line
@@ -45,6 +47,9 @@
       (text/zipper)
       (text/scan-to-offset offset)
       (text/line)))
+
+(defn line->length [line text]
+  (text/line-length (text/scan-to-line (text/zipper text) line)))
 
 (defn offset->line-col
   "transforms absolute offset into absolute [line col] value"
