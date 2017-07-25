@@ -63,7 +63,7 @@
           -fonts
           (check (font->str font-name size)))
     (callback)
-    (js/setTimeout #(after-font-loaded font-name size callback) 100)))
+    (js/setTimeout #(after-font-loaded font-name size spacing callback) 100)))
 
 (defn make-editor-state []
   {:document {:text (text/make-text "")
@@ -245,7 +245,7 @@
           screen-height (get-in viewport [:view-size 1])
           line-height (utils/line-height (:metrics viewport))
           lines-count (text/lines-count (get document :text))
-          document-height (- (* lines-count line-height))]
+          document-height (- (* lines-count line-height) (/ screen-height 2))]
       (swap-editor! state
                     #(update-in % [:viewport :pos]
                       (fn [[x y]]
