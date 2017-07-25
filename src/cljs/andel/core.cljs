@@ -63,7 +63,7 @@
           -fonts
           (check (font->str font-name size)))
     (callback)
-    (js/setTimeout #(after-font-loaded font-name size callback) 100)))
+    (js/setTimeout #(after-font-loaded font-name size spacing callback) 100)))
 
 (defn make-editor-state []
   {:document {:text (text/make-text "")
@@ -210,6 +210,11 @@
         (.appendChild node elt)))
     :render (fn [_] [:div])}))
 
+(defn translate3d [{:keys [x y z] :or {x 0 y 0 z 0}} c]
+  [:div
+   {:style {:transform (str "translate3d(" (px x) ", " (px y) ", " (px z))}}
+   c])
+
 (defrecord LineInfo [line-text line-tokens selection caret-index index])
 
 (defn render-line [{:keys [line-text line-tokens selection caret-index] :as line-info} {:keys [height spacing] :as metrics}]
@@ -307,12 +312,11 @@
                               line-info (LineInfo. line-text line-tokens line-sel line-caret index)]
                           [next-line (conj! res
                                             ^{:key index}
-                                            [render-line line-info metrics])]))
+                                            [translate3d {:y y-shift} [render-line line-info metrics]])]))
                       [(text/scan-to-line (text/zipper text) from)
                        (transient [:div {:style
                                          {:background theme/background
-                                          :width "100%"
-                                          :transform (str "translate3d(0px, " y-shift "px, 0px)")}
+                                          :width "100%"}
                                          :onMouseDown (fn [event]
                                                         (let [x ($ event :clientX)
                                                               y ($ event :clientY)]
