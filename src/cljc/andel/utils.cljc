@@ -4,10 +4,11 @@
 
 (defn pixels->line-col
   "transforms relative position in pixels into absolute [line col] value"
-  [[pix-x pix-y] start-line shift {:keys [height width] :as metrics}]
-  (let [x pix-x
-        y (- (- pix-y shift) (/ height 2))
-        rel-line (Math/round (/ y height))
+  [[pix-x pix-y] start-line shift {:keys [height width spacing] :as metrics}]
+  (let [line-height (+ height spacing)
+        x pix-x
+        y (- (- pix-y shift) (/ line-height 2))
+        rel-line (Math/round (/ y line-height))
         abs-line (+ start-line rel-line)
         abs-col (Math/round (/ x width))]
     {:line abs-line

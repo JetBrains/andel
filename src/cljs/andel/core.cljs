@@ -50,15 +50,15 @@
 (defn font->str [font-name height]
   (str height "px " font-name))
 
-(defn measure [font-name height]
+(defn measure [font-name height spacing]
   (let [canvas (js/document.createElement "canvas")
         ctx (.getContext canvas "2d")]
     (set! (.-font ctx) (font->str font-name height))
     (let [width (.-width (.measureText ctx "X"))]
-        {:width width :height height})))
+        {:width width :height height :spacing spacing})))
 
-(defn after-font-loaded [font-name size callback]
-  (measure font-name size)
+(defn after-font-loaded [font-name size spacing callback]
+  (measure font-name size spacing)
   (if (.. js/document
           -fonts
           (check (font->str font-name size)))
@@ -77,19 +77,20 @@
    :viewport {:ready? false
               :pos [0 0]
               :view-size [0 0]
-              :metrics {:height 0 :width 0}}})
+              :metrics {:height 0 :width 0 :spacing 0}}})
 
 (def swap-editor! swap!)
 
 (defonce state (reagent/atom (make-editor-state)))
 
 (let [font {:type "Fira Code"
-            :size 14}]
-  (after-font-loaded (:type font) (:size font)
+            :size 16
+            :spacing 3}]
+  (after-font-loaded (:type font) (:size font) (:spacing font)
                      (fn []
                        (swap-editor! state
                                      (fn [editor]
-                                       (let [{:keys [width height] :as metrics} (measure (:type font) (:size font))]
+                                       (let [{:keys [width height] :as metrics} (measure (:type font) (:size font) (:spacing font))]
                                          (defstyle :editor
                                            [:pre
                                             {:font-family (:type font)
@@ -139,11 +140,11 @@
 
 (defn infinity? [x] (keyword? x))
 
-(defn render-selection [[from to] {:keys [width height]}]
+(defn render-selection [[from to] {:keys [width height spacing]}]
   #js [:div
        {:style
         (style {:background-color theme/selection
-                :height (px height)
+                :height (px (+ spacing height))
                 :position :absolute
                 :top (px 0)
                 :left (if (infinity? to)
@@ -154,14 +155,14 @@
                          "100%"
                          (px (* (- to from) width)))})}])
 
-(defn render-caret [col {:keys [width height]}]
+(defn render-caret [col {:keys [width height spacing]}]
   #js [:div {:style (style {:width "1px"
                             :animation "blinker 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite"
                             :top 0
                             :background-color "red"
                             :position :absolute
                             :left (px (* col width))
-                            :height (px (inc height))})}])
+                            :height (px (inc (+ spacing height)))})}])
 
 
 
@@ -211,8 +212,8 @@
 
 (defrecord LineInfo [line-text line-tokens selection caret-index index])
 
-(defn render-line [{:keys [line-text line-tokens selection caret-index] :as line-info} {:keys [height] :as metrics}]
-  (let [_ (defstyle :render-line [:.render-line {:height (px height)
+(defn render-line [{:keys [line-text line-tokens selection caret-index] :as line-info} {:keys [height spacing] :as metrics}]
+  (let [_ (defstyle :render-line [:.render-line {:height (px (+ spacing height))
                                                  :position :relative}])]
     [real-dom (dom
                 #js [:div {:class :render-line}
