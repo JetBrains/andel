@@ -140,11 +140,11 @@
 
 (defn infinity? [x] (keyword? x))
 
-(defn render-selection [[from to] {:keys [width height spacing]}]
+(defn render-selection [[from to] {:keys [width] :as metrics}]
   #js [:div
        {:style
         (style {:background-color theme/selection
-                :height (px (+ spacing height))
+                :height (px (utils/line-height metrics))
                 :position :absolute
                 :top (px 0)
                 :left (if (infinity? to)
@@ -155,14 +155,14 @@
                          "100%"
                          (px (* (- to from) width)))})}])
 
-(defn render-caret [col {:keys [width height spacing]}]
+(defn render-caret [col {:keys [width] :as metrics}]
   #js [:div {:style (style {:width "1px"
                             :animation "blinker 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite"
                             :top 0
                             :background-color "red"
                             :position :absolute
                             :left (px (* col width))
-                            :height (px (inc (+ spacing height)))})}])
+                            :height (px (inc (utils/line-height metrics)))})}])
 
 
 
@@ -217,8 +217,8 @@
 
 (defrecord LineInfo [line-text line-tokens selection caret-index index])
 
-(defn render-line [{:keys [line-text line-tokens selection caret-index] :as line-info} {:keys [height spacing] :as metrics}]
-  (let [_ (defstyle :render-line [:.render-line {:height (px (+ spacing height))
+(defn render-line [{:keys [line-text line-tokens selection caret-index] :as line-info} metrics]
+  (let [_ (defstyle :render-line [:.render-line {:height (px (utils/line-height metrics))
                                                  :position :relative}])]
     [real-dom (dom
                 #js [:div {:class :render-line}
@@ -248,17 +248,17 @@
   (fn [evt]
     (let [{:keys [viewport document]} @state
           screen-height (get-in viewport [:view-size 1])
-          line-height (get-in viewport [:metrics :height])
+          line-height (utils/line-height (:metrics viewport))
           lines-count (text/lines-count (get document :text))
-          text-end (- (* lines-count line-height) screen-height)]
+          document-height (- (* lines-count line-height))]
       (swap-editor! state
                     #(update-in % [:viewport :pos]
-                                (fn [[x y]]
-                                  (let [dx (/ (.-wheelDeltaX evt) 2)
-                                        dy (/ (.-wheelDeltaY evt) 2)]
-                                    (if (< (js/Math.abs dx) (js/Math.abs dy))
-                                      [x (min text-end (max 0 (- y dy)))]
-                                      [(max 0 (- x dx)) y])))))
+                      (fn [[x y]]
+                        (let [dx (/ (.-wheelDeltaX evt) 2)
+                              dy (/ (.-wheelDeltaY evt) 2)]
+                          (if (< (js/Math.abs dx) (js/Math.abs dy))
+                            [x (min document-height (max 0 (- y dy)))]
+                            [(max 0 (- x dx)) y])))))
       (.preventDefault evt))))
 
 
@@ -284,14 +284,14 @@
   (fn []
     (let [{:keys [editor document viewport]} @state
           {:keys [pos view-size metrics]} viewport
-          {:keys [height]} metrics
+          line-height (utils/line-height metrics)
           {:keys [text lines]} document
           {:keys [caret selection]} editor
           [_ from-y-offset] pos
           [w h] view-size
-          from (int (/ from-y-offset height))
-          to (+ 5 (+ from (/ h height)))
-          y-shift (- (* height (- (/ from-y-offset height) from)))
+          from (int (/ from-y-offset line-height))
+          to (+ 5 (+ from (/ h line-height)))
+          y-shift (- (* line-height (- (/ from-y-offset line-height) from)))
           caret-offset (get caret :offset)
           [_ hiccup] (reduce
                       (fn [[line-start res] index]
