@@ -47,24 +47,6 @@
 (defn px [x]
   (str x "px"))
 
-(defn font->str [font-name height]
-  (str height "px " font-name))
-
-(defn measure [font-name height spacing]
-  (let [canvas (js/document.createElement "canvas")
-        ctx (.getContext canvas "2d")]
-    (set! (.-font ctx) (font->str font-name height))
-    (let [width (.-width (.measureText ctx "X"))]
-        {:width width :height height :spacing spacing})))
-
-(defn after-font-loaded [font-name size spacing callback]
-  (measure font-name size spacing)
-  (if (.. js/document
-          -fonts
-          (check (font->str font-name size)))
-    (callback)
-    (js/setTimeout #(after-font-loaded font-name size spacing callback) 100)))
-
 (defn make-editor-state []
   {:document {:text (text/make-text "")
               :lexer-broker (a/chan)
@@ -74,32 +56,13 @@
               :first-invalid 0}
    :editor {:caret {:offset 0 :v-col 0}
             :selection [0 0]}
-   :viewport {:ready? false
-              :pos [0 0]
+   :viewport {:pos [0 0]
               :view-size [0 0]
               :metrics {:height 0 :width 0 :spacing 0}}})
 
 (def swap-editor! swap!)
 
 (defonce state (reagent/atom (make-editor-state)))
-
-(let [font {:type "Fira Code"
-            :size 16
-            :spacing 3}]
-  (after-font-loaded (:type font) (:size font) (:spacing font)
-                     (fn []
-                       (swap-editor! state
-                                     (fn [editor]
-                                       (let [{:keys [width height] :as metrics} (measure (:type font) (:size font) (:spacing font))]
-                                         (defstyle :editor
-                                           [:pre
-                                            {:font-family (:type font)
-                                             :font-size   (px height)
-                                             :color       theme/foreground
-                                             :margin      "0px"}])
-                                         (-> editor
-                                             (assoc-in [:viewport :ready?] true)
-                                             (assoc-in [:viewport :metrics] metrics))))))))
 
 (defn style [m]
   (reduce-kv (fn [s k v]
@@ -332,37 +295,36 @@
       (persistent! hiccup))))
 
 (defn editor [state]
-  (if-not (get-in @state [:viewport :ready?])
-    [:h1 "Font not loaded yet..."]
-    (let [dom-input (atom nil)
-          listener (atom nil)]
-      (fn []
-        [:div {:style {:display :flex
-                       :flex 1}
-               :tab-index -1
-               :ref (fn [this]
-                      (when-let [node (reagent/dom-node this)]
-                        (reset! listener true)
-                        (.addEventListener node "focus"
-                                           (fn []
-                                             (when @dom-input
-                                               (.focus @dom-input))))))}
-         [scroll (editor-viewport state) (init-viewport state) (scroll-on-event state)]
-         [:textarea
-          {:ref (fn [this]
-                  (when-let [dom-node (reagent/dom-node this)]
-                    (reset! dom-input dom-node)))
-           :auto-focus true
-           :style {:opacity 0
-                   :pading "0px"
-                   :border :none
-                   :height "0px"
-                   :width "0px"}
-           :on-input (fn [evt]
-                       (let [e (.-target evt)
+  (let [dom-input (atom nil)
+        listener  (atom nil)]
+    (fn []
+      [:div
+       {:style     {:display :flex
+                    :flex    1}
+        :tab-index -1
+        :ref       (fn [this]
+                     (when-let [node (reagent/dom-node this)]
+                       (reset! listener true)
+                       (.addEventListener node "focus"
+                                          (fn []
+                                            (when @dom-input
+                                              (.focus @dom-input))))))}
+       [scroll (editor-viewport state) (init-viewport state) (scroll-on-event state)]
+       [:textarea
+        {:ref        (fn [this]
+                       (when-let [dom-node (reagent/dom-node this)]
+                         (reset! dom-input dom-node)))
+         :auto-focus true
+         :style      {:opacity 0
+                      :pading  "0px"
+                      :border  :none
+                      :height  "0px"
+                      :width   "0px"}
+         :on-input   (fn [evt]
+                       (let [e   (.-target evt)
                              val (.-value e)]
                          (set! (.-value e) "")
-                         (swap-editor! state contr/type-in val)))}]]))))
+                         (swap-editor! state contr/type-in val)))}]])))
 
 (defn main []
   [:div {:style {:display :flex
@@ -429,6 +391,42 @@
   (let [m (a/merge cs)]
     (go (dotimes [i (count cs)] (a/<! m)))))
 
+(defn font->str [font-name height]
+  (str height "px " font-name))
+
+(defn measure [font-name height spacing]
+  (let [canvas (js/document.createElement "canvas")
+        ctx (.getContext canvas "2d")]
+    (set! (.-font ctx) (font->str font-name height))
+    (let [width (.-width (.measureText ctx "X"))]
+        {:width width :height height :spacing spacing})))
+
+(defn measure-async [font-name size spacing]
+  (go
+    (measure font-name size spacing)
+    (loop []
+      (if (.. js/document
+              -fonts
+              (check (font->str font-name size)))
+        (measure font-name size spacing)
+        (do
+          (a/<! (a/timeout 100))
+          (recur))))))
+
+(defn setup-font! [*state font-type font-size spacing]
+  (go
+    (let [metrics (a/<! (measure-async font-type font-size spacing))]
+      (swap-editor! *state
+                    (fn [state]
+                      (let [{:keys [height]} metrics]
+                        (defstyle :editor
+                          [:pre
+                           {:font-family font-type
+                            :font-size   (px height)
+                            :color       theme/foreground
+                            :margin      "0px"}])
+                        (assoc-in state [:viewport :metrics] metrics)))))))
+
 (defn load! []
   (js/window.addEventListener "keydown" (keybind/dispatcher) true)
   (let [loaded (a/promise-chan)]
@@ -439,6 +437,7 @@
                                                "/codemirror/mode/javascript/javascript.js"
                                                "/codemirror/mode/clike/clike.js"
                                                "/codemirror/mode/clojure/clojure.js"])))
+      (a/<! (setup-font! state "Fira Code" 16 3))
       ;run lexer worker and setup atom watcher that will run lexer on changes
       (attach-lexer! state)
       (add-watch state :lexer
