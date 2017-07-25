@@ -122,18 +122,18 @@
 
           :else state)))
 
-(defn set-view-to-line [state line {:keys [height] :as metrics}]
-  (assoc-in state [:viewport :pos 1] (* line height)))
+(defn set-view-to-line [state line metrics]
+  (assoc-in state [:viewport :pos 1] (* line (utils/line-height metrics))))
 
-(defn count-lines-in-view [viewport {:keys [height] :as metrics}]
+(defn count-lines-in-view [viewport metrics]
   (let [{:keys [view-size]} viewport
         [_ view-size] view-size]
-    (Math/round (/ view-size height))))
+    (Math/round (/ view-size (utils/line-height metrics)))))
 
-(defn get-view-in-lines [viewport {:keys [height] :as metrics}]
+(defn get-view-in-lines [viewport metrics]
   (let [{:keys [pos]} viewport
         [_ pos-px] pos
-        pos-in-lines (Math/round (/ pos-px height))
+        pos-in-lines (Math/round (/ pos-px (utils/line-height metrics)))
         pos-in-lines-end (+ pos-in-lines (count-lines-in-view viewport metrics))]
     [pos-in-lines pos-in-lines-end]))
 
