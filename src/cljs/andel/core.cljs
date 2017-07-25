@@ -241,15 +241,21 @@
 
 (defn scroll-on-event [state]
   (fn [evt]
-    (swap-editor! state
-                  #(update-in % [:viewport :pos]
-                              (fn [[x y]]
-                                (let [dx (/ (.-wheelDeltaX evt) 2)
-                                      dy (/ (.-wheelDeltaY evt) 2)]
-                                  (if (< (js/Math.abs dx) (js/Math.abs dy))
-                                    [x (max 0 (- y dy))]
-                                    [(max 0 (- x dx)) y])))))
-    (.preventDefault evt)))
+    (let [{:keys [viewport document]} @state
+          screen-height (get-in viewport [:view-size 1])
+          line-height (get-in viewport [:metrics :height])
+          lines-count (text/lines-count (get document :text))
+          text-end (- (* lines-count line-height) screen-height)]
+      (swap-editor! state
+                    #(update-in % [:viewport :pos]
+                                (fn [[x y]]
+                                  (let [dx (/ (.-wheelDeltaX evt) 2)
+                                        dy (/ (.-wheelDeltaY evt) 2)]
+                                    (if (< (js/Math.abs dx) (js/Math.abs dy))
+                                      [x (min text-end (max 0 (- y dy)))]
+                                      [(max 0 (- x dx)) y])))))
+      (.preventDefault evt))))
+
 
 (defn scroll [viewport init scroll-on-event]
   (let [once (atom true)]
