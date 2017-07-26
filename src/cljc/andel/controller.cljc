@@ -161,36 +161,29 @@
         pos-in-lines-end (+ pos-in-lines (count-lines-in-view viewport metrics))]
     [pos-in-lines pos-in-lines-end]))
 
-(defn pg-move [{:keys [document editor viewport] :as state} dir selection?]
+(defn move-view-if-needed [{:keys [document editor viewport] :as state}]
   (let [{:keys [text]} document
         {:keys [caret]} editor
         {:keys [metrics]} viewport
+        caret-l (utils/offset->line (caret->offset caret) text)
         [from-l to-l] (get-view-in-lines viewport metrics)
-        caret-line (utils/offset->line (caret->offset caret) text)]
-    (case dir
-      :up (if (or (not= caret-line from-l) (= caret-line 0))
-            (set-caret-at-line-begining state from-l selection?)
-            (let [screen-height (count-lines-in-view viewport metrics)
-                  new-from-l (-> from-l
-                                 (- (- screen-height 2))
-                                 (max 0))]
-              (-> state
-                  (set-view-to-line new-from-l metrics)
-                  (set-caret-at-line-begining new-from-l selection?))))
-      :down (cond
-              (utils/last-line? to-l text)
-              (set-caret-at-line-end state to-l selection?)
+        view-in-lines (- to-l from-l)]
+    (cond (and (< caret-l  from-l) (not= from-l 0))
+          (set-view-to-line state caret-l metrics)
 
-              (not= caret-line (dec to-l))
-              (set-caret-at-line-end state (dec to-l) selection?)
+          (< (dec to-l) caret-l)
+          (set-view-to-line state (- caret-l (dec view-in-lines)) metrics)
 
-              :else
-              (let [delta (- (count-lines-in-view viewport metrics) 2)
-                    new-from-l (+ from-l delta)
-                    new-to-l (+ to-l delta (- 1))]
-                (-> state
-                    (set-view-to-line new-from-l metrics)
-                    (set-caret-at-line-end new-to-l selection?)))))))
+          :else state)))
+
+(defn pg-move [{:keys [document viewport] :as state} dir selection?]
+  (let [{:keys [text]} document
+        {:keys [metrics]} viewport
+        view-size-in-lines (count-lines-in-view viewport metrics)
+        sign (case dir :up - :down +)]
+    (-> state
+        (update-in [:editor :caret] translate-caret-verticaly text (sign view-size-in-lines))
+        (move-view-if-needed))))
 
 (defn get-caret-line [caret text]
   (let [{caret-offset :offset} caret
@@ -208,21 +201,6 @@
              :as state} selection?]
   (let [carret-line (get-caret-line caret text)]
     (set-caret-at-line-end state (get-caret-line caret text) selection?)))
-
-(defn move-view-if-needed [{:keys [document editor viewport] :as state}]
-  (let [{:keys [text]} document
-        {:keys [caret]} editor
-        {:keys [metrics]} viewport
-        caret-l (utils/offset->line (caret->offset caret) text)
-        [from-l to-l] (get-view-in-lines viewport metrics)
-        view-in-lines (- to-l from-l)]
-    (cond (and (< caret-l  from-l) (not= from-l 0))
-          (set-view-to-line state caret-l metrics)
-
-          (< (dec to-l) caret-l)
-          (set-view-to-line state (- caret-l (dec view-in-lines)) metrics)
-
-          :else state)))
 
 (defn move-caret [{{:keys [text]} :document
                    {:keys [caret selection] } :editor
