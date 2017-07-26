@@ -103,7 +103,7 @@
 (defn insert-in [insert-loc i]
   (root (:loc (insert-one insert-loc i))))
 
-(def interval {:from 50 :to 100})
+(def interval {:from 2 :to 3})
 
 (-> [[1 3] [20 24]]
     from-to->tree
@@ -113,6 +113,11 @@
 
 (def i {:from 5
         :to 6})
+
+(defn make-empty-interval-tree []
+  (intervals->tree [Interval. nil 0 0]))
+
+(make-empty-interval-tree)
 
 (defn insert-one [loc i]
   (let [loc-from-to (from-to loc)]
@@ -127,20 +132,20 @@
                 (tree/right))
        :updated-base (:to i)})))
 
-(defn insert [it is]
-  (->> is
-       (reduce (fn [{:keys [loc updated-base]} i]
-                 (if (some? updated-base)
-                   (let [next-leaf (tree/next loc)
-                         next-leaf-from-to (from-to next-leaf)
-                         loc-fixed (if (<from-to next-leaf-from-to i)
-                                     (fix-offset next-leaf
-                                                 (- () updated-base)))]))
-                (let [insert-loc (tree/scan loc (by-offset (:from i)))]
-                  (insert-one insert-loc i)))
-              {:loc (zipper it)
-               :prev-to nil})
-       (:loc)
-       (root)))
+;(defn insert [it is]
+;  (->> is
+;       (reduce (fn [{:keys [loc updated-base]} i]
+;                 (if (some? updated-base)
+;                   (let [next-leaf (tree/next loc)
+;                         next-leaf-from-to (from-to next-leaf)
+;                         loc-fixed (if (<from-to next-leaf-from-to i)
+;                                     (fix-offset next-leaf
+;                                                 (- () updated-base)))]))
+;                (let [insert-loc (tree/scan loc (by-offset (:from i)))]
+;                  (insert-one insert-loc i)))
+;              {:loc (zipper it)
+;               :prev-to nil})
+;       (:loc)
+;       (root)))
 
 ;(insert-bulk tr [{:from 3 :to 5} {:from 5 :to 6}])
