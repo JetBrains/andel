@@ -2,19 +2,26 @@
   (:require [andel.intervals :refer :all]
             [clojure.test :refer :all]))
 
-(def interval {:from 2 :to 3})
-
-(-> [[1 3] [20 24]]
-    from-to->tree
-    (get-insert-loc interval)
-    (insert-in interval)
-    tree->from-to)
-
 (deftest create-and-destruct-tree
-  (is (let [ranges [[1 2] [4 8] [16 32]]]
+  (is (let [ranges [[5 10] [11 13] [17 20]]]
         (= ranges
            (-> ranges
                from-to->tree
                tree->from-to)))))
 
-(run-all-tests)
+(deftest simple-insert
+  (is (= (-> (make-empty-interval-tree)
+             (add-interval {:from 5 :to 10})
+             (tree->from-to))
+         [[5 10] [plus-infinity plus-infinity]])))
+
+(deftest insert-right
+  (is (= (-> (make-empty-interval-tree)
+             (add-interval {:from 5 :to 10})
+             (add-interval {:from 17 :to 20})
+             (add-interval {:from 11 :to 13})
+            (tree->from-to))
+         [[5 10] [11 13] [17 20] [plus-infinity plus-infinity]])))
+
+(run-tests)
+

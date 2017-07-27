@@ -3,12 +3,15 @@
 
 (defrecord Interval [offset len end-pos])
 
+(def plus-infinity #?(:cljs js/Number.POSITIVE_INFINITY
+                      :clj Double/POSITIVE_INFINITY))
+
 (defn reducing-fn
   ([] (Interval. nil 0 0))
   ([acc {:keys [offset len] :as i}]
      (let [acc-offset (or (:offset acc) offset)
-         end-pos' (+ (:end-pos acc) offset len)
-         len' (max (:len acc) (- (+ (:end-pos acc) offset len) acc-offset))]
+           end-pos' (+ (:end-pos acc) offset len)
+           len' (max (:len acc) (- (+ (:end-pos acc) offset len) acc-offset))]
      (Interval. acc-offset len' end-pos'))))
 
 (def tree-config {::tree/reducing-fn reducing-fn
@@ -79,8 +82,9 @@
           (tree/leaf? loc)
           (recur (tree/next loc)
                  (let [data (get-in loc [0 :data])]
-                   (when-not (nil? data)
-                     (conj acc (get-in loc [0 :data])))))
+                   (if data
+                     (conj acc data)
+                     acc)))
           :else
           (recur (tree/next loc)
                  acc))))
@@ -91,7 +95,7 @@
                                (+ offset base len)])
                     (+ offset base len)])
                  [[] 0]
-                 (reverse is))))
+                 is)))
 
 (def tree->from-to
   (comp intervals->from-to tree->intervals))
@@ -99,25 +103,6 @@
 (defn get-insert-loc [tr i]
   (tree/scan (zipper tr)
              (by-offset (:from i))))
-
-(defn insert-in [insert-loc i]
-  (root (:loc (insert-one insert-loc i))))
-
-(def interval {:from 2 :to 3})
-
-(-> [[1 3] [20 24]]
-    from-to->tree
-    (get-insert-loc interval)
-    (insert-in interval)
-    tree->from-to)
-
-(def i {:from 5
-        :to 6})
-
-(defn make-empty-interval-tree []
-  (intervals->tree [Interval. nil 0 0]))
-
-(make-empty-interval-tree)
 
 (defn insert-one [loc i]
   (let [loc-from-to (from-to loc)]
@@ -131,6 +116,29 @@
                 (tree/insert-right (make-leaf (:to loc-from-to) i))
                 (tree/right))
        :updated-base (:to i)})))
+
+(defn insert-in [insert-loc i]
+  (root (:loc (insert-one insert-loc i))))
+
+(def interval {:from 2 :to 3})
+
+(-> [[1 3] [20 24]]
+    from-to->tree
+    (get-insert-loc interval)
+    (insert-in interval)
+    #_tree->from-to)
+
+(def i {:from 5
+        :to 6})
+
+(defn make-empty-interval-tree []
+  (intervals->tree [(Interval. plus-infinity 0 plus-infinity)]))
+
+(defn add-interval [itree {:keys [from to] :as interval}]
+  (let [loc (get-insert-loc itree interval)]
+    (-> (insert-one loc interval)
+        :loc
+        root)))
 
 ;(defn insert [it is]
 ;  (->> is
