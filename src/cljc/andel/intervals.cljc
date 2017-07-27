@@ -34,11 +34,6 @@
     {:from (- end-pos (:len m))
      :to end-pos}))
 
-(defn <from-to [x y]
-  (or (< (:from x) (:from y))
-      (and (= (:from x) (:from y))
-           (< (:to y) (:to x)))))
-
 (defn make-leaf [left-sibling-pos i]
   (tree/make-leaf (Interval. (- (:from i) left-sibling-pos)
                              (- (:to i) (:from i))
@@ -106,19 +101,14 @@
 
 (defn insert-one [loc i]
   (let [loc-from-to (from-to loc)]
-    (if (<from-to i loc-from-to)
       (let [left-sibling-pos (:end-pos (tree/loc-acc loc))]
-        {:loc (-> loc
-                  (tree/insert-left (make-leaf left-sibling-pos i))
-                  (fix-offset (- (:from loc-from-to) (:to i))))
-         :updated-base nil})
-      {:loc (-> loc
-                (tree/insert-right (make-leaf (:to loc-from-to) i))
-                (tree/right))
-       :updated-base (:to i)})))
+        (-> loc
+            (tree/insert-left (make-leaf left-sibling-pos i))
+            (fix-offset (- (:from loc-from-to) (:to i)))))))
+
 
 (defn insert-in [insert-loc i]
-  (root (:loc (insert-one insert-loc i))))
+  (root (insert-one insert-loc i)))
 
 (def interval {:from 2 :to 3})
 
@@ -136,9 +126,7 @@
 
 (defn add-interval [itree {:keys [from to] :as interval}]
   (let [loc (get-insert-loc itree interval)]
-    (-> (insert-one loc interval)
-        :loc
-        root)))
+    (root (insert-one loc interval))))
 
 ;(defn insert [it is]
 ;  (->> is
