@@ -4,7 +4,7 @@
 (defrecord Interval [offset len end-pos])
 
 (def plus-infinity #?(:cljs js/Number.POSITIVE_INFINITY
-                      :clj Double/POSITIVE_INFINITY))
+                      :clj 100500 #_Double/POSITIVE_INFINITY))
 
 (defn reducing-fn
   ([] (Interval. nil 0 0))
@@ -25,20 +25,20 @@
 
 (defn root [loc] (tree/root loc))
 
-(defn by-offset [i]
-  #(< i (:end-pos %)))
+(defn by-offset [offset]
+  (let [counter (atom 0)]
+   (fn [m] 
+     (let [left-border (- (:end-pos m) (:len m) @atom)]
+       (prn "META: " m)
+       (prn "LEFT BORDER: " left-border)
+       (swap! update-in counter + (:len m))
+       (<= offset left-border)))))
 
 (defn from-to [loc]
   (let [m (:metrics (tree/node loc))
         {:keys [end-pos]} (reducing-fn (tree/loc-acc loc) m)]
     {:from (- end-pos (:len m))
      :to end-pos}))
-
-(defn make-leaf [left-sibling-pos i]
-  (tree/make-leaf (Interval. (- (:from i) left-sibling-pos)
-                             (- (:to i) (:from i))
-                             nil)
-                  tree-config))
 
 (defn fix-offset [loc offset']
   (tree/edit
@@ -99,12 +99,22 @@
   (tree/scan (zipper tr)
              (by-offset offset)))
 
-(defn insert-one [loc i]
-  (let [loc-from-to (from-to loc)]
-      (let [left-sibling-pos (:end-pos (tree/loc-acc loc))]
-        (-> loc
-            (tree/insert-left (make-leaf left-sibling-pos i))
-            (fix-offset (- (:from loc-from-to) (:to i)))))))
+(defn make-leaf [offset len]
+  (tree/make-leaf (Interval. offset
+                             len
+                             nil)
+                  tree-config))
+
+(defn insert-one [r-sibling-loc interval]
+  (let [r-offset-old (:offset (:metrics (tree/node r-sibling-loc)))
+        {r-from :from r-to :to} (from-to r-sibling-loc)
+        {i-from :from i-to :to} interval
+        i-len (- i-to i-from)
+        new-r-offset (- r-from i-to)
+        i-offset (- r-offset-old new-r-offset i-len)]
+    (-> r-sibling-loc
+        (tree/insert-left (make-leaf i-offset i-len))
+        (fix-offset new-r-offset))))
 
 (defn make-empty-interval-tree []
   (intervals->tree [(Interval. plus-infinity 0 plus-infinity)]))

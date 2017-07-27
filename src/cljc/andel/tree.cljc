@@ -215,8 +215,8 @@
 (def replace z/replace)
 (def insert-child z/insert-child)
 
-(defn root? [[_ {l :l}]]
-  (nil? l))
+(defn root? [[_ ctx]]
+  (nil? ctx))
 
 (defn reset [loc]
   (zipper (root loc)
