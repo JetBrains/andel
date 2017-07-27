@@ -95,9 +95,9 @@
 (def tree->from-to
   (comp intervals->from-to tree->intervals))
 
-(defn get-insert-loc [tr i]
+(defn scan-to-offset [tr offset]
   (tree/scan (zipper tr)
-             (by-offset (:from i))))
+             (by-offset offset)))
 
 (defn insert-one [loc i]
   (let [loc-from-to (from-to loc)]
@@ -106,27 +106,29 @@
             (tree/insert-left (make-leaf left-sibling-pos i))
             (fix-offset (- (:from loc-from-to) (:to i)))))))
 
-
-(defn insert-in [insert-loc i]
-  (root (insert-one insert-loc i)))
-
-(def interval {:from 2 :to 3})
-
-(-> [[1 3] [20 24]]
-    from-to->tree
-    (get-insert-loc interval)
-    (insert-in interval)
-    #_tree->from-to)
-
-(def i {:from 5
-        :to 6})
-
 (defn make-empty-interval-tree []
   (intervals->tree [(Interval. plus-infinity 0 plus-infinity)]))
 
 (defn add-interval [itree {:keys [from to] :as interval}]
-  (let [loc (get-insert-loc itree interval)]
+  (let [loc (scan-to-offset itree from)]
     (root (insert-one loc interval))))
+
+(defn query-markers [itree from to]
+  (let [start-loc (scan-to-offset itree from)]
+    (loop [loc start-loc
+           markers []]
+      (let [{loc-from :from loc-to :to}  (from-to loc)]
+        (cond
+          (< to loc-from)
+          markers
+
+          (tree/leaf? loc)
+          (recur (tree/next loc)
+                 (conj markers {:from loc-from :to loc-to}))
+
+          :else
+          (recur (tree/next loc)
+                  markers))))))
 
 ;(defn insert [it is]
 ;  (->> is

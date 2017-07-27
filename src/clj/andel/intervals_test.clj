@@ -37,7 +37,19 @@
              (add-interval {:from 10 :to 15})
              (add-interval {:from 10 :to 17})
              (tree->from-to))
+         ;; reversed to addition order
          [[10 17] [10 15] [10 18] [10 13] [10 11] [10 12] [plus-infinity plus-infinity]])))
+
+(deftest marker-query-test
+  (let [itree (-> (make-empty-interval-tree)
+                  (add-interval {:from 8 :to 18})
+                  (add-interval {:from 21 :to 30}))]
+    (is (= (query-markers itree 0 5) []))
+    (is (= (query-markers itree 5 8) [{:from 8 :to 18}]))
+    (is (= (query-markers itree 19 22) [{:from 21 :to 30}]))
+    (is (= (query-markers itree 10 25) [{:from 8 :to 18} {:from 21 :to 30}]))
+    (is (= (query-markers itree 2 35) [{:from 8 :to 18} {:from 21 :to 30}]))
+    (is (= (query-markers itree 35 50) []))))
 
 (run-tests)
 
