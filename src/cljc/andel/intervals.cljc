@@ -20,19 +20,30 @@
                   ::tree/split-thresh 4
                   ::tree/leaf-underflown? (constantly false)})
 
+(defrecord Int [offset length rightest])
+
+(defn r-fn
+  ([] nil)
+  ([{l-offset :offset l-rightest :rightest l-length :length :as left}
+    {r-offset :offset r-rightest :rightest r-length :length :as right}]
+     (cond (nil? left)
+           right
+           (nil? right)
+           left
+           :else
+           (map->Int :offset l-offset
+                     :rightest (+ l-rightest r-offset r-rightest) ;; left border of rightest interval in subtree relative to offset
+                     :length (max l-length (+ l-rightest r-offset r-length))))))
+
 (defn zipper [it]
   (tree/zipper it tree-config))
 
 (defn root [loc] (tree/root loc))
 
 (defn by-offset [offset]
-  (let [counter (atom 0)]
-   (fn [m] 
-     (let [left-border (- (:end-pos m) (:len m) @atom)]
-       (prn "META: " m)
-       (prn "LEFT BORDER: " left-border)
-       (swap! update-in counter + (:len m))
-       (<= offset left-border)))))
+   (fn [m]
+     (let [left-border (- (:end-pos m) (:len m))]
+       (<= offset left-border))))
 
 (defn from-to [loc]
   (let [m (:metrics (tree/node loc))
@@ -139,6 +150,11 @@
           :else
           (recur (tree/next loc)
                   markers))))))
+
+(comment
+  (-> (from-to->tree [[1 10] [3 6] [12 15]])
+      (tree->from-to))
+  )
 
 ;(defn insert [it is]
 ;  (->> is
