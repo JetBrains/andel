@@ -89,12 +89,15 @@
 
 (run-tests)
 
-(let [tree (from-to->tree [[10 20] [50 100] [150 1000]])]
-  (-> tree
-      (scan-to-offset 25)))
 
 (comment
 
+  (make-interval-tree)
+  
+  (let [tree (from-to->tree [[10 20] [50 100] [150 1000]])]
+    (-> tree
+        (scan-to-offset 25)))
+  
   (-> (make-empty-interval-tree)
       (add-interval {:from 5 :to 10})
       (scan-to-offset 3)

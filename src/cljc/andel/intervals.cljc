@@ -1,28 +1,13 @@
 (ns andel.intervals
   (:require [andel.tree :as tree]))
 
-(defrecord Interval [offset len end-pos])
 
 (def plus-infinity #?(:cljs js/Number.POSITIVE_INFINITY
                       :clj 100500 #_Double/POSITIVE_INFINITY))
 
+(defrecord Interval [offset length rightest])
+
 (defn reducing-fn
-  ([] (Interval. nil 0 0))
-  ([acc {:keys [offset len] :as i}]
-     (let [acc-offset (or (:offset acc) offset)
-           end-pos' (+ (:end-pos acc) offset len)
-           len' (max (:len acc) (- (+ (:end-pos acc) offset len) acc-offset))]
-     (Interval. acc-offset len' end-pos'))))
-
-(def tree-config {::tree/reducing-fn reducing-fn
-                  ::tree/metrics-fn identity
-                  ::tree/leaf-overflown? (constantly false)
-                  ::tree/split-thresh 4
-                  ::tree/leaf-underflown? (constantly false)})
-
-(defrecord Int [offset length rightest])
-
-(defn r-fn
   ([] nil)
   ([{l-offset :offset l-rightest :rightest l-length :length :as left}
     {r-offset :offset r-rightest :rightest r-length :length :as right}]
@@ -31,9 +16,16 @@
            (nil? right)
            left
            :else
-           (map->Int :offset l-offset
-                     :rightest (+ l-rightest r-offset r-rightest) ;; left border of rightest interval in subtree relative to offset
-                     :length (max l-length (+ l-rightest r-offset r-length))))))
+           (map->Interval {:offset l-offset
+                           :rightest (+ l-rightest r-offset r-rightest) ;; left border of rightest interval in subtree relative to offset
+                           :length (max l-length (+ l-rightest r-offset r-length))}))))
+
+
+(def tree-config {::tree/reducing-fn reducing-fn
+                  ::tree/metrics-fn identity
+                  ::tree/leaf-overflown? (constantly false)
+                  ::tree/split-thresh 4
+                  ::tree/leaf-underflown? (constantly false)})
 
 (defn zipper [it]
   (tree/zipper it tree-config))
@@ -41,17 +33,19 @@
 (defn root [loc] (tree/root loc))
 
 (defn by-offset [offset]
-   (fn [m]
-     (let [left-border (- (:end-pos m) (:len m))]
-       (<= offset left-border))))
+  (fn [m]
+    (< offset (:rightest m))))
 
 (defn from-to [loc]
+  "Last node position relative to accumulated offset"
   (let [m (:metrics (tree/node loc))
-        {:keys [end-pos]} (reducing-fn (tree/loc-acc loc) m)]
-    {:from (- end-pos (:len m))
-     :to end-pos}))
+        {:keys [offset rightest]} (reducing-fn (tree/loc-acc loc) m)
+        from (+ offset rightest)
+        length (:length m)]
+    {:from from
+     :to (+ from length)}))
 
-(defn fix-offset [loc offset']
+#_(defn fix-offset [loc offset']
   (tree/edit
    loc
    (fn [{:keys [metrics data] :as leaf}]
@@ -60,7 +54,7 @@
               :metrics fixed-interval
               :data fixed-interval)))))
 
-(defn from-to->intervals [is]
+#_(defn from-to->intervals [is]
   (first (reduce (fn [[res base] [from to]]
                    [(conj res (Interval. (- from base)
                                          (- to from)
@@ -68,16 +62,6 @@
                     to])
                  [[] 0]
                  is)))
-
-(defn intervals->tree [is]
-  (-> (map #(tree/make-leaf % tree-config) is)
-      (tree/make-node tree-config)
-      (zipper)
-      (assoc-in [1 :changed?] true)
-      (root)))
-
-(def from-to->tree
-  (comp intervals->tree from-to->intervals))
 
 (defn tree->intervals [tr]
   (loop [loc (zipper tr)
@@ -110,10 +94,10 @@
   (tree/scan (zipper tr)
              (by-offset offset)))
 
-(defn make-leaf [offset len]
-  (tree/make-leaf (Interval. offset
-                             len
-                             nil)
+(defn make-leaf [offset length]
+  (tree/make-leaf (map->Interval {:offset offset
+                                  :length length
+                                  0})
                   tree-config))
 
 (defn insert-one [r-sibling-loc interval]
@@ -127,8 +111,20 @@
         (tree/insert-left (make-leaf i-offset i-len))
         (fix-offset new-r-offset))))
 
-(defn make-empty-interval-tree []
-  (intervals->tree [(Interval. plus-infinity 0 plus-infinity)]))
+(defn intervals->tree [intervals]
+  (-> (map #(tree/make-leaf % tree-config) intervals)
+      (tree/make-node tree-config)
+      (zipper)
+      (assoc-in [1 :changed?] true)
+      (root)))
+
+(defn make-interval-tree []
+  (intervals->tree [(map->Interval {:offset   0
+                                    :length   0
+                                    :rightest 0})
+                    (map->Interval {:offset   plus-infinity
+                                    :length   0
+                                    :rightest 0})]))
 
 (defn add-interval [itree {:keys [from to] :as interval}]
   (let [loc (scan-to-offset itree from)]
@@ -152,7 +148,7 @@
                   markers))))))
 
 (comment
-  (-> (from-to->tree [[1 10] [3 6] [12 15]])
+  (-> [[1 10] [3 6] [12 15]]
       (tree->from-to))
   )
 
