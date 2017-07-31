@@ -73,8 +73,52 @@
                                                (= (sort-by :from (mapcat vec bulk-bulk))
                                                   (tree->intervals itree))))))))
 
+;; [{from to}] -> offset -> size -> [{from to}]
+(defn play-type-in [model offset size]
+  (->> model
+       (map (fn [{:keys [from to] :as interval}]
+              (cond
+                (and  (<= from offset) (< offset to))
+                {:from from :to (+ to size)}
+                
+                (< offset from)
+                {:from (+ from size) :to (+ to size)}
+                
+                :else
+                interval)))
+       vec))
+
+(def bulk-offset-size-gen
+  (g/bind intervals-bulk-gen
+          (fn [bulk] (let [max-val (->> bulk
+                                        (map :to)
+                                        (apply max 0))]
+                       (g/tuple (g/return bulk)
+                                (g/large-integer* {:min 0 :max max-val})
+                                (g/large-integer* {:min 1 :max 10000}))))))
+
+(first (g/sample bulk-offset-size-gen))
+
+(deftest single-insertion
+  (is (:result (tc/quick-check 5000
+                               (prop/for-all [[bulk offset size] bulk-offset-size-gen]
+                                             (let [real (-> (make-interval-tree)
+                                                            (add-intervals bulk)
+                                                            (type-in offset size)
+                                                            (tree->intervals))
+                                                   naive (play-type-in bulk offset size)]
+                                               (= naive real)))))))
+
+
 (comment 
   (run-tests)
 
+  (-> (make-interval-tree)
+      (add-intervals [{:from 0 :to 1}])
+      (type-in 0 1)
+      (tree->intervals))
+
+  (play-type-in [{:from 0 :to 1}] 0 1)
+  
   (clojure.test/test-vars [#'andel.intervals-test/generative]))
 
