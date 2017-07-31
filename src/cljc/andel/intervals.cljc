@@ -3,7 +3,7 @@
 
 
 (def plus-infinity #?(:cljs js/Number.POSITIVE_INFINITY
-                      :clj 100500 #_Double/POSITIVE_INFINITY))
+                      :clj Integer/MAX_VALUE #_100000 #_Double/POSITIVE_INFINITY))
 
 (defrecord Interval [offset length rightest])
 
@@ -51,6 +51,24 @@
    loc
    (fn [{:keys [metrics data] :as leaf}]
      (let [fixed-interval (assoc data :offset offset')]
+       (assoc leaf
+              :metrics fixed-interval
+              :data fixed-interval)))))
+
+(defn update-offset [loc f]
+  (tree/edit
+   loc
+   (fn [{:keys [metrics data] :as leaf}]
+     (let [fixed-interval (update data :offset f)]
+       (assoc leaf
+              :metrics fixed-interval
+              :data fixed-interval)))))
+
+(defn update-length [loc f]
+  (tree/edit
+   loc
+   (fn [{:keys [metrics data] :as leaf}]
+     (let [fixed-interval (update data :length f)]
        (assoc leaf
               :metrics fixed-interval
               :data fixed-interval)))))
@@ -114,6 +132,24 @@
 (defn add-intervals [itree intervals]
   (root (reduce insert-one (zipper itree) intervals)))
 
+(defn type-in [itree offset size]
+  (assert (<= 0 offset) "Offset must be not negative")
+  (let [start-loc (scan-to-end itree offset)]
+    (loop [loc start-loc]
+      (let [{loc-from :from loc-to :to :as loc-from-to} (from-to loc)]
+        (cond
+          (tree/node? (tree/node loc))
+          (recur (tree/next loc))
+
+          (< offset loc-from)
+          (root (update-offset loc #(+ size %)))
+          
+          :else
+          (recur (tree/next
+                  (if (< offset loc-to)
+                    (update-length loc #(+ size %))
+                    loc))))))))
+
 ;; add rightest right to monoid
 (defn query-intervals [itree from to]
   (let [start-loc (scan-to-end itree from)]
@@ -133,3 +169,14 @@
                  (if (< from loc-to)
                    (conj markers loc-from-to)
                    markers)))))))
+
+
+(comment
+  (-> (make-interval-tree)
+      (add-intervals [{:from 2 :to 6}                   
+                      {:from 4 :to 8}
+                      {:from 10 :to 12}])
+      (type-in 0 10)
+      #_(tree->intervals))
+
+  )
