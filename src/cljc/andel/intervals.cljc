@@ -33,15 +33,16 @@
 (defn root [loc] (tree/root loc))
 
 (defn by-offset [offset]
-  (fn [m]
-    (< offset (+ (:offset m) (:rightest m)))))
+  (fn [acc m]
+    (let [m (reducing-fn acc m)]
+      (< offset (+ (:offset m) (:rightest m))))))
 
 ;; ondefined for non leaf nodes
 (defn from-to [loc]
   "Last node position relative to accumulated offset"
   (let [m (:metrics (tree/node loc))
-        {:keys [offset rightest]} (reducing-fn (tree/loc-acc loc) m)
-        from (+ offset rightest)
+        rightest (or (:rightest (tree/loc-acc loc)) 0)
+        from (+ (:offset m) rightest)
         length (:length m)]
     {:from from
      :to (+ from length)}))
@@ -92,10 +93,24 @@
   (tree/scan (zipper tr)
              (by-offset offset)))
 
-(defn scan-to-end [tr offset]
-  (tree/scan (zipper tr)
-             (fn [m]
-               (< offset (+ (:offset m) (:length m))))))
+(defn intersect [a b]
+  (let [[fst snd] (if (< (:from a) (:from b)) [a b] [b a])
+        fst-len (- (:to fst) (:from fst))
+        snd-len (- (:to snd) (:from snd))]
+    (if (or (= fst-len 0) (= snd-len 0))
+      false
+      (< (:from snd) (:to fst)))))
+
+(defn scan-intersect [loc interval]
+  (tree/scan loc
+             (fn [acc-metrics node-metrics]
+               (let [rightest (or (:rightest acc-metrics) 0)
+                     offset (:offset node-metrics)
+                     length (:length node-metrics)
+                     from (+ offset rightest)]
+                 (intersect {:from from
+                             :to (+ from length)}
+                            interval)))))
 
 (defn make-leaf [offset length]
   (tree/make-leaf (map->Interval {:offset offset
@@ -134,7 +149,7 @@
 
 (defn type-in [itree offset size]
   (assert (<= 0 offset) "Offset must be not negative")
-  (let [start-loc (scan-to-end itree offset)]
+  (let [start-loc (scan-intersect (zipper itree) offset)]
     (loop [loc start-loc]
       (let [{loc-from :from loc-to :to :as loc-from-to} (from-to loc)]
         (cond
@@ -150,41 +165,31 @@
                     (update-length loc #(+ size %))
                     loc))))))))
 
-(defn intersect [a b]
-  (let [[fst snd] (if (< (:from a) (:from b)) [a b] [b a])
-        fst-len (- (:to fst) (:from fst))
-        snd-len (- (:to snd) (:from snd))]
-    (if (or (= fst-len 0) (= snd-len 0))
-      false
-      (< (:from snd) (:to fst)))))
-
 ;; add rightest right to monoid
 (defn query-intervals
   ([itree from to]
    (query-intervals itree {:from from :to to}))
   ([itree {:keys [from to] :as interval}]
-   (let [start-loc (scan-to-end itree from)]
-     (loop [loc start-loc
-            markers []]
-       (let [{loc-from :from loc-to :to :as loc-from-to} (from-to loc)]
-         (cond
-           (tree/node? (tree/node loc))
-           (recur (tree/next loc)
-                  markers)
+   (loop [loc (zipper itree)
+          markers []]
+     (cond 
+       (tree/end? loc)
+       markers
 
-           (<= to loc-from)
-           markers
-           
-           :else
-           (recur (tree/next loc)
-                  (if (intersect interval loc-from-to)
-                    (conj markers loc-from-to)
-                    markers))))))))
+       (tree/leaf? (tree/node loc))
+       (recur (scan-intersect (tree/next loc) interval)
+              (conj markers (from-to loc)))
+
+       :else
+       (recur (scan-intersect loc interval)
+              markers)))))
 
 
 (comment
   (-> (make-interval-tree)
-      (zipper)
-      (from-to))
+      (add-intervals [{:from 0 :to 1000} {:from 1 :to 2} {:from 4 :to 8} {:from 16 :to 32} {:from 64 :to 128}
+                      {:from 256 :to 512} {:from 700 :to 800}])
+      (query-intervals 600 900)
+      )
 
   )

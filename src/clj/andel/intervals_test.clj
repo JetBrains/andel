@@ -41,11 +41,12 @@
                   (add-intervals [{:from 8 :to 18}])
                   (add-intervals [{:from 21 :to 30}]))]
     (is (= [] (query-intervals itree 1 5)))
-    (is (= [{:from 8 :to 18}] (query-intervals itree 5 8)))
+    (is (= [] (query-intervals itree 5 8)))
     (is (= [{:from 21 :to 30}] (query-intervals itree 19 22)))
     (is (= [{:from 8 :to 18} {:from 21 :to 30}] (query-intervals itree 10 25)))
     (is (= [{:from 8 :to 18} {:from 21 :to 30}] (query-intervals itree 2 35)))
     (is (= [] (query-intervals itree 35 50)))))
+
 
 (def intervals-bulk-gen (g/fmap (fn [v] (vec (sort-by :from v)))
                                 (g/vector

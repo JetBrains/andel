@@ -232,8 +232,9 @@
                             [n & r] (cons node rights)
                             acc (or acc (reducing-fn))]
                        (when (some? n)
-                         (let [acc' (reducing-fn acc (:metrics n))]
-                           (if (pred acc')
+                         (let [m (:metrics n)
+                               acc' (reducing-fn acc m)]
+                           (if (pred acc m)
                              (with-meta [n (-> path
                                                (transient)
                                                (assoc! :l (persistent! l))
