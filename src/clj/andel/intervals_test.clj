@@ -63,7 +63,6 @@
                                                (= (tree->intervals itree)
                                                   bulk)))))))
 
-(mapcat vec (nth (g/sample (g/vector intervals-bulk-gen)) 5))
 
 (deftest multiple-bulk-insertion
   (is (:result (tc/quick-check 100
@@ -141,7 +140,7 @@
 
   (-> [{:from 0 :to 0} {:from 0 :to 1}]
       (play-query {:from 0 :to 1}))
-  
+  q
   (-> (make-interval-tree)
       (add-intervals [{:from 0 :to 1}])
       (query-intervals 0 0))

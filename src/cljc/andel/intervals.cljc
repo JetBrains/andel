@@ -148,8 +148,7 @@
   (root (reduce insert-one (zipper itree) intervals)))
 
 (defn type-in [itree offset size]
-  (assert (<= 0 offset) "Offset must be not negative")
-  (let [start-loc (scan-intersect (zipper itree) offset)]
+  (let [start-loc (scan-intersect (zipper itree) {:from offset :to (inc offset)})]
     (loop [loc start-loc]
       (let [{loc-from :from loc-to :to :as loc-from-to} (from-to loc)]
         (cond
@@ -165,7 +164,6 @@
                     (update-length loc #(+ size %))
                     loc))))))))
 
-;; add rightest right to monoid
 (defn query-intervals
   ([itree from to]
    (query-intervals itree {:from from :to to}))
@@ -183,13 +181,3 @@
        :else
        (recur (scan-intersect loc interval)
               markers)))))
-
-
-(comment
-  (-> (make-interval-tree)
-      (add-intervals [{:from 0 :to 1000} {:from 1 :to 2} {:from 4 :to 8} {:from 16 :to 32} {:from 64 :to 128}
-                      {:from 256 :to 512} {:from 700 :to 800}])
-      (query-intervals 600 900)
-      )
-
-  )
