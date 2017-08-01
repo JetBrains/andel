@@ -97,10 +97,8 @@
                                 (g/large-integer* {:min 0 :max max-val})
                                 (g/large-integer* {:min 1 :max 10000}))))))
 
-(first (g/sample bulk-offset-size-gen))
-
 (deftest single-insertion
-  (is (:result (tc/quick-check 5000
+  (is (:result (tc/quick-check 1000
                                (prop/for-all [[bulk offset size] bulk-offset-size-gen]
                                              (let [real (-> (make-interval-tree)
                                                             (add-intervals bulk)
@@ -109,14 +107,48 @@
                                                    naive (play-type-in bulk offset size)]
                                                (= naive real)))))))
 
+(defn play-query [model {:keys [from to]}]
+  (vec (filter #(intersect % {:from from :to to}) model)))
+
+(defn from-to-gen [max-val]
+  (g/fmap (fn [[x y]] (if (< x y)
+                        {:from x :to y}
+                        {:from y :to x}))
+          (g/tuple (g/large-integer* {:min 0 :max max-val})
+                   (g/large-integer* {:min 0 :max max-val}))))
+
+(def bulk-and-queries-gen
+  (g/bind intervals-bulk-gen
+          (fn [bulk] (g/tuple (g/return bulk)
+                              (g/vector (from-to-gen (->> bulk
+                                                       (map :to)
+                                                       (apply max 0))))))))
+
+(deftest query-test
+  (is (:result (tc/quick-check 1000
+                               (prop/for-all [[bulk queries] bulk-and-queries-gen]
+                                             (= (map play-query (repeat bulk) queries)
+                                                (let [generated-tree (-> (make-interval-tree)
+                                                                         (add-intervals bulk))]
+                                                  (map query-intervals (repeat generated-tree) queries))))))))
 
 (comment 
   (run-tests)
 
+  [[[{:from 0, :to 1}]
+    [{:from 0, :to 0}]]]
+
+  (-> [{:from 0 :to 0} {:from 0 :to 1}]
+      (play-query {:from 0 :to 1}))
+  
   (-> (make-interval-tree)
       (add-intervals [{:from 0 :to 1}])
-      (type-in 0 1)
-      (tree->intervals))
+      (query-intervals 0 0))
+
+  (intersect {:from 0 :to 1} {:from 0 :to 0})
+  
+  (-> (make-interval-tree)
+      (query-intervals 2 2))
 
   (play-type-in [{:from 0 :to 1}] 0 1)
   

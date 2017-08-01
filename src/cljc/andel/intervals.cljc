@@ -150,33 +150,41 @@
                     (update-length loc #(+ size %))
                     loc))))))))
 
-;; add rightest right to monoid
-(defn query-intervals [itree from to]
-  (let [start-loc (scan-to-end itree from)]
-    (loop [loc start-loc
-           markers []]
-      (let [{loc-from :from loc-to :to :as loc-from-to} (from-to loc)]
-        (cond
-          (tree/node? (tree/node loc))
-          (recur (tree/next loc)
-                 markers)
+(defn intersect [a b]
+  (let [[fst snd] (if (< (:from a) (:from b)) [a b] [b a])
+        fst-len (- (:to fst) (:from fst))
+        snd-len (- (:to snd) (:from snd))]
+    (if (or (= fst-len 0) (= snd-len 0))
+      false
+      (< (:from snd) (:to fst)))))
 
-          (< to loc-from)
-          markers
-          
-          :else
-          (recur (tree/next loc)
-                 (if (< from loc-to)
-                   (conj markers loc-from-to)
-                   markers)))))))
+;; add rightest right to monoid
+(defn query-intervals
+  ([itree from to]
+   (query-intervals itree {:from from :to to}))
+  ([itree {:keys [from to] :as interval}]
+   (let [start-loc (scan-to-end itree from)]
+     (loop [loc start-loc
+            markers []]
+       (let [{loc-from :from loc-to :to :as loc-from-to} (from-to loc)]
+         (cond
+           (tree/node? (tree/node loc))
+           (recur (tree/next loc)
+                  markers)
+
+           (<= to loc-from)
+           markers
+           
+           :else
+           (recur (tree/next loc)
+                  (if (intersect interval loc-from-to)
+                    (conj markers loc-from-to)
+                    markers))))))))
 
 
 (comment
   (-> (make-interval-tree)
-      (add-intervals [{:from 2 :to 6}                   
-                      {:from 4 :to 8}
-                      {:from 10 :to 12}])
-      (type-in 0 10)
-      #_(tree->intervals))
+      (zipper)
+      (from-to))
 
   )
