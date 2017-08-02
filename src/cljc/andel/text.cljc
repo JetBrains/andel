@@ -74,10 +74,10 @@
 (def root tree/root)
 
 (defn by-offset [i]
-  #(< i (nth % 0)))
+  (fn [acc m] (< i (nth (r-f acc m) 0))))
 
 (defn by-line [i]
-  #(<= i (nth % 1)))
+  (fn [acc m] (<= i (nth (r-f acc m) 1))))
 
 (defn offset [[node {acc ::tree/acc
                      o-acc ::overriding-acc} :as loc]]
