@@ -17,7 +17,8 @@
            left
            :else
            (map->Interval {:offset l-offset
-                           :rightest (+ l-rightest r-offset r-rightest) ;; left border of rightest interval in subtree relative to offset
+                           :rightest (+ l-rightest r-offset r-rightest)
+                           ;; left border of rightest interval in subtree relative to offset
                            :length (max l-length (+ l-rightest r-offset r-length))}))))
 
 
@@ -37,9 +38,7 @@
     (let [m (reducing-fn acc m)]
       (< offset (+ (:offset m) (:rightest m))))))
 
-;; ondefined for non leaf nodes
 (defn from-to [loc]
-  "Last node position relative to accumulated offset"
   (let [m (:metrics (tree/node loc))
         rightest (or (:rightest (tree/loc-acc loc)) 0)
         from (+ (:offset m) rightest)
@@ -47,32 +46,19 @@
     {:from from
      :to (+ from length)}))
 
-(defn fix-offset [loc offset']
-  (tree/edit
-   loc
-   (fn [{:keys [metrics data] :as leaf}]
-     (let [fixed-interval (assoc data :offset offset')]
-       (assoc leaf
-              :metrics fixed-interval
-              :data fixed-interval)))))
+(defn update-leaf [loc f]
+  (tree/edit loc
+             (fn [{:keys [data] :as leaf}]
+               (let [fixed-interval (f data)]
+                 (assoc leaf
+                        :metrics fixed-interval
+                        :data fixed-interval)))))
 
-(defn update-offset [loc f]
-  (tree/edit
-   loc
-   (fn [{:keys [metrics data] :as leaf}]
-     (let [fixed-interval (update data :offset f)]
-       (assoc leaf
-              :metrics fixed-interval
-              :data fixed-interval)))))
+(defn update-leaf-offset [loc f]
+  (update-leaf loc (fn [data] (update data :offset f))))
 
-(defn update-length [loc f]
-  (tree/edit
-   loc
-   (fn [{:keys [metrics data] :as leaf}]
-     (let [fixed-interval (update data :length f)]
-       (assoc leaf
-              :metrics fixed-interval
-              :data fixed-interval)))))
+(defn update-leaf-length [loc f]
+  (update-leaf loc (fn [data] (update data :length f))))
 
 (defn tree->intervals [tr]
   (loop [loc (zipper tr)
@@ -88,10 +74,6 @@
           
           :else
           (recur (tree/next loc) acc))))
-
-(defn scan-to-offset [tr offset]
-  (tree/scan (zipper tr)
-             (by-offset offset)))
 
 (defn intersect [a b]
   (let [[fst snd] (if (< (:from a) (:from b)) [a b] [b a])
@@ -142,7 +124,7 @@
         offset (- r-offset new-r-offset)]
     (-> r-sibling-loc
         (tree/insert-left (make-leaf offset len))
-        (fix-offset new-r-offset))))
+        (update-leaf-offset (constantly new-r-offset)))))
 
 (defn add-intervals [itree intervals]
   (root (reduce insert-one (zipper itree) intervals)))
