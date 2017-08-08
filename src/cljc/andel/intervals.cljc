@@ -5,7 +5,7 @@
 (def plus-infinity #?(:cljs js/Number.POSITIVE_INFINITY
                       :clj Integer/MAX_VALUE #_100000 #_Double/POSITIVE_INFINITY))
 
-(defrecord Interval [offset length rightest])
+(defrecord Interval [offset length rightest greedy-left? greedy-right?])
 
 (defn reducing-fn
   ([] nil)
@@ -44,7 +44,9 @@
         from (+ (:offset m) rightest)
         length (:length m)]
     {:from from
-     :to (+ from length)}))
+     :to (+ from length)
+     :greedy-left? (:greedy-left? (:data (tree/node loc)))
+     :greedy-right? (:greedy-right? (:data (tree/node loc)))}))
 
 (defn update-leaf [loc f]
   (assert (tree/leaf? (tree/node loc)) "update-leaf should recieve list")
@@ -96,10 +98,12 @@
                              :to (+ from length)}
                             interval)))))
 
-(defn make-leaf [offset length]
+(defn make-leaf [offset length greedy-left? greedy-right?]
   (tree/make-leaf (map->Interval {:offset offset
                                   :length length
-                                  :rightest 0})
+                                  :rightest 0
+                                  :greedy-left? greedy-left?
+                                  :greedy-right? greedy-right?})
                   tree-config))
 
 (defn intervals->tree [intervals]
@@ -112,12 +116,16 @@
 (defn make-interval-tree []
   (intervals->tree [(map->Interval {:offset   0
                                     :length   0
-                                    :rightest 0})
+                                    :rightest 0
+                                    :greedy-left? false
+                                    :greedy-right? false})
                     (map->Interval {:offset   plus-infinity
                                     :length   0
-                                    :rightest 0})]))
+                                    :rightest 0
+                                    :greedy-left? false
+                                    :greedy-right? false})]))
 
-(defn insert-one [loc {:keys [from to] :as interval}]
+(defn insert-one [loc {:keys [from to greedy-left? greedy-right?] :as interval}]
   (let [r-sibling-loc (tree/scan loc (by-offset from))
         r-offset (-> r-sibling-loc tree/node :metrics :offset)
         {r-from :from r-to :to} (from-to r-sibling-loc)
@@ -125,7 +133,7 @@
         new-r-offset (- r-from from)
         offset (- r-offset new-r-offset)]
     (-> r-sibling-loc
-        (tree/insert-left (make-leaf offset len))
+        (tree/insert-left (make-leaf offset len greedy-left? greedy-right?))
         (update-leaf-offset (constantly new-r-offset)))))
 
 (defn add-intervals [itree intervals]
@@ -172,17 +180,25 @@
             [(tree/root (update-leaf-offset new-loc #(+ % size))) acc]
             (recur (remove-leaf new-loc) (conj acc from-to))))))))
 
-(defn process-interval [{:keys [from to] :as interval} offset size]
+(defn process-interval [{:keys [from to greedy-left? greedy-right?] :as interval} offset size]
   (cond
-    (and (<= from offset)
-         (<= offset to))
+    (and greedy-left?
+         (= offset from))
     (assoc interval :to (+ to size))
-
-    (< offset from)
+    
+    (and greedy-right?
+         (= offset to))
+    (assoc interval :to (+ to size))
+    
+    (and (< from offset)
+         (< offset to))
+    (assoc interval :to (+ to size))
+    
+    (<= offset from)
     (assoc interval
            :to (+ to size)
            :from (+ from size))
-
+    
     :else
     interval))
 
@@ -194,15 +210,15 @@
 (comment
 
   (-> (make-interval-tree)
-      (add-intervals [{:from 4 :to 10} {:from 6 :to 15} {:from 9 :to 12}])
+      (add-intervals [{:from 4 :to 10 :greedy-left? false :greedy-right? false}
+                      {:from 6 :to 15 :greedy-left? false :greedy-right? true}
+                      {:from 9 :to 12 :greedy-left? false :greedy-right? true}])
       (type-in 4 3)
       (tree->intervals)
       #_(collect-with-remove 5 3)
       #_((fn [[tree coll]] [(tree->intervals tree) coll])))
 
   )
-
-(+ 2 2)
   
   
 
