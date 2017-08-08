@@ -193,6 +193,13 @@
          (or (right u) (recur u))
          [(z/node p) :end])))))
 
+(defn next-leaf [loc]
+  (let [loc (next loc)]
+    (if (or (leaf? loc)
+            (end? loc))
+      loc
+      (recur loc))))
+
 (defn skip
   "Just like next but not going down"
   [loc]
