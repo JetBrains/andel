@@ -48,6 +48,22 @@
      :greedy-left? (:greedy-left? (:data (tree/node loc)))
      :greedy-right? (:greedy-right? (:data (tree/node loc)))}))
 
+(defn offset->tree-basis [offset]
+  (inc offset))
+
+(defn interval->tree-basis [interval]
+  (-> interval 
+      (update :from offset->tree-basis)
+      (update :to offset->tree-basis)))
+
+(defn tree-basis->offset [offset]
+  (dec offset))
+
+(defn tree-basis->interval [interval]
+  (-> interval
+      (update :from tree-basis->offset)
+      (update :to tree-basis->offset)))
+
 (defn update-leaf [loc f]
   (assert (tree/leaf? (tree/node loc)) "update-leaf should recieve leaf")
   (tree/edit loc
@@ -70,6 +86,7 @@
           (->> acc
                (drop 1)       ;; drop left sentinel
                (drop-last 1)  ;; drop right sentinel
+               (map tree-basis->interval)
                (vec))
           
           (tree/leaf? (tree/node loc))
@@ -138,7 +155,10 @@
         (update-leaf-offset (constantly new-r-offset)))))
 
 (defn add-intervals [itree intervals]
-  (root (reduce insert-one (zipper itree) intervals)))
+  (->> intervals
+       (map interval->tree-basis)
+       (reduce insert-one (zipper itree))
+       root))
 
 (defn unpack-leaf [loc]
   (assert (tree/leaf? loc))
@@ -204,44 +224,50 @@
     interval))
 
 (defn type-in [itree [offset size]]  
-  (let [[itree' intervals] (collect-with-remove itree offset size)
+  (let [offset (offset->tree-basis offset)
+        [itree' intervals] (collect-with-remove itree offset size)
         intervals' (sort-by :from (map #(process-interval % offset size) intervals))]
-    (add-intervals itree' intervals')))
+    (->> intervals'
+         (reduce insert-one (zipper itree'))
+         root)))
+
 
 (defn query-intervals
   ([itree from to]
    (query-intervals itree {:from from :to to}))
-  ([itree {:keys [from to] :as interval}]
-   (loop [loc (zipper itree)
-          markers []]
-     (cond 
-       (tree/end? loc)
-       markers
+  ([itree interval]
+   (let [{:keys [from to] :as interval} (interval->tree-basis interval)]
+     (loop [loc (zipper itree)
+            markers []]
+       (cond 
+         (tree/end? loc)
+         (map tree-basis->interval markers)
 
-       (tree/leaf? (tree/node loc))
-       (recur (scan-intersect (tree/next loc) interval)
-              (conj markers (from-to loc)))
+         (tree/leaf? (tree/node loc))
+         (recur (scan-intersect (tree/next loc) interval)
+                (conj markers (from-to loc)))
 
-       :else
-       (recur (scan-intersect loc interval)
-              markers)))))
+         :else
+         (recur (scan-intersect loc interval)
+                markers))))))
 
 ;;    query-and-loc :: loc -> {:from, :to} -> [[marker], loc]
-(defn query-and-loc [loc {:keys [from to] :as interval}]
-  (loop [loc loc
-         markers []
-         next-loc nil]
-    (cond
-      (or (tree/end? loc))
-      [markers next-loc]
+(defn query-and-loc [loc interval]
+  (let [{:keys [from to] :as interval} (interval->tree-basis interval)]
+    (loop [loc loc
+           markers []
+           next-loc nil]
+      (cond
+        (or (tree/end? loc))
+        [(map tree-basis->interval markers) next-loc]
 
-      (tree/leaf? (tree/node loc))
-      (let [{loc-to :to :as marker} (from-to loc)]
-        (recur (scan-intersect (tree/next loc) interval)
-               (conj markers marker)
-               (or next-loc (if (<= to loc-to) loc))))
+        (tree/leaf? (tree/node loc))
+        (let [{loc-to :to :as marker} (from-to loc)]
+          (recur (scan-intersect (tree/next loc) interval)
+                 (conj markers marker)
+                 (or next-loc (if (<= to loc-to) loc))))
 
-      :else
-      (recur (scan-intersect loc interval)
-             markers
-             (or next-loc loc)))))
+        :else
+        (recur (scan-intersect loc interval)
+               markers
+               (or next-loc loc))))))

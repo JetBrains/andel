@@ -63,8 +63,8 @@
                                             :to (max a b)
                                             :greedy-left? g-l?
                                             :greedy-right? g-r?})
-                                         (g/tuple (g/large-integer* {:min 1 :max 10000})
-                                                  (g/large-integer* {:min 1 :max 10000})
+                                         (g/tuple (g/large-integer* {:min 0 :max 10000})
+                                                  (g/large-integer* {:min 0 :max 10000})
                                                   g/boolean
                                                   g/boolean))
                                  0 100)))
@@ -122,8 +122,8 @@
                                         (map :to)
                                         (apply max 0))]
                        (g/tuple (g/return bulk)
-                                (g/vector (g/tuple (g/large-integer* {:min 1 :max (inc max-val)})
-                                                   (g/large-integer* {:min 1 :max 10000}))))))))
+                                (g/vector (g/tuple (g/large-integer* {:min 0 :max max-val})
+                                                   (g/large-integer* {:min 0 :max 10000}))))))))
 
 (deftest type-in-positive-test
   (is (:result (tc/quick-check 1000
@@ -171,6 +171,10 @@
                                                 (let [generated-tree (-> (make-interval-tree)
                                                                          (add-intervals bulk))]
                                                   (map q&l-wrapper (repeat generated-tree) queries))))))))
+
+(comment
+  (play-query [{:from 0 :to 1 :greedy-left? false :greedy-right? false}] {:from 0 :to 1})
+  )
 
 (defn play-queries [model [q & qs] acc]
   (if (nil? q)
