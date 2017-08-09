@@ -135,6 +135,34 @@
                                                                              (add-intervals bulk))
                                                                          qs)))))))))
 
+;; interval -> [offset length] -> interval
+(defn delete-range-once [interval [offset length]]
+  (let [update-point (fn [point offset length] (if (< offset point)
+                                                 (max offset (- point length))
+                                                 point))]
+    (-> interval
+        (update :from update-point offset length)
+        (update :to update-point offset length))))
+
+;; model -> [offset size] -> model
+(defn play-delete-range-once [model q]
+  (map #(delete-range-once % q) model))
+
+(defn play-delete-range-many [model [q & qs]]
+  (if (nil? q)
+    model
+    (recur (play-delete-range-once model q) qs)))
+
+(def test-delete-range
+  (is (:result (tc/quick-check 1000
+                               (prop/for-all [[bulk qs] bulk-offset-size-gen]
+                                             (= (sort-intervals (play-delete-range-many bulk qs))
+                                                (sort-intervals (tree->intervals
+                                                                 (reduce delete-range
+                                                                         (-> (make-interval-tree)
+                                                                             (add-intervals bulk))
+                                                                         qs)))))))))
+
 (defn play-query [model {:keys [from to]}]
   (vec (filter #(intersect % {:from from :to to}) model)))
 
@@ -171,10 +199,6 @@
                                                 (let [generated-tree (-> (make-interval-tree)
                                                                          (add-intervals bulk))]
                                                   (map q&l-wrapper (repeat generated-tree) queries))))))))
-
-(comment
-  (play-query [{:from 0 :to 1 :greedy-left? false :greedy-right? false}] {:from 0 :to 1})
-  )
 
 (defn play-queries [model [q & qs] acc]
   (if (nil? q)

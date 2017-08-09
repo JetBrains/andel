@@ -103,6 +103,10 @@
       false
       (< (:from snd) (:to fst)))))
 
+(defn intersect-inclusive [a b]
+  (let [[fst snd] (if (< (:from a) (:from b)) [a b] [b a])]
+    (<= (:from snd) (:to fst))))
+
 (defn scan-intersect [loc interval]
   (tree/scan loc
              (fn [acc-metrics node-metrics]
@@ -231,6 +235,43 @@
          (reduce insert-one (zipper itree'))
          root)))
 
+
+(defn collect-with-remove-changed [itree offset size]
+  (let [changed? (fn [acc-metrics node-metrics]
+                   (let [metrics (reducing-fn acc-metrics node-metrics)
+                         rightest (or (:rightest acc-metrics) 0)
+                         node-offset (:offset node-metrics)
+                         length (:length node-metrics)
+                         from (+ node-offset rightest)
+                         to (+ from length)]
+                     (or (intersect-inclusive {:from from :to to} {:from offset :to (+ offset size)})
+                         
+                         (< (+ offset size) (+ (:offset metrics) (:rightest metrics))))))]
+    (loop [loc (zipper itree)
+           acc []]
+      (let [new-loc (tree/scan loc changed?)]
+        (if (tree/end? new-loc)
+          [(tree/root new-loc) acc]
+          (let [{:keys [from to] :as from-to} (from-to new-loc)]
+            (if (< (+ offset size) from)
+              [(tree/root (update-leaf-offset new-loc #(- % size))) acc]
+              (recur (remove-leaf new-loc) (conj acc from-to)))))))))
+
+(defn process-single-interval-deletion [interval offset length]
+  (let [update-point (fn [point offset length] (if (< offset point)
+                                                 (max offset (- point length))
+                                                 point))]
+    (-> interval
+        (update :from update-point offset length)
+        (update :to update-point offset length))))
+
+(defn delete-range [itree [offset size]]
+  (let [offset (offset->tree-basis offset)
+        [itree' intervals] (collect-with-remove-changed itree offset size)
+        intervals' (sort-by :from (map #(process-single-interval-deletion % offset size) intervals))]
+    (->> intervals'
+         (reduce insert-one (zipper itree'))
+         root)))
 
 (defn query-intervals
   ([itree from to]
