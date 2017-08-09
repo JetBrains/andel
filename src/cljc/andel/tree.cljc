@@ -193,13 +193,6 @@
          (or (right u) (recur u))
          [(z/node p) :end])))))
 
-(defn next-leaf [loc]
-  (let [loc (next loc)]
-    (if (or (leaf? loc)
-            (end? loc))
-      loc
-      (recur loc))))
-
 (defn skip
   "Just like next but not going down"
   [loc]
@@ -221,6 +214,13 @@
 (def edit z/edit)
 (def replace z/replace)
 (def insert-child z/insert-child)
+
+(defn next-leaf [loc]
+  (let [loc (next loc)]
+    (if (or (leaf? (node loc))
+            (end? loc))
+      loc
+      (recur loc))))
 
 (defn root? [[_ ctx]]
   (nil? ctx))
