@@ -108,9 +108,9 @@
   (vec (filter #(intersect % {:from from :to to}) model)))
 
 (defn query-gen [max-val]
-  (g/fmap (fn [[x y]] (if (< x y)
-                        {:from x :to y}
-                        {:from y :to x}))
+  (g/fmap (fn [[x y]]
+            {:from (min x y)
+             :to   (max x y)})
           (g/tuple (g/large-integer* {:min 0 :max max-val})
                    (g/large-integer* {:min 0 :max max-val}))))
 
@@ -127,8 +127,23 @@
                                              (= (map play-query (repeat bulk) queries)
                                                 (map query-intervals (repeat (bulk->tree bulk)) queries)))))))
 
-(comment
-  (run-tests)
-  
-  )
+(def operation-gen
+  (g/tuple (g/one-of [(g/return [play-type-in type-in])
+                      (g/return [play-delete-range delete-range])])
+           (g/tuple (g/large-integer* {:min 0 :max 10000000})
+                    (g/large-integer* {:min 0 :max 10000000}))))
+
+(deftest type-and-delete-test
+  (is (:result (tc/quick-check 1000
+                               (prop/for-all
+                                [bulk intervals-bulk-gen
+                                 ops (g/vector operation-gen)]
+                                (let [[tree model] (reduce (fn [[tree model] [[play real] args]]
+                                                             [(real tree args)
+                                                              (play model args)])
+                                                           [(bulk->tree bulk) bulk]
+                                                           ops)]
+                                  (= (set (tree->intervals tree))
+                                     (set model))))))))
+
 
