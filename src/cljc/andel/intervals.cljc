@@ -291,24 +291,3 @@
          :else
          (recur (scan-intersect loc interval)
                 markers))))))
-
-;;    query-and-loc :: loc -> {:from, :to} -> [[marker], loc]
-(defn query-and-loc [loc interval]
-  (let [{:keys [from to] :as interval} (interval->tree-basis interval)]
-    (loop [loc loc
-           markers []
-           next-loc nil]
-      (cond
-        (or (tree/end? loc))
-        [(map tree-basis->interval markers) next-loc]
-
-        (tree/leaf? (tree/node loc))
-        (let [{loc-to :to :as marker} (from-to loc)]
-          (recur (scan-intersect (tree/next loc) interval)
-                 (conj markers marker)
-                 (or next-loc (if (<= to loc-to) loc))))
-
-        :else
-        (recur (scan-intersect loc interval)
-               markers
-               (or next-loc loc))))))

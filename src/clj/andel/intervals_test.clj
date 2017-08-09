@@ -8,57 +8,11 @@
 
 
 (defn compare-intervals [a b]
-  (or (< (:from a) (:from b))
-      (and (= (:from a) (:from b))
-           (< (:to a) (:to b)))
-      (and (= (:from a) (:from b))
-           (= (:to a) (:to b))
-           (and (:greedy-left? a)
-                (not (:greedy-left? b))))
-      (and (= (:from a) (:from b))
-           (= (:to a) (:to b))
-           (= (:greedy-left? a) (:greedy-left? b))
-           (and (:greedy-right? a)
-                (not (:greedy-right? b))))))
+  (< (:from a) (:from b)))
 
-(def interval-comparator (comparator compare-intervals))
+(def sort-intervals (partial sort (comparator compare-intervals)))
 
-(def sort-intervals (partial sort interval-comparator))
-
-(deftest simple-insert
-  (let [itree (-> (make-interval-tree)
-                  (add-intervals [{:from 5 :to 10 :greedy-left? false :greedy-right? false}]))]
-    (is (= (tree->intervals itree) [{:from 5 :to 10 :greedy-left? false :greedy-right? false}]))))
-
-(deftest multiple-insertitions
-  (let [intervals [{:from 1 :to 10 :greedy-left? false :greedy-right? false}
-                   {:from 9 :to 11 :greedy-left? false :greedy-right? false}
-                   {:from 8 :to 12 :greedy-left? false :greedy-right? false}
-                   {:from 3 :to 17 :greedy-left? false :greedy-right? false}
-                   {:from 2 :to 18 :greedy-left? false :greedy-right? false}
-                   {:from 7 :to 13 :greedy-left? false :greedy-right? false}
-                   {:from 6 :to 14 :greedy-left? false :greedy-right? false}
-                   {:from 5 :to 15 :greedy-left? false :greedy-right? false}
-                   {:from 4 :to 16 :greedy-left? false :greedy-right? false}]
-        itree (reduce add-intervals (make-interval-tree) (map vector intervals))]
-    (is (= (tree->intervals itree) (sort-by :from intervals)))))
-
-(deftest bulk-insertitions
-  (let [intervals (sort-by :from  [{:from 0 :to 10 :greedy-left? false :greedy-right? false}
-                                   {:from 0 :to 11 :greedy-left? false :greedy-right? false}
-                                   {:from 0 :to 12 :greedy-left? false :greedy-right? false}
-                                   {:from 0 :to 17 :greedy-left? false :greedy-right? false}
-                                   {:from 2 :to 18 :greedy-left? false :greedy-right? false}
-                                   {:from 7 :to 13 :greedy-left? false :greedy-right? false}
-                                   {:from 6 :to 14 :greedy-left? false :greedy-right? false}
-                                   {:from 5 :to 15 :greedy-left? false :greedy-right? false}
-                                   {:from 4 :to 16 :greedy-left? false :greedy-right? false}])
-        itree (add-intervals (make-interval-tree) intervals)]
-    (is (= (tree->intervals itree) intervals))))
-
-(def intervals-bulk-gen (g/fmap (fn [v] (vec (sort interval-comparator v)))
-                                (g/vector
-                                 (g/fmap (fn [[a b g-l? g-r?]]
+(def interval-gen (g/fmap (fn [[a b g-l? g-r?]]
                                            {:from (min a b)
                                             :to (max a b)
                                             :greedy-left? g-l?
@@ -66,11 +20,13 @@
                                          (g/tuple (g/large-integer* {:min 0 :max 10000})
                                                   (g/large-integer* {:min 0 :max 10000})
                                                   g/boolean
-                                                  g/boolean))
-                                 0 100)))
+                                                  g/boolean)))
+
+(def intervals-bulk-gen (g/fmap (fn [v] (vec (sort-intervals v)))
+                                (g/vector interval-gen 0 100)))
 
 (deftest bulk-insertion
-  (is (:result (tc/quick-check 1000
+  (is (:result (tc/quick-check 100
                                (prop/for-all [bulk intervals-bulk-gen]
                                              (let [itree (add-intervals (make-interval-tree) bulk)]
                                                (= (tree->intervals itree)
@@ -82,11 +38,11 @@
                                              (let [itree (reduce add-intervals
                                                                  (make-interval-tree)
                                                                  bulk-bulk)]
-                                               (= (sort-intervals (mapcat vec bulk-bulk))
-                                                  (sort-intervals (tree->intervals itree)))))))))
+                                               (= (set (mapcat vec bulk-bulk))
+                                                  (set (tree->intervals itree)))))))))
 
-;; [{from to :g-l? :g-r?}] -> [offset size] -> [{:from :to :g-l? :g-r?}]
-(defn play-type-in-once [model [offset size]]
+;; [interval] -> [offset size] -> [interval]
+(defn play-type-in [model [offset size]]
   (vec (->> model
             (map (fn [{:keys [from to greedy-left? greedy-right?] :as interval}]
                    (cond
@@ -110,12 +66,6 @@
                      :else
                      interval))))))
 
-;; [{:from :to :g-l? :g-r?] -> [[offset size]] -> [{:from :to :g-l? g-r?}]
-(defn play-type-in-many [model [q & qs]]
-  (if (nil? q)
-    model
-    (recur (play-type-in-once model q) qs)))
-
 (def bulk-offset-size-gen
   (g/bind intervals-bulk-gen
           (fn [bulk] (let [max-val (->> bulk
@@ -125,48 +75,39 @@
                                 (g/vector (g/tuple (g/large-integer* {:min 0 :max max-val})
                                                    (g/large-integer* {:min 0 :max 10000}))))))))
 
-(deftest type-in-positive-test
-  (is (:result (tc/quick-check 1000
-                               (prop/for-all [[bulk qs] bulk-offset-size-gen]
-                                             (= (sort-intervals (play-type-in-many bulk qs))
-                                                (sort-intervals (tree->intervals
-                                                                 (reduce type-in
-                                                                         (-> (make-interval-tree)
-                                                                             (add-intervals bulk))
-                                                                         qs)))))))))
+(defn bulk->tree [bulk]
+  (-> (make-interval-tree)
+      (add-intervals bulk)))
 
-;; interval -> [offset length] -> interval
-(defn delete-range-once [interval [offset length]]
-  (let [update-point (fn [point offset length] (if (< offset point)
-                                                 (max offset (- point length))
-                                                 point))]
-    (-> interval
-        (update :from update-point offset length)
-        (update :to update-point offset length))))
+(deftest type-in-positive-test
+  (is (:result (tc/quick-check 100
+                               (prop/for-all [[bulk qs] bulk-offset-size-gen]
+                                             (= (set (reduce play-type-in bulk qs))
+                                                (set (tree->intervals
+                                                      (reduce type-in (bulk->tree bulk) qs)))))))))
 
 ;; model -> [offset size] -> model
-(defn play-delete-range-once [model q]
-  (map #(delete-range-once % q) model))
-
-(defn play-delete-range-many [model [q & qs]]
-  (if (nil? q)
-    model
-    (recur (play-delete-range-once model q) qs)))
+(defn play-delete-range [model [offset length]]
+  (map (fn [interval]
+         (let [update-point (fn [point offset length] (if (< offset point)
+                                                 (max offset (- point length))
+                                                 point))]
+           (-> interval
+               (update :from update-point offset length)
+               (update :to update-point offset length))))
+       model))
 
 (def test-delete-range
-  (is (:result (tc/quick-check 1000
+  (is (:result (tc/quick-check 100
                                (prop/for-all [[bulk qs] bulk-offset-size-gen]
-                                             (= (sort-intervals (play-delete-range-many bulk qs))
-                                                (sort-intervals (tree->intervals
-                                                                 (reduce delete-range
-                                                                         (-> (make-interval-tree)
-                                                                             (add-intervals bulk))
-                                                                         qs)))))))))
+                                             (= (set (reduce play-delete-range bulk qs))
+                                                (set (tree->intervals
+                                                      (reduce delete-range (bulk->tree bulk) qs)))))))))
 
 (defn play-query [model {:keys [from to]}]
   (vec (filter #(intersect % {:from from :to to}) model)))
 
-(defn from-to-gen [max-val]
+(defn query-gen [max-val]
   (g/fmap (fn [[x y]] (if (< x y)
                         {:from x :to y}
                         {:from y :to x}))
@@ -176,7 +117,7 @@
 (def bulk-and-queries-gen
   (g/bind intervals-bulk-gen
           (fn [bulk] (g/tuple (g/return bulk)
-                              (g/vector (from-to-gen (->> bulk
+                              (g/vector (query-gen (->> bulk
                                                        (map :to)
                                                        (apply max 0))))))))
 
@@ -184,58 +125,10 @@
   (is (:result (tc/quick-check 100
                                (prop/for-all [[bulk queries] bulk-and-queries-gen]
                                              (= (map play-query (repeat bulk) queries)
-                                                (let [generated-tree (-> (make-interval-tree)
-                                                                         (add-intervals bulk))]
-                                                  (map query-intervals (repeat generated-tree) queries))))))))
-
-
-(defn q&l-wrapper [itree from-to]
-  (first (query-and-loc (zipper itree) from-to)))
-
-(def simple-q&l-test
-  (is (:result (tc/quick-check 100
-                               (prop/for-all [[bulk queries] bulk-and-queries-gen]
-                                             (= (map play-query (repeat bulk) queries)
-                                                (let [generated-tree (-> (make-interval-tree)
-                                                                         (add-intervals bulk))]
-                                                  (map q&l-wrapper (repeat generated-tree) queries))))))))
-
-(defn play-queries [model [q & qs] acc]
-  (if (nil? q)
-    acc
-    (recur model
-           qs
-           (conj acc
-                 (vec (filter #(intersect % q) model)))
-           )))
-
-(def bulk-and-increasing-queries-gen
-  (g/bind intervals-bulk-gen
-          (fn [bulk] (g/tuple (g/return bulk)
-                              (let [max-val (->> bulk
-                                             (map :to)
-                                             (apply max 0))]
-                                (g/fmap #(first (reduce (fn [[acc cur] [a b]]
-                                                          [(conj acc {:from (min (inc cur) max-val)
-                                                                      :to (min (+ a b (inc cur)) max-val)})
-                                                           (+ cur a)])
-                                                        [[] 0]
-                                                        %))
-                                        (g/vector (g/tuple g/nat g/nat))))))))
-
-(def queries-test
-  (is (:result (tc/quick-check 100
-                               (prop/for-all [[bulk queries] bulk-and-increasing-queries-gen]
-                                             (= (play-queries bulk queries [])
-                                                (let [begin-loc (-> (make-interval-tree)
-                                                              (add-intervals bulk)
-                                                              (zipper))]
-                                                  (first (reduce (fn [[acc loc] q]
-                                                                   (let [[ans new-loc] (query-and-loc loc q)]
-                                                                     [(conj acc ans) new-loc]))
-                                                                 [[] begin-loc]
-                                                                 queries)))))))))
+                                                (map query-intervals (repeat (bulk->tree bulk)) queries)))))))
 
 (comment
   (run-tests)
-  (clojure.test/test-vars [#'andel.intervals-test/generative]))
+  
+  )
+
