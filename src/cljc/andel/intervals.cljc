@@ -2,7 +2,7 @@
   (:require [andel.tree :as tree]))
 
 
-(def plus-infinity #?(:cljs js/Number.POSITIVE_INFINITY
+(def plus-infinity #?(:cljs 1000000000.0 #_js/Number.POSITIVE_INFINITY
                       :clj Integer/MAX_VALUE #_100000 #_Double/POSITIVE_INFINITY))
 
 (defrecord Interval [offset length rightest greedy-left? greedy-right?])

@@ -4,6 +4,7 @@
               [andel.throttling :as throttling]
               [andel.controller :as contr]
               [andel.utils :as utils]
+              [andel.intervals :as intervals]
               [reagent.core :as reagent]
               [reagent.ratom :refer [track]]
               [reagent.session :as session]
@@ -449,6 +450,10 @@
       ;load sample document from the internet
       (let [text (:body (a/<! (http/get "/EditorImpl.java")))]
         (swap-editor! state contr/set-text text))
+      (let [markup (->> (:body (a/<! (http/get "/markup.edn")))
+                        (sort-by :from))]
+        (js/console.log (str "MARKUP LOADED: " (count markup)))
+        (swap-editor! state (fn [s] (assoc s :markup markup))))
       ;deliver promise
       (a/>! loaded :done))
     loaded))
@@ -492,3 +497,98 @@
 (bind-function! "shift-up" contr/move-caret :up true)
 (bind-function! "shift-down" contr/move-caret :down true)
 (bind-function! "esc" contr/drop-selection-on-esc)
+
+
+
+;; benchmarks
+
+
+(defn current-time! []
+  (.now js/Date))
+
+(defn bench [name f & {:keys [count] :or {count 10}}]
+  (let [start-time (current-time!)]
+    (js/console.log (str "START BENCH " name))
+    (mapv (fn [f] (f)) (repeat count f))
+    (let [end-time (current-time!)
+          total-time (- end-time start-time)]
+      (js/console.log (str "END BENCH: " name " "
+                            {:count count
+                             :total total-time
+                             :average (/ total-time count)})))))
+
+
+(defn bench-insert [markup]
+  (bench "TREE INSERT"
+   (fn []
+     (-> (intervals/make-interval-tree)
+         (intervals/add-intervals markup)))
+   :count 100))
+
+(defn bench-insert-base [markup]
+  (bench "BASE INSERT"
+   (fn []
+     (mapv (fn [m] (update m :from inc)) markup))
+   :count 100))
+
+(defn bench-query [markup]
+  (let [itree (-> (intervals/make-interval-tree)
+                  (intervals/add-intervals markup))]
+    (bench "TREE QUERY"
+           (fn []
+             (let [from (rand-int 160000)
+                   to (+ from 3200)]
+               (intervals/query-intervals itree {:from from :to to})))
+           :count 1000)))
+
+(defn play-query [model {:keys [from to]}]
+  (vec (filter #(intervals/intersect % {:from from :to to}) model)))
+
+(defn bench-query-base [markup]
+  (bench "QUERY BASE"
+         (fn []
+           (let [from (rand-int 160000)
+                 to (+ from 3200)]
+             (play-query markup {:from from :to to})))
+         :count 1000))
+
+(defn bench-type-in [markup]
+  (let [itree (-> (intervals/make-interval-tree)
+                  (intervals/add-intervals markup))]
+    (bench "TYPE-IN BENCH"
+           (fn []
+             (let [offset (rand-int 160000)
+                   size 1]
+               (intervals/type-in itree [offset size])))
+           :count 1000)))
+
+(defn bench-delete [markup]
+  (let [itree (-> (intervals/make-interval-tree)
+                  (intervals/add-intervals markup))]
+    (bench "DELETE BENCH"
+           (fn []
+             (let [offset (rand-int 160000)
+                   size 1]
+               (intervals/delete-range itree [offset size])))
+           :count 1000)))
+
+
+
+(defn bench-editing [markup]
+  (let [itree (-> (intervals/make-interval-tree)
+                  (intervals/add-intervals markup))]
+    (bench "TREE EDITING"
+           (fn []
+             (let [cmd (rand-nth [:insert :delete])]
+               (case cmd
+                 :insert ))))))
+
+(bind-function! "ctrl-b" (fn [s]
+                           (let [markup (:markup s)]
+                               (bench-insert markup)
+                               (bench-insert-base markup)
+                               (bench-query markup)
+                               (bench-query-base markup)
+                               (bench-type-in markup)
+                               (bench-delete markup))
+                           s))
