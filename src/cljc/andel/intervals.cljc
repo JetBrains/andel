@@ -16,10 +16,12 @@
            (nil? right)
            left
            :else
-           (map->Interval {:offset l-offset
-                           :rightest (+ l-rightest r-offset r-rightest)
-                           ;; left border of rightest interval in subtree relative to offset
-                           :length (max l-length (+ l-rightest r-offset r-length))}))))
+           (Interval. l-offset ;; offset
+                      (max l-length (+ l-rightest r-offset r-length)) ;; length
+                      (+ l-rightest r-offset r-rightest) ;;rightest
+                      ;; left border of rightest interval in subtree relative to offset
+                      nil
+                      nil))))
 
 
 (def tree-config {::tree/reducing-fn reducing-fn
@@ -121,11 +123,12 @@
 
 
 (defn make-leaf [offset length greedy-left? greedy-right?]
-  (tree/make-leaf (map->Interval {:offset offset
-                                  :length length
-                                  :rightest 0
-                                  :greedy-left? greedy-left?
-                                  :greedy-right? greedy-right?})
+  (tree/make-leaf (Interval. offset ;;offset
+                             length ;;length
+                             0      ;;rightest
+                             greedy-left? ;; greedy-left?
+                             greedy-right?  ;; greedy-right?
+                             )
                   tree-config))
 
 (defn intervals->tree [intervals]
