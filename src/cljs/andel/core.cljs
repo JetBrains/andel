@@ -159,7 +159,7 @@
     (push! res #js [:span (subs text i)])))
 
 (defn render-markup [markup {:keys [height width spacing]}]
-  (let [res (reduce (fn [res [from to]]
+  (let [res (reduce (fn [res {:keys [from to]}]
                       (push! res #js [:div {:style (style {:background-color "red"
                                                            :left (px (* from width))
                                                            :width (px (* width (- to from)))
@@ -253,14 +253,16 @@
                        scroll-on-event)))}
        [viewport]])))
 
+(defrecord Marker [from to])
+
 (defn prepare-markup [markup from to]
   (->> markup
       (filter (fn [marker]
                 (and (<= (:from marker) to)
                      (<= from (:to marker)))))
       (mapv (fn [marker]
-              [(max 0 (- (:from marker) from))
-               (max 0 (- (:to marker) from))]))))
+              (->Marker (max 0 (- (:from marker) from))
+                        (max 0 (- (:to marker) from)))))))
 
 ;; Todo: untangle all this spaghetti bindings
 (defn editor-viewport [state]
