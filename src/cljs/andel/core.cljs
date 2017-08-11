@@ -130,8 +130,6 @@
                             :left (px (* col width))
                             :height (px (inc (utils/line-height metrics)))})}])
 
-
-
 (def token-class
   (let [tokens-cache #js {}]
     (fn [tt]
@@ -160,6 +158,17 @@
                         tokens)]
     (push! res #js [:span (subs text i)])))
 
+(defn render-markup [markup {:keys [height width spacing]}]
+  (let [res (reduce (fn [res [from to]]
+                      (push! res #js [:div {:style (style {:background-color "red"
+                                                           :left (px (* from width))
+                                                           :width (px (* width (- to from)))
+                                                           :height (px (+ height spacing))
+                                                           :position :absolute})}]))
+                    #js [:pre {:class :line-markup}]
+                    markup)]
+    res))
+
 (def real-dom
   (reagent/create-class
    {:component-will-update
@@ -181,16 +190,18 @@
    {:style {:transform (str "translate3d(" (px x) ", " (px y) ", " (px z))}}
    c])
 
-(defrecord LineInfo [line-text line-tokens selection caret-index index])
+(defrecord LineInfo [line-text line-tokens line-markup selection caret-index index])
 
-(defn render-line [{:keys [line-text line-tokens selection caret-index] :as line-info} metrics]
+(defn render-line [{:keys [line-text line-tokens line-markup selection caret-index] :as line-info} metrics]
   (let [_ (defstyle :render-line [:.render-line {:height (px (utils/line-height metrics))
                                                  :position :relative}])]
     [real-dom (dom
                 #js [:div {:class :render-line}
                      (render-selection selection metrics)
                      (render-text line-text line-tokens metrics)
-                     (when caret-index (render-caret caret-index metrics))])]))
+                     (when caret-index (render-caret caret-index metrics))
+                     (render-markup line-markup metrics)
+                     ])]))
 
 (defn line-selection [[from to] [line-start-offset line-end-offset]]
   (cond (and (< from line-start-offset) (< line-start-offset to))
@@ -242,6 +253,15 @@
                        scroll-on-event)))}
        [viewport]])))
 
+(defn prepare-markup [markup from to]
+  (->> markup
+      (filter (fn [marker]
+                (and (<= (:from marker) to)
+                     (<= from (:to marker)))))
+      (mapv (fn [marker]
+              [(max 0 (- (:from marker) from))
+               (max 0 (- (:to marker) from))]))))
+
 ;; Todo: untangle all this spaghetti bindings
 (defn editor-viewport [state]
   (fn []
@@ -255,7 +275,11 @@
           from (int (/ from-y-offset line-height))
           to (+ 5 (+ from (/ h line-height)))
           y-shift (- (* line-height (- (/ from-y-offset line-height) from)))
+          line-zipper (text/scan-to-line (text/zipper text) from)
+          from-offset (text/offset line-zipper)
+          to-offset (dec (text/offset (text/scan-to-line line-zipper (inc to))))
           caret-offset (get caret :offset)
+          markup (intervals/query-intervals (:markup document) {:from from-offset :to to-offset})
           [_ hiccup] (reduce
                       (fn [[line-start res] index]
                         (let [next-line (text/scan-to-line line-start (inc index))
@@ -272,7 +296,8 @@
                               line-caret (when (and (<= line-start-offset caret-offset) (<= caret-offset line-end-offset))
                                            (- caret-offset line-start-offset))
                               line-tokens (:tokens (get lines index))
-                              line-info (LineInfo. line-text line-tokens line-sel line-caret index)]
+                              line-markup (prepare-markup markup line-start-offset line-end-offset)
+                              line-info (LineInfo. line-text line-tokens line-markup line-sel line-caret index)]
                           [next-line (conj! res
                                             ^{:key index}
                                             [translate3d {:y y-shift} [render-line line-info metrics]])]))
@@ -453,7 +478,8 @@
       (let [markup (->> (:body (a/<! (http/get "/markup.edn")))
                         (sort-by :from))]
         (js/console.log (str "MARKUP LOADED: " (count markup)))
-        (swap-editor! state (fn [s] (assoc s :markup markup))))
+        (swap-editor! state (fn [s] (assoc-in s [:document :markup] (-> (intervals/make-interval-tree)
+                                                                        (intervals/add-intervals markup))))))
       ;deliver promise
       (a/>! loaded :done))
     loaded))
@@ -497,7 +523,6 @@
 (bind-function! "shift-up" contr/move-caret :up true)
 (bind-function! "shift-down" contr/move-caret :down true)
 (bind-function! "esc" contr/drop-selection-on-esc)
-
 
 
 ;; benchmarks
