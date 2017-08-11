@@ -502,7 +502,6 @@
 
 ;; benchmarks
 
-
 (defn current-time! []
   (.now js/Date))
 
@@ -586,9 +585,10 @@
 (bind-function! "ctrl-b" (fn [s]
                            (let [markup (:markup s)]
                                (bench-insert markup)
-                               (bench-insert-base markup)
+                               #_(bench-insert-base markup)
                                (bench-query markup)
-                               (bench-query-base markup)
+                               #_(bench-query-base markup)
                                (bench-type-in markup)
                                (bench-delete markup))
+                           (js/alert "BENCH DONE")
                            s))

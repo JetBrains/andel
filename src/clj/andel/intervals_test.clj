@@ -49,20 +49,20 @@
                      (and greedy-left?
                           (= offset from))
                      (assoc interval :to (+ to size))
-                     
+
                      (and greedy-right?
                           (= offset to))
                      (assoc interval :to (+ to size))
-                     
+
                      (and (< from offset)
                           (< offset to))
                      (assoc interval :to (+ to size))
-                     
+
                      (<= offset from)
                      (assoc interval
                             :to (+ to size)
                             :from (+ from size))
-                     
+
                      :else
                      interval))))))
 
@@ -145,5 +145,3 @@
                                                            ops)]
                                   (= (set (tree->intervals tree))
                                      (set model))))))))
-
-
