@@ -13,14 +13,14 @@
 (def sort-intervals (partial sort (comparator compare-intervals)))
 
 (def interval-gen (g/fmap (fn [[a b g-l? g-r?]]
-                                           {:from (min a b)
-                                            :to (max a b)
-                                            :greedy-left? g-l?
-                                            :greedy-right? g-r?})
-                                         (g/tuple (g/large-integer* {:min 0 :max 10000})
-                                                  (g/large-integer* {:min 0 :max 10000})
-                                                  g/boolean
-                                                  g/boolean)))
+                            (map->Marker {:from (min a b)
+                                          :to (max a b)
+                                          :greedy-left? g-l?
+                                          :greedy-right? g-r?}))
+                          (g/tuple (g/large-integer* {:min 0 :max 10000})
+                                   (g/large-integer* {:min 0 :max 10000})
+                                   g/boolean
+                                   g/boolean)))
 
 (def intervals-bulk-gen (g/fmap (fn [v] (vec (sort-intervals v)))
                                 (g/vector interval-gen 0 100)))

@@ -7,6 +7,7 @@
 
 (defrecord IntervalNode [offset length rightest])
 (defrecord IntervalLeaf [offset length rightest greedy-left? greedy-right?])
+(defrecord Marker [from to greedy-left? greedy-right?])
 
 (defn reducing-fn
   ([] nil)
@@ -41,15 +42,23 @@
     (let [m (reducing-fn acc m)]
       (< offset (+ (:offset m) (:rightest m))))))
 
-(defn from-to [loc]
-  (let [m (:metrics (tree/node loc))
+(defn loc->metrics [loc]
+  (:metrics (tree/node loc)))
+
+(defn loc->data [loc]
+  (assert (tree/leaf? loc))
+  (:data (tree/node loc)))
+
+(defn loc->Marker [loc]
+  (let [metrics (loc->metrics loc)
+        leaf-data (loc->data loc)
         rightest (or (:rightest (tree/loc-acc loc)) 0)
-        from (+ (:offset m) rightest)
-        length (:length m)]
-    {:from from
-     :to (+ from length)
-     :greedy-left? (:greedy-left? (:data (tree/node loc)))
-     :greedy-right? (:greedy-right? (:data (tree/node loc)))}))
+        from (+ (:offset metrics) rightest)
+        length (:length metrics)]
+    (->Marker from
+              (+ from length)
+              (:greedy-left? leaf-data)
+              (:greedy-right? leaf-data))))
 
 (defn offset->tree-basis [offset]
   (inc offset))
@@ -93,7 +102,7 @@
                (vec))
 
           (tree/leaf? (tree/node loc))
-          (recur (tree/next loc) (conj acc (from-to loc)))
+          (recur (tree/next loc) (conj acc (loc->Marker loc)))
 
           :else
           (recur (tree/next loc) acc))))
@@ -142,7 +151,7 @@
 (defn insert-one [loc {:keys [from to greedy-left? greedy-right?] :as interval}]
   (let [r-sibling-loc (tree/scan loc (by-offset from))
         r-offset (-> r-sibling-loc tree/node :metrics :offset)
-        {r-from :from r-to :to} (from-to r-sibling-loc)
+        {r-from :from r-to :to} (loc->Marker r-sibling-loc)
         len (- to from)
         new-r-offset (- r-from from)
         offset (- r-offset new-r-offset)]
@@ -156,13 +165,9 @@
        (reduce insert-one (zipper itree))
        root))
 
-(defn unpack-leaf [loc]
-  (assert (tree/leaf? loc))
-  (:data (tree/node loc)))
-
 (defn remove-leaf [loc]
-  (let [{:keys [offset length]} (unpack-leaf loc)
-        {:keys [from to]} (from-to loc)]
+  (let [{:keys [offset length]} (loc->data loc)
+        {:keys [from to]} (loc->Marker loc)]
     (-> loc
         tree/remove
         ((fn [loc]
@@ -192,7 +197,7 @@
     (let [new-loc (next-changed loc offset)]
       (if (tree/end? new-loc)
         [(tree/root new-loc) acc]
-        (let [{:keys [from to] :as from-to} (from-to new-loc)]
+        (let [{:keys [from to] :as from-to} (loc->Marker new-loc)]
           (if (< offset from)
             [(tree/root (update-leaf-offset new-loc #(+ % size))) acc]
             (recur (remove-leaf new-loc) (conj acc from-to))))))))
@@ -244,7 +249,7 @@
       (let [new-loc (tree/scan loc changed?)]
         (if (tree/end? new-loc)
           [(tree/root new-loc) acc]
-          (let [{:keys [from to] :as from-to} (from-to new-loc)]
+          (let [{:keys [from to] :as from-to} (loc->Marker new-loc)]
             (if (< (+ offset size) from)
               [(tree/root (update-leaf-offset new-loc #(- % size))) acc]
               (recur (remove-leaf new-loc) (conj acc from-to)))))))))
@@ -280,7 +285,7 @@
 
          (tree/leaf? (tree/node loc))
          (recur (scan-intersect (tree/next loc) interval)
-                (conj! markers (tree-basis->interval (from-to loc))))
+                (conj! markers (tree-basis->interval (loc->Marker loc))))
 
          :else
          (recur (scan-intersect loc interval)

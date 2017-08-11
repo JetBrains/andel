@@ -253,16 +253,16 @@
                        scroll-on-event)))}
        [viewport]])))
 
-(defrecord Marker [from to])
-
 (defn prepare-markup [markup from to]
   (->> markup
       (filter (fn [marker]
                 (and (<= (:from marker) to)
                      (<= from (:to marker)))))
       (mapv (fn [marker]
-              (->Marker (max 0 (- (:from marker) from))
-                        (max 0 (- (:to marker) from)))))))
+              (intervals/->Marker (max 0 (- (:from marker) from))
+                                  (max 0 (- (:to marker) from))
+                                  nil
+                                  nil)))))
 
 ;; Todo: untangle all this spaghetti bindings
 (defn editor-viewport [state]
@@ -480,6 +480,7 @@
       (let [markup (->> (:body (a/<! (http/get "/markup.edn")))
                         (sort-by :from))]
         (js/console.log (str "MARKUP LOADED: " (count markup)))
+        #_(swap-editor! state (fn [s] (assoc-in s [:raw-markers] markup)))
         (swap-editor! state (fn [s] (assoc-in s [:document :markup] (-> (intervals/make-interval-tree)
                                                                         (intervals/add-intervals markup))))))
       ;deliver promise
@@ -546,10 +547,10 @@
 
 (defn bench-insert [markup]
   (bench "TREE INSERT"
-   (fn []
-     (-> (intervals/make-interval-tree)
-         (intervals/add-intervals markup)))
-   :count 100))
+         (fn []
+           (-> (intervals/make-interval-tree)
+               (intervals/add-intervals markup)))
+         :count 100))
 
 (defn bench-insert-base [markup]
   (bench "BASE INSERT"
@@ -610,12 +611,12 @@
                  :insert ))))))
 
 (bind-function! "ctrl-b" (fn [s]
-                           (let [markup (:markup s)]
-                               (bench-insert markup)
-                               #_(bench-insert-base markup)
-                               (bench-query markup)
-                               #_(bench-query-base markup)
-                               (bench-type-in markup)
-                               (bench-delete markup))
+                           (let [markup (:raw-markers s)]
+                             #_(bench-insert markup)
+                             #_(bench-insert-base markup)
+                             (bench-query markup)
+                             #_(bench-query-base markup)
+                             #_(bench-type-in markup)
+                             #_(bench-delete markup))
                            (js/alert "BENCH DONE")
                            s))
