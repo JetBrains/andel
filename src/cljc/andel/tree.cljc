@@ -1,5 +1,6 @@
 (ns andel.tree
   (:require [clojure.zip :as z])
+  (:require [andel.fast-zip :as fz])
   (:refer-clojure :exclude (replace remove next)))
 
 (defrecord Node [metrics children])
