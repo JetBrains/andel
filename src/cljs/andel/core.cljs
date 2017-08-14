@@ -281,7 +281,7 @@
           from-offset (text/offset line-zipper)
           to-offset (dec (text/offset (text/scan-to-line line-zipper (inc to))))
           caret-offset (get caret :offset)
-          markup (intervals/query-intervals (:markup document) {:from from-offset :to to-offset})
+          markup (intervals/query-intervals (:markup document) (intervals/map->Marker {:from from-offset :to to-offset}))
           [_ hiccup] (reduce
                       (fn [[line-start res] index]
                         (let [next-line (text/scan-to-line line-start (inc index))
@@ -480,7 +480,7 @@
       (let [markup (->> (:body (a/<! (http/get "/markup.edn")))
                         (sort-by :from))]
         (js/console.log (str "MARKUP LOADED: " (count markup)))
-        #_(swap-editor! state (fn [s] (assoc-in s [:raw-markers] markup)))
+        (swap-editor! state (fn [s] (assoc-in s [:raw-markers] markup)))
         (swap-editor! state (fn [s] (assoc-in s [:document :markup] (-> (intervals/make-interval-tree)
                                                                         (intervals/add-intervals markup))))))
       ;deliver promise
@@ -565,11 +565,11 @@
            (fn []
              (let [from (rand-int 160000)
                    to (+ from 3200)]
-               (intervals/query-intervals itree {:from from :to to})))
-           :count 1000)))
+               (intervals/query-intervals itree (intervals/map->Marker {:from from :to to}))))
+           :count 10000)))
 
 (defn play-query [model {:keys [from to]}]
-  (vec (filter #(intervals/intersect % {:from from :to to}) model)))
+  (vec (filter #(intervals/intersect % (intervals/map->Marker {:from from :to to})) model)))
 
 (defn bench-query-base [markup]
   (bench "QUERY BASE"

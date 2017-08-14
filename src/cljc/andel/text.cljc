@@ -120,8 +120,8 @@
       (let [loc' (forget-acc loc')
             o (offset loc')
             l (line loc')]
-        (assoc-in loc' [1 ::overriding-acc]
-                  (array i (+ l (count-of (:data (tree/node loc')) \newline 0 (- i o)))))))))
+        (update loc' 1
+                assoc ::overriding-acc (array i (+ l (count-of (:data (tree/node loc')) \newline 0 (- i o)))))))))
 
 (defn retain [loc l]
   (scan-to-offset loc (+ (offset loc) l)))
@@ -135,7 +135,7 @@
             l (line loc')
             idx (nth-index (:data (tree/node loc')) \newline (- i l))]
         (-> loc'
-            (assoc-in [1 ::overriding-acc] (array (+ o idx) i))
+            (update 1 assoc ::overriding-acc (array (+ o idx) i))
             (cond-> (< 0 i) (retain 1)))))))
 
 (defn line-length [loc]
@@ -224,3 +224,24 @@
 (defn line-text [t i]
   (let [loc (scan-to-line (zipper t) i)]
     (text loc (line-length loc))))
+
+;; never exits somehow
+(defn query-text [loc from to]
+  (let [loc-from loc #_(scan-to-line (zipper t) from)
+        offset-from (offset loc-from)]
+    (loop [loc loc-from
+           start-offset offset-from
+           line from
+           acc (transient [])]
+      (if (or (< to line)
+              (tree/end? loc))
+        (persistent! acc)
+        (let [next-line (inc line)
+              next-loc (scan-to-line loc next-line)
+              next-offset (offset next-loc)
+              length (- next-offset start-offset)
+              text (text loc length)]
+          (recur next-loc
+                 next-offset
+                 next-line
+                 (conj! acc {:offset start-offset :length length :text text :index line})))))))

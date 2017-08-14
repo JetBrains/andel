@@ -163,12 +163,13 @@
 
 (defn right [[node {::keys [acc]} :as loc]]
   (when-let [r (z/right loc)]
-    (let [{::keys [reducing-fn]} (meta loc)]
-      (assoc-in r [1 ::acc] (reducing-fn (or acc (reducing-fn)) (:metrics node))))))
+    (let [{::keys [reducing-fn]} (meta loc)
+          acc' (reducing-fn (or acc (reducing-fn)) (:metrics node))]
+      (update r 1 assoc ::acc acc'))))
 
 (defn down [[_ {::keys [acc]} :as loc]]
   (some-> (z/down loc)
-          (assoc-in [1 ::acc] acc)))
+          (update 1 assoc ::acc acc)))
 
 (defn root
   "Modified version of clojure.zip/root to work with balancing version of up"
@@ -180,18 +181,24 @@
         (recur p)
         (z/node loc)))))
 
+
+(def node z/node)
+(defn branch? [loc]
+  (node? (node loc)))
+
+
 (defn next
   "Modified version of clojure.zip/next to work with balancing version of up"
   [loc]
   (if (= :end (loc 1))
     loc
     (or
-     (and (z/branch? loc) (down loc))
+     (and (branch? loc) (down loc))
      (right loc)
      (loop [p loc]
        (if-let [u (up p)]
          (or (right u) (recur u))
-         [(z/node p) :end])))))
+         [(node p) :end])))))
 
 (defn skip
   "Just like next but not going down"
@@ -203,13 +210,11 @@
      (loop [p loc]
        (if-let [u (up p)]
          (or (right u) (recur u))
-         [(z/node p) :end])))))
+         [(node p) :end])))))
 
 
 (def insert-right z/insert-right)
 (def children z/children)
-(def branch? z/branch?)
-(def node z/node)
 (defn end? [[_ p]] (keyword? p))
 (def edit z/edit)
 (def replace z/replace)
@@ -251,7 +256,7 @@
                              (recur (conj! l n) r acc'))))))]
 
       (if (some? next-loc)
-        (if (z/branch? next-loc)
+        (if (branch? next-loc)
           (recur (down next-loc) pred)
           next-loc)
         (recur (skip loc) pred)))))
