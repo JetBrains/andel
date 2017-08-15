@@ -15,11 +15,11 @@
   andel.fast-zip
   (:refer-clojure :exclude [replace remove next]))
 
-(deftype ZipperOps [branch? children make-node])
+#_(deftype ZipperOps [branch? children make-node])
 
-(deftype ZipperPath [l r ppath pnodes changed?])
+#_(deftype ZipperPath [l r ppath pnodes changed? acc])
 
-(deftype ZipperLocation [^ZipperOps ops node ^ZipperPath path])
+#_(deftype ZipperLocation [^ZipperOps ops node ^ZipperPath path])
 
 (defn zipper
   "Creates a new zipper structure.
@@ -120,6 +120,7 @@
           #?(:clj (.next ^clojure.lang.ISeq cs) :cljs (cljs.core/next cs))
           path
           (if path (conj (.-pnodes path) node) [node])
+          nil
           nil))))))
 
 (defn up
@@ -133,7 +134,7 @@
            (.-ops loc)
            (make-node loc pnode (concat (reverse (.-l path)) (cons (.-node loc) (.-r path))))
            (if-let [^ZipperPath ppath (.-ppath path)]
-             (ZipperPath. (.-l ppath) (.-r ppath) (.-ppath ppath) (.-pnodes ppath) true)))
+             (ZipperPath. (.-l ppath) (.-r ppath) (.-ppath ppath) (.-pnodes ppath) true (.-acc ppath))))
           (ZipperLocation.
            (.-ops loc)
            pnode
@@ -162,7 +163,8 @@
         #?(:clj (.next ^clojure.lang.ISeq r) :cljs (cljs.core/next r))
         (.-ppath path)
         (.-pnodes path)
-        (.-changed? path))))))
+        (.-changed? path)
+        nil)))))
 
 (defn rightmost
   "Returns the loc of the rightmost sibling of the node at this loc, or self"
@@ -177,41 +179,8 @@
         nil
         (.-ppath path)
         (.-pnodes path)
-        (.-changed? path)))
-      loc)))
-
-(defn left
-  "Returns the loc of the left sibling of the node at this loc, or nil"
-  [^ZipperLocation loc]
-  (let [^ZipperPath path (.-path loc)]
-    (when (and path (seq (.-l path)))
-      (ZipperLocation.
-       (.-ops loc)
-       (peek (.-l path))
-       (ZipperPath.
-        (pop (.-l path))
-        (cons (.-node loc) (.-r path))
-        (.-ppath path)
-        (.-pnodes path)
-        (.-changed? path))))))
-
-(defn leftmost
-  "Returns the loc of the leftmost sibling of the node at this loc, or self"
-  [^ZipperLocation loc]
-  (let [^ZipperPath path (.-path loc)]
-    (if (and path (seq (.-l path)))
-      (ZipperLocation.
-       (.-ops loc)
-       (last (.-l path))
-       (ZipperPath.
-        '()
-        (concat
-         #?(:clj (.next ^clojure.lang.ISeq (reverse (.-l path)))
-            :cljs (cljs.core/next (reverse (.-l path))))
-         [(.-node loc)] (.-r path))
-        (.-ppath path)
-        (.-pnodes path)
-        (.-changed? path)))
+        (.-changed? path)
+        nil))
       loc)))
 
 (defn insert-left
@@ -221,7 +190,7 @@
     (ZipperLocation.
      (.-ops loc)
      (.-node loc)
-     (ZipperPath. (conj (.-l path) item) (.-r path) (.-ppath path) (.-pnodes path) true))
+     (ZipperPath. (conj (.-l path) item) (.-r path) (.-ppath path) (.-pnodes path) true (.-acc path)))
     (throw (new #?(:clj Exception :cljs js/Error) "Insert at top"))))
 
 (defn insert-right
@@ -231,7 +200,7 @@
     (ZipperLocation.
      (.-ops loc)
      (.-node loc)
-     (ZipperPath. (.-l path) (cons item (.-r path)) (.-ppath path) (.-pnodes path) true))
+     (ZipperPath. (.-l path) (cons item (.-r path)) (.-ppath path) (.-pnodes path) true (.-acc path)))
     (throw (new #?(:clj Exception :cljs js/Error) "Insert at top"))))
 
 (defn replace
@@ -241,7 +210,7 @@
    (.-ops loc)
    node
    (if-let [^ZipperPath path (.-path loc)]
-     (ZipperPath. (.-l path) (.-r path) (.-ppath path) (.-pnodes path) true))))
+     (ZipperPath. (.-l path) (.-r path) (.-ppath path) (.-pnodes path) true (.-acc path)))))
 
 (defn insert-child
   "Inserts the item as the leftmost child of the node at this loc, without moving"
@@ -292,7 +261,7 @@
       (loop [loc (ZipperLocation.
                   (.-ops loc)
                   (peek (.-l path))
-                  (ZipperPath. (pop (.-l path)) (.-r path) (.-ppath path) (.-pnodes path) true))]
+                  (ZipperPath. (pop (.-l path)) (.-r path) (.-ppath path) (.-pnodes path) true (.-acc path)))]
         (if-let [child (and (branch? loc) (down loc))]
           (recur (rightmost child))
           loc))
@@ -300,7 +269,7 @@
        (.-ops loc)
        (make-node loc (peek (.-pnodes path)) (.-r path))
        (if-let [^ZipperPath ppath (.-ppath path)]
-         (if ppath (ZipperPath. (.-l ppath) (.-r ppath) (.-ppath ppath) (.-pnodes ppath) true)))))
+         (if ppath (ZipperPath. (.-l ppath) (.-r ppath) (.-ppath ppath) (.-pnodes ppath) true (.-acc path))))))
     (throw (new #?(:clj Exception :cljs js/Error) "Remove at top"))))
 
 (defn edit
