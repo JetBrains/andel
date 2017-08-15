@@ -187,7 +187,7 @@
         (fz/node loc)))))
 
 
-(def node z/node)
+(def node fz/node)
 (defn branch? [loc]
   (node? (node loc)))
 
@@ -202,7 +202,9 @@
      (loop [p loc]
        (if-let [u (up p)]
          (or (right u) (recur u))
-         (fz/->ZipperLocation (.-ops loc) (.-node p) :end))))))
+         (with-meta
+           (fz/->ZipperLocation (.-ops loc) (.-node p) :end)
+           (meta loc)))))))
 
 (defn skip
   "Just like next but not going down"
@@ -214,7 +216,9 @@
      (loop [p loc]
        (if-let [u (up p)]
          (or (right u) (recur u))
-         (fz/->ZipperLocation (.-ops loc) (.-node p) :end))))))
+         (with-meta
+           (fz/->ZipperLocation (.-ops loc) (.-node p) :end)
+           (meta loc)))))))
 
 
 (def insert-right fz/insert-right)
@@ -254,11 +258,10 @@
                                          (.-ops loc)
                                          n
                                          (-> path
-                                                  (transient)
-                                                  (assoc! :l (persistent! l))
-                                                  (assoc! :r (seq r))
-                                                  (assoc! :acc acc)
-                                                  (persistent!))) (meta loc))
+                                             (assoc :l (persistent! l))
+                                             (assoc :r (seq r))
+                                             (assoc :acc acc)))
+                               (meta loc))
                              (recur (conj! l n) r acc'))))))]
       (if (some? next-loc)
         (if (branch? next-loc)
