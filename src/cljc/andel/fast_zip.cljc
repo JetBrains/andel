@@ -15,11 +15,11 @@
   andel.fast-zip
   (:refer-clojure :exclude [replace remove next]))
 
-#_(deftype ZipperOps [branch? children make-node])
+(defrecord ZipperOps [branch? children make-node])
 
-#_(deftype ZipperPath [l r ppath pnodes changed? acc])
+(defrecord ZipperPath [l r ppath pnodes changed? acc])
 
-#_(deftype ZipperLocation [^ZipperOps ops node ^ZipperPath path])
+(defrecord ZipperLocation [^ZipperOps ops node ^ZipperPath path])
 
 (defn zipper
   "Creates a new zipper structure.
@@ -36,38 +36,6 @@
   {:added "1.0"}
   [branch? children make-node root]
   (ZipperLocation. (ZipperOps. branch? children make-node) root nil))
-
-(defn seq-zip
-  "Returns a zipper for nested sequences, given a root sequence"
-  {:added "1.0"}
-  [root]
-  (zipper
-   seq?
-   identity
-   (fn [node children] (with-meta children (meta node)))
-   root))
-
-(defn vector-zip
-  "Returns a zipper for nested vectors, given a root vector"
-  {:added "1.0"}
-  [root]
-  (zipper
-   vector?
-   seq
-   (fn [node children] (with-meta (vec children) (meta node)))
-   root))
-
-(defn xml-zip
-  "Returns a zipper for xml elements (as from xml/parse),
-  given a root element"
-  {:added "1.0"}
-  [root]
-  (zipper
-   (complement string?)
-   (comp seq :content)
-   (fn [node children]
-     (assoc node :content (and children (apply vector children))))
-   root))
 
 (defn node
   "Returns the node at loc"
@@ -110,14 +78,14 @@
   or nil if no children"
   [^ZipperLocation loc]
   (when (branch? loc)
-    (when-let [cs (children loc)]
+    (when-let [[c & cs] (children loc)]
       (let [node (.-node loc), ^ZipperPath path (.-path loc)]
         (ZipperLocation.
          (.-ops loc)
-         (first cs)
+         c
          (ZipperPath.
           '()
-          #?(:clj (.next ^clojure.lang.ISeq cs) :cljs (cljs.core/next cs))
+          cs
           path
           (if path (conj (.-pnodes path) node) [node])
           nil
@@ -237,16 +205,6 @@
          (if-let [u (up p)]
            (or (right u) (recur u))
            (ZipperLocation. (.-ops loc) (.-node p) :end)))))))
-
-(defn prev
-  "Moves to the previous loc in the hierarchy, depth-first. If already at the root, returns nil."
-  [loc]
-  (if-let [lloc (left loc)]
-    (loop [loc lloc]
-      (if-let [child (and (branch? loc) (down loc))]
-        (recur (rightmost child))
-        loc))
-    (up loc)))
 
 (defn end?
   "Returns true if loc represents the end of a depth-first walk"

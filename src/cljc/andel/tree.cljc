@@ -1,6 +1,6 @@
 (ns andel.tree
-  (:require [clojure.zip :as z])
-  (:require [andel.fast-zip :as fz])
+  (:require [clojure.zip :as z]
+            [andel.fast-zip :as fz])
   (:refer-clojure :exclude (replace remove next)))
 
 (defrecord Node [metrics children])
@@ -174,10 +174,12 @@
   (some-> (fz/down loc)
           (update :path assoc :acc acc)))
 
+(defn end? [{p :path}] (keyword? p))
+
 (defn root
   "Modified version of clojure.zip/root to work with balancing version of up"
   [loc]
-  (if (= :end (loc 1))
+  (if (end? loc)
     (fz/node loc)
     (let [p (up loc)]
       (if p
@@ -217,7 +219,6 @@
 
 (def insert-right fz/insert-right)
 (def children fz/children)
-(defn end? [{p :path}] (keyword? p))
 (def edit fz/edit)
 (def replace fz/replace)
 (def insert-child fz/insert-child)

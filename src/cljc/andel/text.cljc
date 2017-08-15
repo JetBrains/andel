@@ -62,10 +62,13 @@
                   ::tree/leaf-underflown? (fn [s] (< (count s) string-merge-thresh))
                   ::tree/merge-leafs (fn [s1 s2] (str s1 s2))})
 
+(defn mark-changed [loc]
+  (update loc :path assoc :changed? true))
+
 (defn make-text [s]
   (-> (tree/zipper (tree/make-node [(tree/make-leaf s tree-config)] tree-config) tree-config)
       (tree/down)
-      (assoc-in [1 :changed?] true)
+      (mark-changed)
       (tree/root)))
 
 (defn zipper [tree]
@@ -79,14 +82,12 @@
 (defn by-line [i]
   (fn [acc m] (<= i (nth (r-f acc m) 1))))
 
-(defn offset [[node {acc ::tree/acc
-                     o-acc ::overriding-acc} :as loc]]
+(defn offset [{node :node {acc :acc o-acc :o-acc} :path :as loc}]
   (if (tree/end? loc)
     (first (:metrics node))
     (or (first o-acc) (first acc) 0)))
 
-(defn line [[node {acc ::tree/acc
-                   o-acc ::overriding-acc} :as loc]]
+(defn line [{node :node {acc :acc o-acc :o-acc} :path :as loc}]
   (if (tree/end? loc)
     (second (:metrics node))
     (or (second o-acc) (second acc) 0)))
@@ -111,7 +112,7 @@
             (recur (inc i) (dec n))))))))
 
 (defn forget-acc [loc]
-  (assoc loc 1 (dissoc (loc 1) ::overriding-acc)))
+  (update loc :path dissoc :o-acc))
 
 (defn scan-to-offset [loc i]
   (let [loc' (tree/scan loc (by-offset i))]
@@ -120,8 +121,8 @@
       (let [loc' (forget-acc loc')
             o (offset loc')
             l (line loc')]
-        (update loc' 1
-                assoc ::overriding-acc (array i (+ l (count-of (:data (tree/node loc')) \newline 0 (- i o)))))))))
+        (update loc' :path
+                assoc :o-acc (array i (+ l (count-of (:data (tree/node loc')) \newline 0 (- i o)))))))))
 
 (defn retain [loc l]
   (scan-to-offset loc (+ (offset loc) l)))
@@ -135,7 +136,7 @@
             l (line loc')
             idx (nth-index (:data (tree/node loc')) \newline (- i l))]
         (-> loc'
-            (update 1 assoc ::overriding-acc (array (+ o idx) i))
+            (update :path assoc :o-acc (array (+ o idx) i))
             (cond-> (< 0 i) (retain 1)))))))
 
 (defn line-length [loc]
@@ -225,23 +226,9 @@
   (let [loc (scan-to-line (zipper t) i)]
     (text loc (line-length loc))))
 
-;; never exits somehow
-(defn query-text [loc from to]
-  (let [loc-from loc #_(scan-to-line (zipper t) from)
-        offset-from (offset loc-from)]
-    (loop [loc loc-from
-           start-offset offset-from
-           line from
-           acc (transient [])]
-      (if (or (< to line)
-              (tree/end? loc))
-        (persistent! acc)
-        (let [next-line (inc line)
-              next-loc (scan-to-line loc next-line)
-              next-offset (offset next-loc)
-              length (- next-offset start-offset)
-              text (text loc length)]
-          (recur next-loc
-                 next-offset
-                 next-line
-                 (conj! acc {:offset start-offset :length length :text text :index line})))))))
+
+(comment
+
+  (-> (make-text "11"))
+
+  )
