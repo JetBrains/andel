@@ -105,7 +105,7 @@
     (when-let [pnodes (and path (.-pnodes path))]
       (let [pnode (peek pnodes)]
         (with-meta
-          (if (.-changed? path)
+          (if (:changed? path)
             (ZipperLocation.
              (.-ops loc)
              (make-node loc pnode (concat (reverse (.-l path)) (cons (.-node loc) (.-r path))))
@@ -141,7 +141,7 @@
           #?(:clj (.next ^clojure.lang.ISeq r) :cljs (cljs.core/next r))
           (.-ppath path)
           (.-pnodes path)
-          (.-changed? path)
+          (:changed? path)
           nil))
         (meta loc)))))
 
@@ -159,7 +159,7 @@
           nil
           (.-ppath path)
           (.-pnodes path)
-          (.-changed? path)
+          (:changed? path)
           nil))
         (meta loc))
       loc)))

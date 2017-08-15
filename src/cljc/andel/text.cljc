@@ -57,7 +57,7 @@
 (def tree-config {::tree/reducing-fn r-f
                   ::tree/metrics-fn metrics
                   ::tree/leaf-overflown? (fn [x] (<= string-thresh (count x)))
-                  ::tree/split-thresh 32
+                  ::tree/split-thresh 64
                   ::tree/split-leaf split-string
                   ::tree/leaf-underflown? (fn [s] (< (count s) string-merge-thresh))
                   ::tree/merge-leafs (fn [s1 s2] (str s1 s2))})
@@ -229,6 +229,10 @@
 
 (comment
 
-  (-> (make-text "11"))
+  (-> (make-text "123456789012345678901234567890")
+      (zipper)
+      (scan-to-offset 3)
+      (delete 3)
+      (root))
 
   )

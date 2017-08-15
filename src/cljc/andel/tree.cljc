@@ -161,7 +161,11 @@
     (let [config (meta loc)]
       (if-let [parent (fz/up loc)]
         (fz/replace parent (make-node (balance-children (fz/children parent) config) config))
-        (with-meta [(shrink-tree (grow-tree [node] config)) nil] (meta loc))))
+        (with-meta (fz/->ZipperLocation
+                    (.-ops loc)
+                    (shrink-tree (grow-tree [node] config))
+                    (fz/->ZipperPath nil nil nil nil nil nil))
+          (meta loc))))
     (fz/up loc)))
 
 (defn right [{node :node {acc :acc} :path :as loc}]
@@ -247,7 +251,7 @@
     (let [{::keys [reducing-fn]} (meta loc)
           next-loc (if (root? loc)
                      loc
-                     (loop [l (transient lefts)
+                     (loop [l lefts
                             [n & r] (cons node rights)
                             acc (or acc (reducing-fn))]
                        (when (some? n)
@@ -258,11 +262,12 @@
                                          (.-ops loc)
                                          n
                                          (-> path
-                                             (assoc :l (persistent! l))
+                                             (assoc :l l)
                                              (assoc :r (seq r))
-                                             (assoc :acc acc)))
+                                             (assoc :acc acc)
+   ))
                                (meta loc))
-                             (recur (conj! l n) r acc'))))))]
+                             (recur (conj l n) r acc'))))))]
       (if (some? next-loc)
         (if (branch? next-loc)
           (recur (down next-loc) pred)

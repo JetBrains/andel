@@ -200,7 +200,7 @@
                      (render-selection selection metrics)
                      (render-text line-text line-tokens metrics)
                      (when caret-index (render-caret caret-index metrics))
-                     (render-markup line-markup metrics)
+                     ;(render-markup line-markup metrics)
                      ])]))
 
 (defn line-selection [[from to] [line-start-offset line-end-offset]]
@@ -277,11 +277,11 @@
           from (int (/ from-y-offset line-height))
           to (+ 5 (+ from (/ h line-height)))
           y-shift (- (* line-height (- (/ from-y-offset line-height) from)))
-          line-zipper (text/scan-to-line (text/zipper text) from)
-          from-offset (text/offset line-zipper)
-          to-offset (dec (text/offset (text/scan-to-line line-zipper (inc to))))
+          ;line-zipper (text/scan-to-line (text/zipper text) from)
+          ;from-offset (text/offset line-zipper)
+          ;to-offset (dec (text/offset (text/scan-to-line line-zipper (inc to))))
           caret-offset (get caret :offset)
-          markup (intervals/query-intervals (:markup document) (intervals/map->Marker {:from from-offset :to to-offset}))
+          ;markup (intervals/query-intervals (:markup document) (intervals/map->Marker {:from from-offset :to to-offset}))
           [_ hiccup] (reduce
                       (fn [[line-start res] index]
                         (let [next-line (text/scan-to-line line-start (inc index))
@@ -298,7 +298,7 @@
                               line-caret (when (and (<= line-start-offset caret-offset) (<= caret-offset line-end-offset))
                                            (- caret-offset line-start-offset))
                               line-tokens (:tokens (get lines index))
-                              line-markup (prepare-markup markup line-start-offset line-end-offset)
+                              line-markup nil ;(prepare-markup markup line-start-offset line-end-offset)
                               line-info (LineInfo. line-text line-tokens line-markup line-sel line-caret index)]
                           [next-line (conj! res
                                             ^{:key index}
@@ -480,8 +480,8 @@
       (let [markup (->> (:body (a/<! (http/get "/markup.edn")))
                         (sort-by :from))]
         (js/console.log (str "MARKUP LOADED: " (count markup)))
-        (swap-editor! state (fn [s] (assoc-in s [:raw-markers] markup)))
-        (swap-editor! state (fn [s] (assoc-in s [:document :markup] (-> (intervals/make-interval-tree)
+        #_(swap-editor! state (fn [s] (assoc-in s [:raw-markers] markup)))
+        #_(swap-editor! state (fn [s] (assoc-in s [:document :markup] (-> (intervals/make-interval-tree)
                                                                         (intervals/add-intervals markup))))))
       ;deliver promise
       (a/>! loaded :done))
