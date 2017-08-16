@@ -60,24 +60,3 @@
 
 (deftest generative
   (is (:result (tc/quick-check 3000 play-test))))
-
-(comment
-
-  [["0" [[:insert "0"] [:insert ""] [:insert "1"] [:retain 1]]]]
-
-  (let [start-text "00000000"
-        ops [[:insert "0"] [:delete "00000000"]]
-        played (text/play (text/make-text start-text) ops)
-        ]
-
-    (text/text (text/zipper played) (text/text-length played))
-
-    #_(play-naive start-text ops))
-
-  (-> (text/make-text "00000000")
-      (text/zipper)
-      (text/insert "0")
-      (text/delete (count "00000000"))
-      #_(text/root))
-
-  )

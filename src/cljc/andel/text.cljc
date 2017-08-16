@@ -125,11 +125,7 @@
                 assoc :o-acc (array i (+ l (count-of (:data (tree/node loc')) \newline 0 (- i o)))))))))
 
 (defn retain [loc l]
-  #_(prn "DID RETAIN")
-  (let [loc' (scan-to-offset loc (+ (offset loc) l))]
-    #_(prn "OLD LOC OFFSET: " (offset loc))
-    #_(prn "NEW LOC OFFSET: " (offset loc'))
-    loc'))
+  (scan-to-offset loc (+ (offset loc) l)))
 
 (defn scan-to-line [loc i]
   (let [loc' (tree/scan loc (by-line i))]
@@ -181,10 +177,6 @@
       (recur (str s f) (rest lt))
       s)))
 
-(defn threading-offset [loc str]
-    #_(prn str ": " (offset loc))
-    loc)
-
 (defn insert [loc s]
   (if (tree/branch? loc)
     (recur (tree/down loc) s)
@@ -196,27 +188,20 @@
                        (tree/make-leaf (str (subs data 0 rel-offset) s (subs data rel-offset)) tree-config)))
           (retain (count s))))))
 
-(defn logg [x str]
-  #_(prn str x)
-  x)
-
 (defn delete [loc l]
-  #_(prn "IN")
   (if (tree/branch? loc)
     (recur (tree/down loc) l)
-    (let [i (logg (offset loc) "offset")
-          chunk-offset (logg (nth (tree/loc-acc loc) 0) "chunk-offset")
-          rel-offset (logg (- i chunk-offset) "rel-offset")
-          chunk-l (logg (count (:data (tree/node loc))) "chunk-l")
-          end (logg (min chunk-l (+ rel-offset l)) "end")
+    (let [i (offset loc)
+          chunk-offset (nth (tree/loc-acc loc) 0)
+          rel-offset (- i chunk-offset)
+          chunk-l (count (:data (tree/node loc)))
+          end (min chunk-l (+ rel-offset l))
           next-loc  (if (and (= rel-offset 0) (= end chunk-l))
-                      (do #_(prn "REMOVE")
-                        (tree/remove (forget-acc loc)))
-                      (do #_(prn "EDIT")
-                          (-> loc
-                              (tree/edit (fn [{s :data}]
-                                           (tree/make-leaf (str (subs s 0 rel-offset) (subs s end)) tree-config)))
-                              (scan-to-offset i))))
+                      (tree/remove (forget-acc loc))
+                      (-> loc
+                          (tree/edit (fn [{s :data}]
+                                       (tree/make-leaf (str (subs s 0 rel-offset) (subs s end)) tree-config)))
+                          (scan-to-offset i)))
           deleted-c (- end rel-offset)]
       (if (< deleted-c l)
         (recur next-loc (- l deleted-c))
@@ -242,14 +227,3 @@
 (defn line-text [t i]
   (let [loc (scan-to-line (zipper t) i)]
     (text loc (line-length loc))))
-
-
-(comment
-
-  (-> (make-text "123456789012345678901234567890")
-      (zipper)
-      (scan-to-offset 3)
-      (delete 3)
-      (root))
-
-  )

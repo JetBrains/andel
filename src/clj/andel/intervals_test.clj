@@ -127,21 +127,6 @@
                                              (= (map play-query (repeat bulk) queries)
                                                 (map query-intervals (repeat (bulk->tree bulk)) queries)))))))
 
-(comment
-
-   [[[#andel.intervals.Marker{:from 0,
-                            :to 1,
-                            :greedy-left? true,
-                            :greedy-right? true}]
-   [[8 2] [2 4] [3 0]]]]
-
-   (-> (make-interval-tree)
-       (add-intervals [{:from 0 :to 0 :greedy-left? false :greedy-right? false}])
-       (query-intervals {:from 0 :to 0})
-       )
-
-  )
-
 (def operation-gen
   (g/tuple (g/one-of [(g/return [play-type-in type-in])
                       (g/return [play-delete-range delete-range])])

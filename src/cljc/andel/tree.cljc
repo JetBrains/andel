@@ -64,9 +64,6 @@
            (partition-binary children split-thresh)))))
 
 (defn fast-some [pred coll]
-  #_(prn (count coll))
-  #_(prn (vec coll))
-  #_(prn (pred (first coll)))
   (reduce (fn [_ c] (if (pred c) (reduced true) false)) false coll))
 
 (defn nodes? [c]
@@ -294,8 +291,7 @@
                           (assoc :changed? true)))
       (meta loc))
     (if (some? left)
-      (do #_(prn "NEXT")
-          (next (fz/remove loc)))
+      (next (fz/remove loc))
       (if (root? loc)
         (replace loc (make-node [] (meta loc)))
         (recur (fz/up loc))))))
