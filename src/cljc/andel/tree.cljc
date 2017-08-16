@@ -251,7 +251,7 @@
     (let [{::keys [reducing-fn]} (meta loc)
           next-loc (if (root? loc)
                      loc
-                     (loop [l lefts
+                     (loop [l (transient lefts)
                             [n & r] (cons node rights)
                             acc (or acc (reducing-fn))]
                        (when (some? n)
@@ -261,13 +261,14 @@
                              (with-meta (fz/->ZipperLocation
                                          (.-ops loc)
                                          n
-                                         (-> path
-                                             (assoc :l l)
-                                             (assoc :r (seq r))
-                                             (assoc :acc acc)
-   ))
+                                         (fz/->ZipperPath (persistent! l)
+                                                          (seq r)
+                                                          (.-ppath path)
+                                                          (.-pnodes path)
+                                                          (.-changed? path)
+                                                          acc))
                                (meta loc))
-                             (recur (conj l n) r acc'))))))]
+                             (recur (conj! l n) r acc'))))))]
       (if (some? next-loc)
         (if (branch? next-loc)
           (recur (down next-loc) pred)
@@ -283,9 +284,14 @@
 (defn remove [{node :node {[left] :l [right] :r :as path} :path :as loc}]
   (if (some? right)
     (with-meta
-      [right (-> path
+      #_[right (-> path
                  (update :r (fn [r] (seq (drop 1 r))))
                  (assoc :changed? true))]
+      (fz/->ZipperLocation (.-ops loc)
+                      right
+                      (-> path
+                          (update :r (fn [r] (seq (drop 1 r))))
+                          (assoc :changed? true)))
       (meta loc))
     (if (some? left)
       (next (fz/remove loc))

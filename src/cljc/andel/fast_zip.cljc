@@ -15,11 +15,11 @@
   andel.fast-zip
   (:refer-clojure :exclude [replace remove next]))
 
-(defrecord ZipperOps [branch? children make-node])
+#_(defrecord ZipperOps [branch? children make-node])
 
-(defrecord ZipperPath [l r ppath pnodes changed? acc])
+#_(defrecord ZipperPath [l r ppath pnodes changed? acc])
 
-(defrecord ZipperLocation [^ZipperOps ops node ^ZipperPath path])
+#_(defrecord ZipperLocation [^ZipperOps ops node ^ZipperPath path])
 
 (defn zipper
   "Creates a new zipper structure.
@@ -95,7 +95,7 @@
             path
             (if path (conj (.-pnodes path) node) [node])
             nil
-            nil))
+            (some-> loc (.-path) (.-acc))))
           (meta loc))))))
 
 (defn up
@@ -108,7 +108,7 @@
           (if (:changed? path)
             (ZipperLocation.
              (.-ops loc)
-             (make-node loc pnode (concat (reverse (.-l path)) (cons (.-node loc) (.-r path))))
+             (make-node loc pnode (concat (.-l path) (cons (.-node loc) (.-r path))))
              (if-let [^ZipperPath ppath (.-ppath path)]
                (ZipperPath. (.-l ppath) (.-r ppath) (.-ppath ppath) (.-pnodes ppath) true (.-acc ppath))))
             (ZipperLocation.
@@ -142,7 +142,7 @@
           (.-ppath path)
           (.-pnodes path)
           (:changed? path)
-          nil))
+          (some-> loc (.-path) (.-acc))))
         (meta loc)))))
 
 (defn rightmost
@@ -160,7 +160,7 @@
           (.-ppath path)
           (.-pnodes path)
           (:changed? path)
-          nil))
+          (some-> loc (.-path) (.-acc))))
         (meta loc))
       loc)))
 

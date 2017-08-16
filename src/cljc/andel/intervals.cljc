@@ -170,6 +170,16 @@
        (reduce insert-one (zipper itree))
        root))
 
+(comment
+
+  (-> (make-interval-tree)
+      (add-intervals [{:from 0 :to 0}
+                      {:from 1 :to 2}
+                      {:from 2 :to 3}])
+      (tree->intervals))
+
+  )
+
 (defn remove-leaf [loc]
   (let [{:keys [offset length]} (loc->data loc)
         {:keys [from to]} (loc->Marker loc)]
@@ -279,7 +289,7 @@
   ([itree from to]
    (query-intervals itree {:from from :to to}))
   ([itree interval]
-   (let [interval (interval->tree-basis interval)
+   (let [interval (map->Marker (interval->tree-basis interval))
          from (.-from interval)
          to (.-to interval)]
      (loop [loc (zipper itree)
