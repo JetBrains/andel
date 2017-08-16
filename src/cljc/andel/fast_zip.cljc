@@ -15,11 +15,11 @@
   andel.fast-zip
   (:refer-clojure :exclude [replace remove next]))
 
-#_(defrecord ZipperOps [branch? children make-node])
+(defrecord ZipperOps [branch? children make-node])
 
-#_(defrecord ZipperPath [l r ppath pnodes changed? acc])
+(defrecord ZipperPath [l r ppath pnodes changed? acc])
 
-#_(defrecord ZipperLocation [^ZipperOps ops node ^ZipperPath path])
+(defrecord ZipperLocation [^ZipperOps ops node ^ZipperPath path])
 
 (defn zipper
   "Creates a new zipper structure.
@@ -220,19 +220,40 @@
   [^ZipperLocation loc]
   (if-let [^ZipperPath path (.-path loc)]
     (if (pos? (count (.-l path)))
-      (loop [loc (ZipperLocation.
-                  (.-ops loc)
-                  (peek (.-l path))
-                  (ZipperPath. (pop (.-l path)) (.-r path) (.-ppath path) (.-pnodes path) true (.-acc path)))]
+      (loop [loc (with-meta
+                   (ZipperLocation.
+                    (.-ops loc)
+                    (peek (.-l path))
+                    (ZipperPath. (pop (.-l path)) (.-r path) (.-ppath path) (.-pnodes path) true (.-acc path)))
+                   (meta loc))]
         (if-let [child (and (branch? loc) (down loc))]
           (recur (rightmost child))
           loc))
-      (ZipperLocation.
-       (.-ops loc)
-       (make-node loc (peek (.-pnodes path)) (.-r path))
-       (if-let [^ZipperPath ppath (.-ppath path)]
-         (if ppath (ZipperPath. (.-l ppath) (.-r ppath) (.-ppath ppath) (.-pnodes ppath) true (.-acc path))))))
+      (with-meta
+        (ZipperLocation.
+         (.-ops loc)
+         (make-node loc (peek (.-pnodes path)) (.-r path))
+         (if-let [^ZipperPath ppath (.-ppath path)]
+           (if ppath (ZipperPath. (.-l ppath) (.-r ppath) (.-ppath ppath) (.-pnodes ppath) true (.-acc path)))))
+        (meta loc)))
     (throw (new #?(:clj Exception :cljs js/Error) "Remove at top"))))
+
+#_(defn remove
+  "Removes the node at loc, returning the loc that would have preceded
+  it in a depth-first walk."
+  {:added "1.0"}
+  [loc]
+    (let [[node {l :l, ppath :ppath, pnodes :pnodes, rs :r, :as path}] loc]
+      (if (nil? path)
+        (throw (new Exception "Remove at top"))
+        (if (pos? (count l))
+          (loop [loc (with-meta [(peek l) (assoc path :l (pop l) :changed? true)] (meta loc))]
+            (if-let [child (and (branch? loc) (down loc))]
+              (recur (rightmost child))
+              loc))
+          (with-meta [(make-node loc (peek pnodes) rs)
+                      (and ppath (assoc ppath :changed? true))]
+                     (meta loc))))))
 
 (defn edit
   "Replaces the node at this loc with the value of (f node args)"

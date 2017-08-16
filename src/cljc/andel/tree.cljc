@@ -64,6 +64,9 @@
            (partition-binary children split-thresh)))))
 
 (defn fast-some [pred coll]
+  #_(prn (count coll))
+  #_(prn (vec coll))
+  #_(prn (pred (first coll)))
   (reduce (fn [_ c] (if (pred c) (reduced true) false)) false coll))
 
 (defn nodes? [c]
@@ -284,9 +287,6 @@
 (defn remove [{node :node {[left] :l [right] :r :as path} :path :as loc}]
   (if (some? right)
     (with-meta
-      #_[right (-> path
-                 (update :r (fn [r] (seq (drop 1 r))))
-                 (assoc :changed? true))]
       (fz/->ZipperLocation (.-ops loc)
                       right
                       (-> path
@@ -294,7 +294,8 @@
                           (assoc :changed? true)))
       (meta loc))
     (if (some? left)
-      (next (fz/remove loc))
+      (do #_(prn "NEXT")
+          (next (fz/remove loc)))
       (if (root? loc)
         (replace loc (make-node [] (meta loc)))
         (recur (fz/up loc))))))

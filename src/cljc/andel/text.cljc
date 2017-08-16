@@ -46,7 +46,7 @@
       (let [x-h (quot x 2)]
         (concat (split-count i (+ i x-h) thresh) (split-count (+ i x-h) j thresh))))))
 
-(def string-thresh 10)
+(def string-thresh 8)
 (def string-merge-thresh (quot string-thresh 2))
 
 (defn split-string [x]
@@ -192,28 +192,31 @@
           chunk-offset (nth (tree/loc-acc loc) 0)
           rel-offset (- i chunk-offset)]
       (-> loc
-          #_(threading-offset "START")
-          #_(threading-offset "BEFORE EDIT")
           (tree/edit (fn [{:keys [data]}]
                        (tree/make-leaf (str (subs data 0 rel-offset) s (subs data rel-offset)) tree-config)))
-          #_(threading-offset "AFTER EDIT")
-          (retain (count s))
-          #_(threading-offset "END")))))
+          (retain (count s))))))
+
+(defn logg [x str]
+  #_(prn str x)
+  x)
 
 (defn delete [loc l]
+  #_(prn "IN")
   (if (tree/branch? loc)
     (recur (tree/down loc) l)
-    (let [i (offset loc)
-          chunk-offset (nth (tree/loc-acc loc) 0)
-          rel-offset (- i chunk-offset)
-          chunk-l (count (:data (tree/node loc)))
-          end (min chunk-l (+ rel-offset l))
+    (let [i (logg (offset loc) "offset")
+          chunk-offset (logg (nth (tree/loc-acc loc) 0) "chunk-offset")
+          rel-offset (logg (- i chunk-offset) "rel-offset")
+          chunk-l (logg (count (:data (tree/node loc))) "chunk-l")
+          end (logg (min chunk-l (+ rel-offset l)) "end")
           next-loc  (if (and (= rel-offset 0) (= end chunk-l))
-                      (tree/remove (forget-acc loc))
-                      (-> loc
-                          (tree/edit (fn [{s :data}]
-                                       (tree/make-leaf (str (subs s 0 rel-offset) (subs s end)) tree-config)))
-                          (scan-to-offset i)))
+                      (do #_(prn "REMOVE")
+                        (tree/remove (forget-acc loc)))
+                      (do #_(prn "EDIT")
+                          (-> loc
+                              (tree/edit (fn [{s :data}]
+                                           (tree/make-leaf (str (subs s 0 rel-offset) (subs s end)) tree-config)))
+                              (scan-to-offset i))))
           deleted-c (- end rel-offset)]
       (if (< deleted-c l)
         (recur next-loc (- l deleted-c))
