@@ -196,7 +196,8 @@
      (.-ops loc)
      node
      (if-let [^ZipperPath path (.-path loc)]
-       (ZipperPath. (.-l path) (.-r path) (.-ppath path) (.-pnodes path) true (.-acc path))))
+       (assoc path :changed? true)
+       #_(ZipperPath. (.-l path) (.-r path) (.-ppath path) (.-pnodes path) true (.-acc path))))
     (meta loc)))
 
 (defn insert-child

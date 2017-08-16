@@ -12,7 +12,7 @@
                                 (g/return :retain) g/pos-int)
                                (g/tuple
                                 (g/return :insert) g/string-alphanumeric)
-                               (g/tuple
+                               #_(g/tuple
                                 (g/return :delete) g/pos-int)])))
 
 (defn random-ops [text frames]
@@ -60,3 +60,27 @@
 
 (deftest generative
   (is (:result (tc/quick-check 3000 play-test))))
+
+(comment
+
+  [["0" [[:insert "0"] [:insert ""] [:insert "1"] [:retain 1]]]]
+
+  (let [start-text "0"
+        ops [[:insert "1"] [:insert ""] [:insert "2"] [:insert "3"] [:retain 1]]
+        played (text/play (text/make-text start-text) ops)]
+
+    (text/text (text/zipper played) (text/text-length played))
+
+    (play-naive start-text ops))
+
+  (-> (text/make-text "0123456789012345678901234567890123456789")
+      (text/zipper)
+      (text/scan-to-offset 2)
+      (threading-offset)
+      (text/retain 2)
+      (threading-offset)
+      (text/retain 2)
+      (threading-offset)
+      (text/retain 2))
+
+  )

@@ -46,7 +46,7 @@
       (let [x-h (quot x 2)]
         (concat (split-count i (+ i x-h) thresh) (split-count (+ i x-h) j thresh))))))
 
-(def string-thresh 64)
+(def string-thresh 10)
 (def string-merge-thresh (quot string-thresh 2))
 
 (defn split-string [x]
@@ -125,7 +125,11 @@
                 assoc :o-acc (array i (+ l (count-of (:data (tree/node loc')) \newline 0 (- i o)))))))))
 
 (defn retain [loc l]
-  (scan-to-offset loc (+ (offset loc) l)))
+  #_(prn "DID RETAIN")
+  (let [loc' (scan-to-offset loc (+ (offset loc) l))]
+    #_(prn "OLD LOC OFFSET: " (offset loc))
+    #_(prn "NEW LOC OFFSET: " (offset loc'))
+    loc'))
 
 (defn scan-to-line [loc i]
   (let [loc' (tree/scan loc (by-line i))]
@@ -177,6 +181,10 @@
       (recur (str s f) (rest lt))
       s)))
 
+(defn threading-offset [loc str]
+    #_(prn str ": " (offset loc))
+    loc)
+
 (defn insert [loc s]
   (if (tree/branch? loc)
     (recur (tree/down loc) s)
@@ -184,9 +192,13 @@
           chunk-offset (nth (tree/loc-acc loc) 0)
           rel-offset (- i chunk-offset)]
       (-> loc
+          #_(threading-offset "START")
+          #_(threading-offset "BEFORE EDIT")
           (tree/edit (fn [{:keys [data]}]
                        (tree/make-leaf (str (subs data 0 rel-offset) s (subs data rel-offset)) tree-config)))
-          (retain (count s))))))
+          #_(threading-offset "AFTER EDIT")
+          (retain (count s))
+          #_(threading-offset "END")))))
 
 (defn delete [loc l]
   (if (tree/branch? loc)
@@ -219,7 +231,9 @@
                   (case code
                     :retain (retain loc arg)
                     :insert (insert loc arg)
-                    :delete (delete loc (if (string? arg) (count arg) arg)))) (zipper t) operation)))
+                    :delete (delete loc (if (string? arg) (count arg) arg))))
+                (zipper t)
+                operation)))
 
 
 (defn line-text [t i]
