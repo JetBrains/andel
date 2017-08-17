@@ -45,7 +45,7 @@
                    leaf-underflown?
                    merge-leafs)
    tree
-   nil))
+   (fz/->ZipperPath nil nil :root nil nil nil)))
 
 (defn partition-binary [s thresh]
   (let [cs (count s)]
@@ -182,7 +182,7 @@
 (defn right [loc]
   (let [node (.-node loc)
         path (.-path loc)
-        acc (.-acc loc)]
+        acc (.-acc path)]
     (when-let [r (fz/right loc)]
       (let [reducing-fn (.-reducing-fn (.-ops loc))
             acc' (reducing-fn (or acc (reducing-fn)) (.-metrics node))]
@@ -254,45 +254,53 @@
       (recur loc))))
 
 (defn root? [loc]
-  (nil? (.-path loc)))
+  (= :root (.-ppath (.-path loc)))
+  #_(nil? (.-path loc)))
 
 (defn reset [loc]
   (zipper (root loc)
           (.-ops loc)))
 
 (defn scan [loc pred]
-  (let [node (.-node loc)
-        path (.-path loc)
-        rights (some-> path .-r)
-        lefts (some-> path .-l)
-        acc (some-> path .-acc)]
-    (if (end? loc)
-      loc
-      (let [reducing-fn (.-reducing-fn (.-ops loc))
-            next-loc (if (root? loc)
-                       loc
-                       (loop [l (transient lefts)
-                              [n & r] (cons node rights)
-                              acc (or acc (reducing-fn))]
-                         (when (some? n)
-                           (let [m (.-metrics n)
-                                 acc' (reducing-fn acc m)]
-                             (if (pred acc m)
-                               (fz/->ZipperLocation
-                                (.-ops loc)
-                                n
-                                (fz/->ZipperPath (persistent! l)
-                                                 (seq r)
-                                                 (.-ppath path)
-                                                 (.-pnodes path)
-                                                 (.-changed? path)
-                                                 acc))
-                               (recur (conj! l n) r acc'))))))]
-        (if (some? next-loc)
-          (if (branch? next-loc)
-            (recur (down next-loc) pred)
-            next-loc)
-          (recur (skip loc) pred))))))
+  (if (end? loc)
+    loc
+    (let [node (.-node loc)
+          path (.-path loc)
+          rights (some-> path .-r)
+          lefts (some-> path .-l)
+          acc (some-> path .-acc)
+          reducing-fn (.-reducing-fn (.-ops loc))
+          next-loc (if (root? loc)
+                     loc
+                     (loop [l (transient lefts)
+                            [n & r :as v] (cons node rights)
+                            acc (or acc (reducing-fn))]
+                       (when (some? n)
+                         (let [m (.-metrics n)
+                               acc' (reducing-fn acc m)]
+                           (if (pred acc m)
+                             (fz/->ZipperLocation
+                              (.-ops loc)
+                              n
+                              (fz/->ZipperPath (persistent! l)
+                                               (seq r)
+                                               (.-ppath path)
+                                               (.-pnodes path)
+                                               (.-changed? path)
+                                               acc))
+                             (recur (conj! l n) r acc'))))))]
+      (if (some? next-loc)
+        (if (branch? next-loc)
+          (recur (down next-loc) pred)
+          next-loc)
+        (recur (skip loc) pred)))))
+
+(comment
+
+  (let [[n & r] (cons 1 nil)]
+    n)
+
+  )
 
 (defn insert-left [loc x]
   (let [reducing-fn (.-reducing-fn (.-ops loc))]
@@ -303,8 +311,8 @@
 (defn remove [loc]
   (let [node (.-node loc)
         path (.-path loc)
-        left (some-> path .-l)
-        right (some-> path .r)]
+        [left] (some-> path .-l)
+        [right] (some-> path .-r)]
     (if (some? right)
       (fz/->ZipperLocation (.-ops loc)
                            right

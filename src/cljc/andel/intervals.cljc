@@ -32,11 +32,11 @@
 (defn metrics-fn [{:keys [offset length rightest]}]
   (->IntervalNode offset length rightest))
 
-(def tree-config {::tree/reducing-fn reducing-fn
-                  ::tree/metrics-fn metrics-fn
-                  ::tree/leaf-overflown? (constantly false)
-                  ::tree/split-thresh 16
-                  ::tree/leaf-underflown? (constantly false)})
+(def tree-config {:reducing-fn reducing-fn
+                  :metrics-fn metrics-fn
+                  :leaf-overflown? (constantly false)
+                  :split-thresh 16
+                  :leaf-underflown? (constantly false)})
 
 (defn zipper [it]
   (tree/zipper it tree-config))
@@ -59,8 +59,8 @@
   (let [metrics (loc->metrics loc)
         leaf-data (loc->data loc)
         rightest (or (some-> (tree/loc-acc loc) (.-rightest)) 0)
-        from (+ (.-offset metrics) rightest)
-        length (.-length metrics)]
+        from (+ (:offset metrics) rightest)
+        length (:length metrics)]
     (Marker.  from
               (+ from length)
               (.-greedy-left? leaf-data)

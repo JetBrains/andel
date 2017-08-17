@@ -108,7 +108,7 @@
         res))))
 
 (defn nth-index [s c n]
-  (if (= n 0)
+  (if (identical? n 0)
     0
     (loop [from 0
            n n]

@@ -33,7 +33,7 @@
                                                   bulk)))))))
 
 (deftest multiple-bulk-insertion
-  (is (:result (tc/quick-check 100
+  (is (:result (tc/quick-check 30
                                (prop/for-all [bulk-bulk (g/vector intervals-bulk-gen)]
                                              (let [itree (reduce add-intervals
                                                                  (make-interval-tree)
@@ -97,7 +97,7 @@
                (update :to update-point offset length))))
        model))
 
-(def test-delete-range
+(deftest test-delete-range
   (is (:result (tc/quick-check 100
                                (prop/for-all [[bulk qs] bulk-offset-size-gen]
                                              (= (set (reduce play-delete-range bulk qs))
@@ -105,7 +105,7 @@
                                                       (reduce delete-range (bulk->tree bulk) qs)))))))))
 
 (defn play-query [model {:keys [from to]}]
-  (vec (filter #(intersect % {:from from :to to}) model)))
+  (vec (filter #(intersect % (map->Marker {:from from :to to})) model)))
 
 (defn query-gen [max-val]
   (g/fmap (fn [[x y]]
