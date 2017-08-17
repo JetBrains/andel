@@ -35,7 +35,7 @@
                             merge-leafs] :as config}]
   (fz/->ZipperLocation
    (fz/->ZipperOps node?
-                   :children
+                   #(.-children %)
                    (fn [node children] (make-node children config))
                    reducing-fn
                    metrics-fn
@@ -61,115 +61,141 @@
 (defn nodes? [c]
   (node? (first c)))
 
-(defn split-needed? [children {:keys [leaf-overflown? split-thresh] :as config}]
-  (fast-some (if (nodes? children)
-               #(<= split-thresh (count (:children %)))
-               #(leaf-overflown? (:data %)))
-             children))
+(defn split-needed? [children config]
+  (let [leaf-overflown? (.-leaf-overflown? config)
+        split-thresh (.-split-thresh config)]
+    (fast-some (if (nodes? children)
+                 #(<= split-thresh (count (.-children %)))
+                 #(leaf-overflown? (.-data %)))
+               children)))
 
-(defn split-children [children {:keys [leaf-overflown? split-leaf split-thresh] :as config}]
-  (if (split-needed? children config)
-    (persistent!
-     (reduce
-      (fn [result node]
-        (cond (and (node? node) (<= split-thresh (count (:children node))))
-              (reduce conj! result (map #(make-node % config)
-                                        (partition-binary (:children node) split-thresh)))
+(defn split-children [children config]
+  (let [leaf-overflown? (.-leaf-overflown? config)
+        split-leaf (.-split-leaf config)
+        split-thresh (.-split-thresh config)]
+    (if (split-needed? children config)
+      (persistent!
+       (reduce
+        (fn [result node]
+          (cond (and (node? node) (<= split-thresh (count (.-children node))))
+                (reduce conj! result (map #(make-node % config)
+                                          (partition-binary (.-children node) split-thresh)))
 
-              (and (leaf? node) (leaf-overflown? (:data node)))
-              (reduce conj! result (map #(make-leaf % config) (split-leaf (:data node))))
+                (and (leaf? node) (leaf-overflown? (.-data node)))
+                (reduce conj! result (map #(make-leaf % config) (split-leaf (.-data node))))
 
-              :else (conj! result node)))
-      (transient [])
-      children))
-    children))
+                :else (conj! result node)))
+        (transient [])
+        children))
+      children)))
 
-(defn loc-acc [{{acc :acc} :path :as loc}]
-  (or acc
-      ((:reducing-fn (.-ops loc)))))
+(defn loc-acc [loc]
+  (let [path (.-path loc)
+        acc (.-acc path)]
+    (or acc
+        ((.-reducing-fn (.-ops loc))))))
 
-(defn merge-needed? [children {:keys [leaf-underflown? split-thresh]}]
-  (fast-some (if (nodes? children)
-               (let [merge-thresh (quot split-thresh 2)]
-                 #(< (count (:children %)) merge-thresh))
-               #(leaf-underflown? (:data %)))
-             children))
+(defn merge-needed? [children config]
+  (let [leaf-underflown? (.-leaf-underflown? config)
+        split-thresh (.-split-thresh config)]
+    (fast-some (if (nodes? children)
+                 (let [merge-thresh (quot split-thresh 2)]
+                   #(< (count (.-children %)) merge-thresh))
+                 #(leaf-underflown? (.-data %)))
+               children)))
 
-(defn merge-children [children {:keys [leaf-underflown? merge-leafs leaf-overflown? split-leaf split-thresh] :as config}]
-  (if (merge-needed? children config)
-    (if (nodes? children)
-      (let [merge-thresh (quot split-thresh 2)
-            [result last] (reduce
-                           (fn [[result left] right]
-                             (let [left-children (:children left)
-                                   right-children (:children right)
-                                   left-c (count left-children)
-                                   right-c (count right-children)]
-                               (if (or (< left-c merge-thresh) (< right-c merge-thresh))
-                                 (if (<= split-thresh (+ left-c right-c))
-                                   (let [[children-left children-right]
-                                         (partition-binary (concat left-children right-children) split-thresh)]
-                                     [(conj! result (make-node (merge-children children-left config) config))
-                                      (make-node children-right config)])
-                                   [result (make-node (merge-children (concat left-children right-children) config) config)])
-                                 [(conj! result left) right])))
-                           [(transient []) (first children)]
-                           (drop 1 children))]
-        (persistent! (conj! result last)))
-      (let [[result last] (reduce
+(defn merge-children [children config]
+  (let [leaf-underflown? (.-leaf-underflown? config)
+        merge-leafs (.-merge-leafs config)
+        leaf-overflown? (.-leaf-overflown? config)
+        split-leaf (.-split-leaf config)
+        split-thresh (.-split-thresh config)]
+    (if (merge-needed? children config)
+      (if (nodes? children)
+        (let [merge-thresh (quot split-thresh 2)
+              [result last] (reduce
+                             (fn [[result left] right]
+                               (let [left-children (.-children left)
+                                     right-children (.-children right)
+                                     left-c (count left-children)
+                                     right-c (count right-children)]
+                                 (if (or (< left-c merge-thresh) (< right-c merge-thresh))
+                                   (if (<= split-thresh (+ left-c right-c))
+                                     (let [[children-left children-right]
+                                           (partition-binary (concat left-children right-children) split-thresh)]
+                                       [(conj! result (make-node (merge-children children-left config) config))
+                                        (make-node children-right config)])
+                                     [result (make-node (merge-children (concat left-children right-children) config) config)])
+                                   [(conj! result left) right])))
+                             [(transient []) (first children)]
+                             (drop 1 children))]
+          (persistent! (conj! result last)))
+        (let [[result last] (reduce
                              (fn [[result left-data] right]
-                               (if (or (leaf-underflown? left-data) (leaf-underflown? (:data right)))
-                                 (let [merged-data (merge-leafs left-data (:data right))]
+                               (if (or (leaf-underflown? left-data) (leaf-underflown? (.-data right)))
+                                 (let [merged-data (merge-leafs left-data (.-data right))]
                                    (if (leaf-overflown? merged-data)
                                      (let [[left-data right-data] (split-leaf merged-data)]
                                        [(conj! result (make-leaf left-data config))
                                         right-data])
                                      [result merged-data]))
-                                 [(conj! result (make-leaf left-data config)) (:data right)]))
-                             [(transient []) (:data (first children))]
+                                 [(conj! result (make-leaf left-data config)) (.-data right)]))
+                             [(transient []) (.-data (first children))]
                              (drop 1 children))]
-        (persistent! (conj! result (make-leaf last config)))))
-    children))
+          (persistent! (conj! result (make-leaf last config)))))
+      children)))
 
 (defn balance-children [children config]
   (-> children
       (split-children config)
       (merge-children config)))
 
-(defn grow-tree [children {:keys [split-thresh] :as config}]
-  (let [balanced-children (balance-children children config)]
+(defn grow-tree [children config]
+  (let [split-thresh (.-split-thresh config)
+        balanced-children (balance-children children config)]
     (if (< (count balanced-children) split-thresh)
       (make-node balanced-children config)
       (recur [(make-node balanced-children config)] config))))
 
 
-(defn shrink-tree [{[c :as children] :children :as node}]
-  (if (and (node? c) (= 1 (count children)))
-    (recur c)
-    node))
+(defn shrink-tree [node]
+  (let [children (.-children node)
+        [c] children]
+    (if (and (node? c) (= 1 (count children)))
+      (recur c)
+      node)))
 
-(defn up [{node :node {changed? :changed?} :path :as loc}]
-  (if changed?
-    (let [config (.-ops loc)]
-      (if-let [parent (fz/up loc)]
-        (fz/replace parent (make-node (balance-children (fz/children parent) config) config))
-        (fz/->ZipperLocation
-         (.-ops loc)
-         (shrink-tree (grow-tree [node] config))
-         (fz/->ZipperPath nil nil nil nil nil nil))))
-    (fz/up loc)))
+(defn up [loc]
+  (let [node (.-node loc)
+        path (.-path loc)
+        changed? (some-> path .-changed?)]
+    (if changed?
+      (let [config (.-ops loc)]
+        (if-let [parent (fz/up loc)]
+          (fz/replace parent (make-node (balance-children (fz/children parent) config) config))
+          (fz/->ZipperLocation
+           (.-ops loc)
+           (shrink-tree (grow-tree [node] config))
+           (fz/->ZipperPath nil nil nil nil nil nil))))
+      (fz/up loc))))
 
-(defn right [{node :node {acc :acc} :path :as loc}]
-  (when-let [r (fz/right loc)]
-    (let [{:keys [reducing-fn]} (.-ops loc)
-          acc' (reducing-fn (or acc (reducing-fn)) (:metrics node))]
-      (update r :path assoc :acc acc'))))
+(defn right [loc]
+  (let [node (.-node loc)
+        path (.-path loc)
+        acc (.-acc loc)]
+    (when-let [r (fz/right loc)]
+      (let [reducing-fn (.-reducing-fn (.-ops loc))
+            acc' (reducing-fn (or acc (reducing-fn)) (.-metrics node))]
+        (update r :path assoc :acc acc')))))
 
-(defn down [{{acc :acc} :path :as loc}]
-  (some-> (fz/down loc)
-          (update :path assoc :acc acc)))
+(defn down [loc]
+  (let [path (.-path loc)
+        acc (some-> path .-acc)]
+    (some-> (fz/down loc)
+            (update :path assoc :acc acc))))
 
-(defn end? [{p :path}] (keyword? p))
+(defn end? [loc]
+  (keyword? (.-path loc)))
 
 (defn root
   "Modified version of clojure.zip/root to work with balancing version of up"
@@ -188,28 +214,30 @@
 
 (defn next
   "Modified version of clojure.zip/next to work with balancing version of up"
-  [{path :path :as loc}]
-  (if (#?(:clj identical? :cljs =) :end path)
-    loc
-    (or
-     (and (branch? loc) (down loc))
-     (right loc)
-     (loop [p loc]
-       (if-let [u (up p)]
-         (or (right u) (recur u))
-         (fz/->ZipperLocation (.-ops loc) (.-node p) :end))))))
+  [loc]
+  (let [path (.-path loc)]
+    (if (#?(:clj identical? :cljs =) :end path)
+      loc
+      (or
+       (and (branch? loc) (down loc))
+       (right loc)
+       (loop [p loc]
+         (if-let [u (up p)]
+           (or (right u) (recur u))
+           (fz/->ZipperLocation (.-ops loc) (.-node p) :end)))))))
 
 (defn skip
   "Just like next but not going down"
-  [{path :path :as loc}]
-  (if (#?(:clj identical? :cljs =) :end path)
-    loc
-    (or
-     (right loc)
-     (loop [p loc]
-       (if-let [u (up p)]
-         (or (right u) (recur u))
-         (fz/->ZipperLocation (.-ops loc) (.-node p) :end))))))
+  [loc]
+  (let [path (.-path loc)]
+    (if (#?(:clj identical? :cljs =) :end path)
+      loc
+      (or
+       (right loc)
+       (loop [p loc]
+         (if-let [u (up p)]
+           (or (right u) (recur u))
+           (fz/->ZipperLocation (.-ops loc) (.-node p) :end)))))))
 
 
 (def insert-right fz/insert-right)
@@ -225,57 +253,66 @@
       loc
       (recur loc))))
 
-(defn root? [{p :path}]
-  (nil? p))
+(defn root? [loc]
+  (nil? (.-path loc)))
 
 (defn reset [loc]
   (zipper (root loc)
           (.-ops loc)))
 
-(defn scan [{node :node {rights :r lefts :l acc :acc :as path} :path :as loc} pred]
-  (if (end? loc)
-    loc
-    (let [{:keys [reducing-fn]} (.-ops loc)
-          next-loc (if (root? loc)
-                     loc
-                     (loop [l (transient lefts)
-                            [n & r] (cons node rights)
-                            acc (or acc (reducing-fn))]
-                       (when (some? n)
-                         (let [m (:metrics n)
-                               acc' (reducing-fn acc m)]
-                           (if (pred acc m)
-                             (fz/->ZipperLocation
-                              (.-ops loc)
-                              n
-                              (fz/->ZipperPath (persistent! l)
-                                               (seq r)
-                                               (.-ppath path)
-                                               (.-pnodes path)
-                                               (.-changed? path)
-                                               acc))
-                             (recur (conj! l n) r acc'))))))]
-      (if (some? next-loc)
-        (if (branch? next-loc)
-          (recur (down next-loc) pred)
-          next-loc)
-        (recur (skip loc) pred)))))
+(defn scan [loc pred]
+  (let [node (.-node loc)
+        path (.-path loc)
+        rights (some-> path .-r)
+        lefts (some-> path .-l)
+        acc (some-> path .-acc)]
+    (if (end? loc)
+      loc
+      (let [reducing-fn (.-reducing-fn (.-ops loc))
+            next-loc (if (root? loc)
+                       loc
+                       (loop [l (transient lefts)
+                              [n & r] (cons node rights)
+                              acc (or acc (reducing-fn))]
+                         (when (some? n)
+                           (let [m (.-metrics n)
+                                 acc' (reducing-fn acc m)]
+                             (if (pred acc m)
+                               (fz/->ZipperLocation
+                                (.-ops loc)
+                                n
+                                (fz/->ZipperPath (persistent! l)
+                                                 (seq r)
+                                                 (.-ppath path)
+                                                 (.-pnodes path)
+                                                 (.-changed? path)
+                                                 acc))
+                               (recur (conj! l n) r acc'))))))]
+        (if (some? next-loc)
+          (if (branch? next-loc)
+            (recur (down next-loc) pred)
+            next-loc)
+          (recur (skip loc) pred))))))
 
 (defn insert-left [loc x]
-  (let [{:keys [reducing-fn]} (.-ops loc)]
+  (let [reducing-fn (.-reducing-fn (.-ops loc))]
     (-> loc
         (fz/insert-left x)
-        (update :path update :acc reducing-fn (:metrics x)))))
+        (update :path update :acc reducing-fn (.-metrics x)))))
 
-(defn remove [{node :node {[left] :l [right] :r :as path} :path :as loc}]
-  (if (some? right)
-    (fz/->ZipperLocation (.-ops loc)
-                         right
-                         (-> path
-                             (update :r (fn [r] (seq (drop 1 r))))
-                             (assoc :changed? true)))
-    (if (some? left)
-      (next (fz/remove loc))
-      (if (root? loc)
-        (replace loc (make-node [] (.-ops loc)))
-        (recur (fz/up loc))))))
+(defn remove [loc]
+  (let [node (.-node loc)
+        path (.-path loc)
+        left (some-> path .-l)
+        right (some-> path .r)]
+    (if (some? right)
+      (fz/->ZipperLocation (.-ops loc)
+                           right
+                           (-> path
+                               (update :r (fn [r] (seq (drop 1 r))))
+                               (assoc :changed? true)))
+      (if (some? left)
+        (next (fz/remove loc))
+        (if (root? loc)
+          (replace loc (make-node [] (.-ops loc)))
+          (recur (fz/up loc)))))))
