@@ -15,27 +15,20 @@
   andel.fast-zip
   (:refer-clojure :exclude [replace remove next]))
 
-(defrecord ZipperOps [branch? children make-node])
+(defrecord ZipperOps [branch?
+                      children
+                      make-node
+                      reducing-fn
+                      metrics-fn
+                      leaf-overflown?
+                      split-thresh
+                      split-leaf
+                      leaf-underflown?
+                      merge-leafs])
 
 (defrecord ZipperPath [l r ppath pnodes changed? acc])
 
 (defrecord ZipperLocation [^ZipperOps ops node ^ZipperPath path])
-
-(defn zipper
-  "Creates a new zipper structure.
-
-  branch? is a fn that, given a node, returns true if can have
-  children, even if it currently doesn't.
-
-  children is a fn that, given a branch node, returns a seq of its
-  children.
-
-  make-node is a fn that, given an existing node and a seq of
-  children, returns a new branch node with the supplied children.
-  root is the root node."
-  {:added "1.0"}
-  [branch? children make-node root]
-  (ZipperLocation. (ZipperOps. branch? children make-node) root nil))
 
 (defn node
   "Returns the node at loc"

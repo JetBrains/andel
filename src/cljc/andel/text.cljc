@@ -46,7 +46,7 @@
       (let [x-h (quot x 2)]
         (concat (split-count i (+ i x-h) thresh) (split-count (+ i x-h) j thresh))))))
 
-(def string-thresh 8)
+(def string-thresh 64)
 (def string-merge-thresh (quot string-thresh 2))
 
 (defn split-string [x]
@@ -54,13 +54,13 @@
   (map (fn [[i j]] (subs x i j)) (split-count 0 (count x) string-thresh)))
 
 
-(def tree-config {::tree/reducing-fn r-f
-                  ::tree/metrics-fn metrics
-                  ::tree/leaf-overflown? (fn [x] (<= string-thresh (count x)))
-                  ::tree/split-thresh 64
-                  ::tree/split-leaf split-string
-                  ::tree/leaf-underflown? (fn [s] (< (count s) string-merge-thresh))
-                  ::tree/merge-leafs (fn [s1 s2] (str s1 s2))})
+(def tree-config {:reducing-fn r-f
+                  :metrics-fn metrics
+                  :leaf-overflown? (fn [x] (<= string-thresh (count x)))
+                  :split-thresh 64
+                  :split-leaf split-string
+                  :leaf-underflown? (fn [s] (< (count s) string-merge-thresh))
+                  :merge-leafs (fn [s1 s2] (str s1 s2))})
 
 (defn mark-changed [loc]
   (update loc :path assoc :changed? true))
