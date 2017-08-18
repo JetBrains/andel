@@ -89,21 +89,6 @@
   (.appendChild e c)
   e)
 
-(defn dom [[tag x & r :as el]]
-  (assert (some? el))
-  (let [[attrs-map children] (if (map? x) [x r] [nil (cons x r)])]
-    (reduce (fn [n [a v]]
-              (assoc-attr! n a v))
-            (reduce (fn [n c]
-                      (if (some? c)
-                        (conj-child! n (if (string? c)
-                                         (make-text-node c)
-                                         (dom c)))
-                        n))
-                    (make-node tag)
-                    children)
-            attrs-map)))
-
 (defn infinity? [x] (keyword? x))
 
 (defn render-selection [[from to] {:keys [width] :as metrics}]
@@ -197,6 +182,24 @@
 
 (defrecord LineInfo [line-text line-tokens line-markup selection caret-index index])
 
+(defn dom [el]
+  (let  [tag (aget el 0)
+         x (aget el 1)
+         r (.slice el 2)]
+    (assert (some? el))
+    (let [[attrs-map children] (if (map? x) [x r] [nil (cons x r)])]
+      (reduce (fn [n [a v]]
+                (assoc-attr! n a v))
+              (reduce (fn [n c]
+                        (if (some? c)
+                          (conj-child! n (if (string? c)
+                                           (make-text-node c)
+                                           (dom c)))
+                          n))
+                      (make-node tag)
+                      children)
+              attrs-map))))
+
 (defn render-line [line-info metrics]
   (let [line-text (.-line-text line-info)
         line-tokens (.-line-tokens line-info)
@@ -262,7 +265,8 @@
        [viewport]])))
 
 (defn prepare-markup [markup from to]
-  (->> markup
+  []
+  #_(->> markup
       (filter (fn [marker]
                 (and (<= (:from marker) to)
                      (<= from (:to marker)))))
@@ -313,7 +317,7 @@
                           [next-line (conj! res
                                             ^{:key index}
                                             [translate-y y-shift [render-line line-info metrics]])]))
-                      [(text/scan-to-line (text/zipper text) from)
+                      [line-zipper
                        (transient [:div {:style
                                          {:background theme/background
                                           :width "100%"}
@@ -490,9 +494,9 @@
       (let [markup (->> (:body (a/<! (http/get "/markup.edn")))
                         (sort-by :from))]
         (js/console.log (str "MARKUP LOADED: " (count markup)))
-        (swap-editor! state (fn [s] (assoc-in s [:raw-markers] markup)))
+        (swap-editor! state (fn [s] (assoc-in s [:raw-markers] (map intervals/map->Marker markup))))
         (swap-editor! state (fn [s] (assoc-in s [:document :markup] (-> (intervals/make-interval-tree)
-                                                                        (intervals/add-intervals markup))))))
+                                                                        (intervals/add-intervals (map intervals/map->Marker markup)))))))
       ;deliver promise
       (a/>! loaded :done))
     loaded))
@@ -543,6 +547,24 @@
 (defn current-time! []
   (.now js/Date))
 
+(defn text-tree-info [t]
+  (loop [acc {:nodes 0 :leafs 0}
+         loc (text/zipper t)]
+    (if (tree/end? loc)
+      (js/console.log (str "TEXT: " acc))
+      (if (tree/node? (tree/node loc))
+        (recur (update acc :nodes inc) (tree/next loc))
+        (recur (update acc :leafs inc) (tree/next loc))))))
+
+(defn intervals-tree-info [t]
+  (loop [acc {:nodes 0 :leafs 0}
+         loc (intervals/zipper t)]
+    (if (tree/end? loc)
+      (js/console.log (str "INTERVALS: " acc))
+      (if (tree/node? (tree/node loc))
+        (recur (update acc :nodes inc) (tree/next loc))
+        (recur (update acc :leafs inc) (tree/next loc))))))
+
 (defn bench [name f & {:keys [count] :or {count 10}}]
   (let [start-time (current-time!)]
     (js/console.log (str "START BENCH " name))
@@ -554,13 +576,12 @@
                              :total total-time
                              :average (/ total-time count)})))))
 
-
 (defn bench-insert [markup]
   (bench "TREE INSERT"
          (fn []
            (-> (intervals/make-interval-tree)
                (intervals/add-intervals markup)))
-         :count 100))
+         :count 1))
 
 (defn bench-insert-base [markup]
   (bench "BASE INSERT"
@@ -607,7 +628,7 @@
              (let [offset (rand-int 160000)
                    size 1]
                (intervals/delete-range itree [offset size])))
-           :count 1000)))
+           :count 1)))
 
 
 
@@ -621,12 +642,16 @@
                  :insert ))))))
 
 (bind-function! "ctrl-b" (fn [s]
-                           (let [markup (:raw-markers s)]
+                           (let [markup (:raw-markers s)
+                                 interval-tree (get-in s [:document :markup])
+                                 text-tree (get-in s [:document :text])]
+                             #_(text-tree-info text-tree)
+                             #_(intervals-tree-info interval-tree)
                              (bench-insert markup)
                              #_(bench-insert-base markup)
-                             (bench-query markup)
+                             #_(bench-query markup)
                              #_(bench-query-base markup)
-                             (bench-type-in markup)
-                             (bench-delete markup))
+                             #_(bench-type-in markup)
+                             #_(bench-delete markup))
                            (js/alert "BENCH DONE")
                            s))

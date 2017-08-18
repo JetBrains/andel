@@ -26,6 +26,8 @@
 
            (defn ^boolean leaf? [x] (not (node? x)))))
 
+(def root-path (fz/->ZipperPath nil nil :root nil nil nil nil))
+
 (defn zipper [tree {:keys [reducing-fn
                             metrics-fn
                             leaf-overflown?
@@ -45,7 +47,7 @@
                    leaf-underflown?
                    merge-leafs)
    tree
-   (fz/->ZipperPath nil nil :root nil nil nil)))
+   root-path))
 
 (defn partition-binary [s thresh]
   (let [cs (count s)]
@@ -176,7 +178,7 @@
           (fz/->ZipperLocation
            (.-ops loc)
            (shrink-tree (grow-tree [node] config))
-           (fz/->ZipperPath nil nil nil nil nil nil))))
+           root-path)))
       (fz/up loc))))
 
 (defn right [loc]
@@ -186,13 +188,14 @@
     (when-let [r (fz/right loc)]
       (let [reducing-fn (.-reducing-fn (.-ops loc))
             acc' (reducing-fn (or acc (reducing-fn)) (.-metrics node))]
-        (update r :path assoc :acc acc')))))
+        (fz/update-path r #(fz/assoc-acc % acc'))
+        #_(update r :path assoc :acc acc')))))
 
 (defn down [loc]
   (let [path (.-path loc)
         acc (some-> path .-acc)]
     (some-> (fz/down loc)
-            (update :path assoc :acc acc))))
+            (fz/update-path #(fz/assoc-acc % acc)))))
 
 (defn end? [loc]
   (keyword? (.-path loc)))
@@ -216,7 +219,7 @@
   "Modified version of clojure.zip/next to work with balancing version of up"
   [loc]
   (let [path (.-path loc)]
-    (if (#?(:clj identical? :cljs =) :end path)
+    (if (end? loc)
       loc
       (or
        (and (branch? loc) (down loc))
@@ -230,7 +233,7 @@
   "Just like next but not going down"
   [loc]
   (let [path (.-path loc)]
-    (if (#?(:clj identical? :cljs =) :end path)
+    (if (end? loc)
       loc
       (or
        (right loc)
@@ -261,6 +264,10 @@
   (zipper (root loc)
           (.-ops loc)))
 
+(defn push! [a x]
+  (.push a x)
+  a)
+
 (defn scan [loc pred]
   (if (end? loc)
     loc
@@ -273,7 +280,8 @@
           next-loc (if (root? loc)
                      loc
                      (loop [l (transient lefts)
-                            [n & r :as v] (cons node rights)
+                            n node
+                            r rights
                             acc (or acc (reducing-fn))]
                        (when (some? n)
                          (let [m (.-metrics n)
@@ -287,13 +295,19 @@
                                                (.-ppath path)
                                                (.-pnodes path)
                                                (.-changed? path)
-                                               acc))
-                             (recur (conj! l n) r acc'))))))]
+                                               acc
+                                               nil))
+                             (recur (conj! l n)
+                                    (first r)
+                                    (rest r)
+                                    acc'))))))]
       (if (some? next-loc)
         (if (branch? next-loc)
           (recur (down next-loc) pred)
           next-loc)
         (recur (skip loc) pred)))))
+
+
 
 (comment
 
@@ -306,7 +320,7 @@
   (let [reducing-fn (.-reducing-fn (.-ops loc))]
     (-> loc
         (fz/insert-left x)
-        (update :path update :acc reducing-fn (.-metrics x)))))
+        (fz/update-path (fn [p] (fz/assoc-acc p (reducing-fn (.-acc p) (.-metrics x))))))))
 
 (defn remove [loc]
   (let [node (.-node loc)
