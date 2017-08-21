@@ -5,7 +5,8 @@
             [clojure.spec.test.alpha :as stest]
             [clojure.test :refer :all]
             [clojure.test.check :as tc]
-            [andel.text :as text]))
+            [andel.text :as text]
+            [andel.tree :as tree]))
 
 (def op-frames-gen (g/vector
                     (g/one-of [(g/tuple

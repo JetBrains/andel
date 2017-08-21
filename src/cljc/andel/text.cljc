@@ -1,5 +1,6 @@
 (ns andel.text
-  (:require [andel.tree :as tree]))
+  (:require [andel.tree :as tree]
+            [andel.fast-zip :as fz]))
 
 #?(:clj
    (do
@@ -53,19 +54,21 @@
   (assert (<= string-thresh (count x)))
   (map (fn [[i j]] (subs x i j)) (split-count 0 (count x) string-thresh)))
 
+(def tree-config {:reducing-fn r-f
+                  :metrics-fn metrics
+                  :leaf-overflown? (fn [x] (<= string-thresh (count x)))
+                  :split-thresh 64
+                  :split-leaf split-string
+                  :leaf-underflown? (fn [s] (< (count s) string-merge-thresh))
+                  :merge-leafs (fn [s1 s2] (str s1 s2))})
 
-(def tree-config {::tree/reducing-fn r-f
-                  ::tree/metrics-fn metrics
-                  ::tree/leaf-overflown? (fn [x] (<= string-thresh (count x)))
-                  ::tree/split-thresh 32
-                  ::tree/split-leaf split-string
-                  ::tree/leaf-underflown? (fn [s] (< (count s) string-merge-thresh))
-                  ::tree/merge-leafs (fn [s1 s2] (str s1 s2))})
+(defn mark-changed [loc]
+  (update loc :path assoc :changed? true))
 
 (defn make-text [s]
   (-> (tree/zipper (tree/make-node [(tree/make-leaf s tree-config)] tree-config) tree-config)
       (tree/down)
-      (assoc-in [1 :changed?] true)
+      (mark-changed)
       (tree/root)))
 
 (defn zipper [tree]
@@ -73,23 +76,36 @@
 
 (def root tree/root)
 
+(defn metrics-offset [m]
+  (some-> m (aget 0)))
+
+(defn metrics-line [m]
+  (some-> m (aget 1)))
+
 (defn by-offset [i]
-  #(< i (nth % 0)))
+  (fn [acc m] (< i (metrics-offset (r-f acc m)))))
 
 (defn by-line [i]
-  #(<= i (nth % 1)))
+  (fn [acc m] (<= i (metrics-line (r-f acc m)))))
 
-(defn offset [[node {acc ::tree/acc
-                     o-acc ::overriding-acc} :as loc]]
-  (if (tree/end? loc)
-    (first (:metrics node))
-    (or (first o-acc) (first acc) 0)))
 
-(defn line [[node {acc ::tree/acc
-                   o-acc ::overriding-acc} :as loc]]
-  (if (tree/end? loc)
-    (second (:metrics node))
-    (or (second o-acc) (second acc) 0)))
+(defn offset [loc]
+  (let [node (.-node loc)
+        path (.-path loc)
+        acc (some-> path .-acc)
+        o-acc (.-o-acc path)]
+    (if (tree/end? loc)
+      (metrics-offset (.-metrics node))
+      (or (metrics-offset o-acc) (metrics-offset acc) 0))))
+
+(defn line [loc]
+  (let [node (.-node loc)
+        path (.-path loc)
+        acc (some-> path .-acc)
+        o-acc (.-o-acc path)]
+    (if (tree/end? loc)
+      (metrics-line (.-metrics node))
+      (or (metrics-line o-acc) (metrics-line acc) 0))))
 
 (defn count-of [s c from to]
   (loop [res 0
@@ -100,7 +116,7 @@
         res))))
 
 (defn nth-index [s c n]
-  (if (= n 0)
+  (if (identical? n 0)
     0
     (loop [from 0
            n n]
@@ -111,7 +127,7 @@
             (recur (inc i) (dec n))))))))
 
 (defn forget-acc [loc]
-  (assoc loc 1 (dissoc (loc 1) ::overriding-acc)))
+  (fz/update-path loc #(fz/assoc-o-acc % nil)))
 
 (defn scan-to-offset [loc i]
   (let [loc' (tree/scan loc (by-offset i))]
@@ -120,8 +136,8 @@
       (let [loc' (forget-acc loc')
             o (offset loc')
             l (line loc')]
-        (assoc-in loc' [1 ::overriding-acc]
-                  (array i (+ l (count-of (:data (tree/node loc')) \newline 0 (- i o)))))))))
+        (fz/update-path loc'
+                        #(fz/assoc-o-acc % (array i (+ l (count-of (.-data (tree/node loc')) \newline 0 (- i o))))))))))
 
 (defn retain [loc l]
   (scan-to-offset loc (+ (offset loc) l)))
@@ -133,9 +149,9 @@
       (let [loc' (forget-acc loc')
             o (offset loc')
             l (line loc')
-            idx (nth-index (:data (tree/node loc')) \newline (- i l))]
+            idx (nth-index (.-data (tree/node loc')) \newline (- i l))]
         (-> loc'
-            (assoc-in [1 ::overriding-acc] (array (+ o idx) i))
+            (fz/update-path #(fz/assoc-o-acc % (array (+ o idx) i)))
             (cond-> (< 0 i) (retain 1)))))))
 
 (defn line-length [loc]
@@ -153,8 +169,8 @@
       (if (tree/branch? loc)
         (recur (tree/down loc) l)
         (let [i (offset loc)
-              text (:data (tree/node loc))
-              base-offset (nth (tree/loc-acc loc) 0)
+              text (.-data (tree/node loc))
+              base-offset (metrics-offset (tree/loc-acc loc))
               start (- i base-offset)
               end (min (count text) (+ start l))
               s (subs text start end)
@@ -164,10 +180,17 @@
             (list s)))))))
 
 (defn lines-count [t]
-  (inc (second (:metrics t))))
+  (or (some-> t
+              (.-metrics)
+              (metrics-line)
+              (inc))
+      0))
 
 (defn text-length [t]
-  (first (:metrics t)))
+  (or (some-> t
+              (.-metrics)
+              (metrics-offset))
+      0))
 
 (defn text [loc l]
   (loop [s ""
@@ -180,26 +203,28 @@
   (if (tree/branch? loc)
     (recur (tree/down loc) s)
     (let [i (offset loc)
-          chunk-offset (nth (tree/loc-acc loc) 0)
+          chunk-offset (metrics-offset (tree/loc-acc loc))
           rel-offset (- i chunk-offset)]
       (-> loc
-          (tree/edit (fn [{:keys [data]}]
-                       (tree/make-leaf (str (subs data 0 rel-offset) s (subs data rel-offset)) tree-config)))
+          (tree/edit (fn [node]
+                       (let [data (.-data node)]
+                         (tree/make-leaf (str (subs data 0 rel-offset) s (subs data rel-offset)) tree-config))))
           (retain (count s))))))
 
 (defn delete [loc l]
   (if (tree/branch? loc)
     (recur (tree/down loc) l)
     (let [i (offset loc)
-          chunk-offset (nth (tree/loc-acc loc) 0)
+          chunk-offset (metrics-offset (tree/loc-acc loc))
           rel-offset (- i chunk-offset)
-          chunk-l (count (:data (tree/node loc)))
+          chunk-l (count (.-data (tree/node loc)))
           end (min chunk-l (+ rel-offset l))
           next-loc  (if (and (= rel-offset 0) (= end chunk-l))
                       (tree/remove (forget-acc loc))
                       (-> loc
-                          (tree/edit (fn [{s :data}]
-                                       (tree/make-leaf (str (subs s 0 rel-offset) (subs s end)) tree-config)))
+                          (tree/edit (fn [node]
+                                       (let [s (.-data node)]
+                                         (tree/make-leaf (str (subs s 0 rel-offset) (subs s end)) tree-config))))
                           (scan-to-offset i)))
           deleted-c (- end rel-offset)]
       (if (< deleted-c l)
@@ -209,8 +234,8 @@
 (def reset tree/reset)
 
 (defn debug-tree [t]
-  (if (array? (:children t))
-    (assoc t :children (vec (map debug-tree (:children t))))
+  (if (array? (.-children t))
+    (assoc t :children (vec (map debug-tree (.-children t))))
     t))
 
 (defn play [t operation]
@@ -218,7 +243,9 @@
                   (case code
                     :retain (retain loc arg)
                     :insert (insert loc arg)
-                    :delete (delete loc (if (string? arg) (count arg) arg)))) (zipper t) operation)))
+                    :delete (delete loc (if (string? arg) (count arg) arg))))
+                (zipper t)
+                operation)))
 
 
 (defn line-text [t i]

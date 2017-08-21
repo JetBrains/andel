@@ -4,6 +4,7 @@
               [andel.throttling :as throttling]
               [andel.controller :as contr]
               [andel.utils :as utils]
+              [andel.intervals :as intervals]
               [reagent.core :as reagent]
               [reagent.ratom :refer [track]]
               [reagent.session :as session]
@@ -88,21 +89,6 @@
   (.appendChild e c)
   e)
 
-(defn dom [[tag x & r :as el]]
-  (assert (some? el))
-  (let [[attrs-map children] (if (map? x) [x r] [nil (cons x r)])]
-    (reduce (fn [n [a v]]
-              (assoc-attr! n a v))
-            (reduce (fn [n c]
-                      (if (some? c)
-                        (conj-child! n (if (string? c)
-                                         (make-text-node c)
-                                         (dom c)))
-                        n))
-                    (make-node tag)
-                    children)
-            attrs-map)))
-
 (defn infinity? [x] (keyword? x))
 
 (defn render-selection [[from to] {:keys [width] :as metrics}]
@@ -128,8 +114,6 @@
                             :position :absolute
                             :left (px (* col width))
                             :height (px (inc (utils/line-height metrics)))})}])
-
-
 
 (def token-class
   (let [tokens-cache #js {}]
@@ -159,6 +143,17 @@
                         tokens)]
     (push! res #js [:span (subs text i)])))
 
+(defn render-markup [markup {:keys [height width spacing]}]
+  (let [res (reduce (fn [res {:keys [from to]}]
+                      (push! res #js [:div {:style (style {:background-color "red"
+                                                           :left (px (* from width))
+                                                           :width (px (* width (- to from)))
+                                                           :height (px (+ height spacing))
+                                                           :position :absolute})}]))
+                    #js [:pre {:class :line-markup}]
+                    markup)]
+    res))
+
 (def real-dom
   (reagent/create-class
    {:component-will-update
@@ -180,16 +175,44 @@
    {:style {:transform (str "translate3d(" (px x) ", " (px y) ", " (px z))}}
    c])
 
-(defrecord LineInfo [line-text line-tokens selection caret-index index])
 
-(defn render-line [{:keys [line-text line-tokens selection caret-index] :as line-info} metrics]
-  (let [_ (defstyle :render-line [:.render-line {:height (px (utils/line-height metrics))
-                                                 :position :relative}])]
+
+(defn translate-y [y c]
+  [:div {:style {:transform (str "translate3d(0px, " (px y) ", 0px)")}} c])
+
+(defrecord LineInfo [line-text line-tokens line-markup selection caret-index index])
+
+(defn dom [el]
+  (let  [tag (aget el 0)
+         x (aget el 1)
+         r (.slice el 2)]
+    (assert (some? el))
+    (let [[attrs-map children] (if (map? x) [x r] [nil (cons x r)])]
+      (reduce (fn [n [a v]]
+                (assoc-attr! n a v))
+              (reduce (fn [n c]
+                        (if (some? c)
+                          (conj-child! n (if (string? c)
+                                           (make-text-node c)
+                                           (dom c)))
+                          n))
+                      (make-node tag)
+                      children)
+              attrs-map))))
+
+(defn render-line [line-info metrics]
+  (let [line-text (.-line-text line-info)
+        line-tokens (.-line-tokens line-info)
+        line-markup (.-line-markup line-info)
+        selection (.-selection line-info)
+        caret-index (.-caret-index line-info)]
     [real-dom (dom
-                #js [:div {:class :render-line}
-                     (render-selection selection metrics)
-                     (render-text line-text line-tokens metrics)
-                     (when caret-index (render-caret caret-index metrics))])]))
+               #js [:div {:class :render-line}
+                    (render-selection selection metrics)
+                    (render-text line-text line-tokens metrics)
+                    (when caret-index (render-caret caret-index metrics))
+                    (render-markup line-markup metrics)
+                    ])]))
 
 (defn line-selection [[from to] [line-start-offset line-end-offset]]
   (cond (and (< from line-start-offset) (< line-start-offset to))
@@ -241,6 +264,18 @@
                        scroll-on-event)))}
        [viewport]])))
 
+(defn prepare-markup [markup from to]
+  []
+  #_(->> markup
+      (filter (fn [marker]
+                (and (<= (:from marker) to)
+                     (<= from (:to marker)))))
+      (mapv (fn [marker]
+              (intervals/->Marker (max 0 (- (:from marker) from))
+                                  (max 0 (- (:to marker) from))
+                                  nil
+                                  nil)))))
+
 ;; Todo: untangle all this spaghetti bindings
 (defn editor-viewport [state]
   (fn []
@@ -254,7 +289,13 @@
           from (int (/ from-y-offset line-height))
           to (+ 5 (+ from (/ h line-height)))
           y-shift (- (* line-height (- (/ from-y-offset line-height) from)))
+          line-zipper (text/scan-to-line (text/zipper text) from)
+          from-offset (text/offset line-zipper)
+          to-offset (dec (text/offset (text/scan-to-line line-zipper (inc to))))
           caret-offset (get caret :offset)
+          markup (intervals/query-intervals (:markup document) (intervals/map->Marker {:from from-offset :to to-offset}))
+          _ (defstyle :render-line [:.render-line {:height (px (utils/line-height metrics))
+                                                   :position :relative}])
           [_ hiccup] (reduce
                       (fn [[line-start res] index]
                         (let [next-line (text/scan-to-line line-start (inc index))
@@ -271,11 +312,12 @@
                               line-caret (when (and (<= line-start-offset caret-offset) (<= caret-offset line-end-offset))
                                            (- caret-offset line-start-offset))
                               line-tokens (:tokens (get lines index))
-                              line-info (LineInfo. line-text line-tokens line-sel line-caret index)]
+                              line-markup (prepare-markup markup line-start-offset line-end-offset)
+                              line-info (LineInfo. line-text line-tokens line-markup line-sel line-caret index)]
                           [next-line (conj! res
                                             ^{:key index}
-                                            [translate3d {:y y-shift} [render-line line-info metrics]])]))
-                      [(text/scan-to-line (text/zipper text) from)
+                                            [translate-y y-shift [render-line line-info metrics]])]))
+                      [line-zipper
                        (transient [:div {:style
                                          {:background theme/background
                                           :width "100%"}
@@ -449,6 +491,12 @@
       ;load sample document from the internet
       (let [text (:body (a/<! (http/get "/EditorImpl.java")))]
         (swap-editor! state contr/set-text text))
+      (let [markup (->> (:body (a/<! (http/get "/markup.edn")))
+                        (sort-by :from))]
+        (js/console.log (str "MARKUP LOADED: " (count markup)))
+        (swap-editor! state (fn [s] (assoc-in s [:raw-markers] (map intervals/map->Marker markup))))
+        (swap-editor! state (fn [s] (assoc-in s [:document :markup] (-> (intervals/make-interval-tree)
+                                                                        (intervals/add-intervals (map intervals/map->Marker markup)))))))
       ;deliver promise
       (a/>! loaded :done))
     loaded))
@@ -492,3 +540,118 @@
 (bind-function! "shift-up" contr/move-caret :up true)
 (bind-function! "shift-down" contr/move-caret :down true)
 (bind-function! "esc" contr/drop-selection-on-esc)
+
+
+;; benchmarks
+
+(defn current-time! []
+  (.now js/Date))
+
+(defn text-tree-info [t]
+  (loop [acc {:nodes 0 :leafs 0}
+         loc (text/zipper t)]
+    (if (tree/end? loc)
+      (js/console.log (str "TEXT: " acc))
+      (if (tree/node? (tree/node loc))
+        (recur (update acc :nodes inc) (tree/next loc))
+        (recur (update acc :leafs inc) (tree/next loc))))))
+
+(defn intervals-tree-info [t]
+  (loop [acc {:nodes 0 :leafs 0}
+         loc (intervals/zipper t)]
+    (if (tree/end? loc)
+      (js/console.log (str "INTERVALS: " acc))
+      (if (tree/node? (tree/node loc))
+        (recur (update acc :nodes inc) (tree/next loc))
+        (recur (update acc :leafs inc) (tree/next loc))))))
+
+(defn bench [name f & {:keys [count] :or {count 10}}]
+  (let [start-time (current-time!)]
+    (js/console.log (str "START BENCH " name))
+    (mapv (fn [f] (f)) (repeat count f))
+    (let [end-time (current-time!)
+          total-time (- end-time start-time)]
+      (js/console.log (str "END BENCH: " name " "
+                            {:count count
+                             :total total-time
+                             :average (/ total-time count)})))))
+
+(defn bench-insert [markup]
+  (bench "TREE INSERT"
+         (fn []
+           (-> (intervals/make-interval-tree)
+               (intervals/add-intervals markup)))
+         :count 1))
+
+(defn bench-insert-base [markup]
+  (bench "BASE INSERT"
+   (fn []
+     (mapv (fn [m] (update m :from inc)) markup))
+   :count 100))
+
+(defn bench-query [markup]
+  (let [itree (-> (intervals/make-interval-tree)
+                  (intervals/add-intervals markup))]
+    (bench "TREE QUERY"
+           (fn []
+             (let [from (rand-int 160000)
+                   to (+ from 3200)]
+               (intervals/query-intervals itree (intervals/map->Marker {:from from :to to}))))
+           :count 10000)))
+
+(defn play-query [model {:keys [from to]}]
+  (vec (filter #(intervals/intersect % (intervals/map->Marker {:from from :to to})) model)))
+
+(defn bench-query-base [markup]
+  (bench "QUERY BASE"
+         (fn []
+           (let [from (rand-int 160000)
+                 to (+ from 3200)]
+             (play-query markup {:from from :to to})))
+         :count 1000))
+
+(defn bench-type-in [markup]
+  (let [itree (-> (intervals/make-interval-tree)
+                  (intervals/add-intervals markup))]
+    (bench "TYPE-IN BENCH"
+           (fn []
+             (let [offset (rand-int 160000)
+                   size 1]
+               (intervals/type-in itree [offset size])))
+           :count 1000)))
+
+(defn bench-delete [markup]
+  (let [itree (-> (intervals/make-interval-tree)
+                  (intervals/add-intervals markup))]
+    (bench "DELETE BENCH"
+           (fn []
+             (let [offset (rand-int 160000)
+                   size 1]
+               (intervals/delete-range itree [offset size])))
+           :count 1)))
+
+
+
+(defn bench-editing [markup]
+  (let [itree (-> (intervals/make-interval-tree)
+                  (intervals/add-intervals markup))]
+    (bench "TREE EDITING"
+           (fn []
+             (let [cmd (rand-nth [:insert :delete])]
+               (case cmd
+                 :insert ))))))
+
+(bind-function! "ctrl-b" (fn [s]
+                           (let [markup (:raw-markers s)
+                                 interval-tree (get-in s [:document :markup])
+                                 text-tree (get-in s [:document :text])]
+                             #_(text-tree-info text-tree)
+                             #_(intervals-tree-info interval-tree)
+                             (bench-insert markup)
+                             #_(bench-insert-base markup)
+                             #_(bench-query markup)
+                             #_(bench-query-base markup)
+                             #_(bench-type-in markup)
+                             #_(bench-delete markup))
+                           (js/alert "BENCH DONE")
+                           s))
