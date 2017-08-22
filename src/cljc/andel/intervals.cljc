@@ -289,7 +289,7 @@
           [(tree/root new-loc) acc]
           (let [from-to (loc->Marker new-loc)
                 from (.-from from-to)
-                to (.to from-to)]
+                to (.-to from-to)]
             (if (< (+ offset size) from)
               [(tree/root (update-leaf-offset new-loc #(- % size))) (persistent! acc)]
               (recur (remove-leaf new-loc) (conj! acc from-to)))))))))
