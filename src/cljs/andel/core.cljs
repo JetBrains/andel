@@ -6,7 +6,7 @@
               [andel.utils :as utils]
               [andel.intervals :as intervals]
               [andel.keybind :as keybind]
-	      [garden.core :as g]
+              [garden.core :as g]
               [clojure.core.async :as a]
               [cljs-http.client :as http]
               [andel.text :as text]
@@ -20,9 +20,10 @@
     (:require-macros [reagent.interop :refer [$ $!]]
                      [cljs.core.async.macros :refer [go]]))
 
-
-(defn el [tag props & children]
-  (.createElement js/React tag props children))
+(defn el
+  ([tag props] (el tag props []))
+  ([tag props children]
+   (.createElement js/React tag props children)))
 
 (defn head []
   (aget (js/document.getElementsByTagName "head") 0))
@@ -146,7 +147,7 @@
                                            (subs text i (+ i len))])])
                         [0 #js [:pre {:class :line-text}]]
                         tokens)]
-    (push! res #js [:span (subs text i)])))
+    (push! res #js [:span {} (subs text i)])))
 
 (defn render-markup [markup {:keys [height width spacing]}]
   (let [res (reduce (fn [res {:keys [from to]}]
@@ -176,7 +177,7 @@
             (let [elt ($ ($ this :props) :dom)
                   node (.findDOMNode js/ReactDOM this)]
               (.appendChild node elt))))
-        
+
         :render
         (fn [_] (el "div" #js {:key "realDOM"}))}))
 
@@ -190,21 +191,24 @@
 
 (defn dom [el]
   (let  [tag (aget el 0)
-         x (aget el 1)
-         r (.slice el 2)]
+         attrs-map (aget el 1)
+         children (.slice el 2)]
     (assert (some? el))
-    (let [[attrs-map children] (if (map? x) [x r] [nil (cons x r)])]
-      (reduce (fn [n [a v]]
-                (assoc-attr! n a v))
-              (reduce (fn [n c]
-                        (if (some? c)
-                          (conj-child! n (if (string? c)
-                                           (make-text-node c)
-                                           (dom c)))
-                          n))
-                      (make-node tag)
-                      children)
-              attrs-map))))
+    (let [len (.-length children)
+          el-with-children (loop [i 0
+                                  n (make-node tag)]
+                             (if (< i len)
+                               (if-let [c (aget children i)]
+                                 (recur (inc i)
+                                        (conj-child! n (if (string? c)
+                                                         (make-text-node c)
+                                                         (dom c))))
+                                 (recur (inc i) n))
+                               n))]
+      (reduce-kv (fn [n a v]
+                   (assoc-attr! n a v))
+                 el-with-children
+                 attrs-map))))
 
 (defn def-fun [f]
   (js/createReactClass
@@ -223,7 +227,7 @@
       (this-as this
         (let [line-info (props :line-info)
               metrics (props :metrics)
-              
+
               line-text (.-lineText line-info)
               line-tokens (.-lineTokens line-info)
               line-markup (.-lineMarkup line-info)
@@ -261,7 +265,7 @@
                                          (when e
                                                      (on-resize (.-clientWidth e) (.-clientHeight e))))
                               :onWheel on-mouse-wheel}
-                   child)))))
+                   [child])))))
 
 
 (defn editor-viewport [props]
@@ -303,13 +307,13 @@
                         [next-line (conj! res
                                           (el "div" (js-obj "key" index
                                                             "style" (js-obj "transform" (str "translate3d(0px, " (px y-shift) ", 0px)")))
-                                              (el render-line #js {:key index
-                                                                   :props {:line-info line-info
-                                                                           :metrics metrics}})))]))
+                                              [(el render-line #js {:key index
+                                                                     :props {:line-info line-info
+                                                                             :metrics metrics}})]))]))
                     [line-zipper
                      (transient [])]
                     (range from to))]
-    (apply el "div" #js {:style #js {:background theme/background
+    (el "div" #js {:style #js {:background theme/background
                                      :width "100%"}
                          :key "viewport"
                          :onMouseDown (fn [event]
@@ -335,11 +339,11 @@
       (swap-editor! state
                     #(update-in % [:viewport :pos]
                       (fn [[x y]]
-                        (let [dx (/ (.-deltaX evt) 2)
-                              dy (/ (.-deltaY evt) 2)]                          
+                        (let [dx (.-deltaX evt)
+                              dy (.-deltaY evt)]
                           (if (< (js/Math.abs dx) (js/Math.abs dy))
-                            [x (min document-height (max 0 (- y dy)))]
-                            [(max 0 (- x dx)) y])))))
+                            [x (min document-height (max 0 (+ y dy)))]
+                            [(max 0 (+ x dx)) y])))))
       (.preventDefault evt))))
 
 (defn init-viewport [state]
@@ -356,13 +360,13 @@
                          (fn [_ _ old-state new-state]
                            (when (not (= old-state new-state))
                              (.setState cmp new-state)))))))
-        
+
         :componentWillUnmount
         (fn []
           (this-as cmp
             (let [*state ($ ($ cmp :props) :editorState)]
-              (remove-watch *state :editor-view))))                                      
-        
+              (remove-watch *state :editor-view))))
+
         :render
         (fn []
           (this-as cmp
@@ -374,34 +378,34 @@
                              :onFocus (fn []
                                         (prn "FOCUS")
                                         (.focus ($ cmp :textInput)))}
-                  (el scroll (js-obj "key" "viewport"
-                                     "props" {:child (el editor-viewport
-                                                         #js {:key "editor-viewport"
-                                                              :editorState state})
-                                              :onResize (init-viewport *state)
-                                              :onMouseWheel (scroll-on-event *state)}))
-                  (el "textarea"
-                      #js {:key "textarea"
-                           :autoFocus true
-                           :ref (fn [input]
-                                  (aset cmp "textInput" input))
-                           :style #js {:opacity 0
-                                       :pading  "0px"
-                                       :border  :none
-                                       :height  "0px"
-                                       :width   "0px"}
-                           :onInput (fn [evt]
-                                      (let [e   (.-target evt)
-                                            val (.-value e)]
-                                        (set! (.-value e) "")
-                                        (swap-editor! *state contr/type-in val)))})))))}))
+                  [(el scroll (js-obj "key" "viewport"
+                                       "props" {:child (el editor-viewport
+                                                           #js {:key "editor-viewport"
+                                                                :editorState state})
+                                                :onResize (init-viewport *state)
+                                                :onMouseWheel (scroll-on-event *state)}))
+                   (el "textarea"
+                       #js {:key "textarea"
+                            :autoFocus true
+                            :ref (fn [input]
+                                   (aset cmp "textInput" input))
+                            :style #js {:opacity 0
+                                        :pading  "0px"
+                                        :border  :none
+                                        :height  "0px"
+                                        :width   "0px"}
+                            :onInput (fn [evt]
+                                       (let [e   (.-target evt)
+                                             val (.-value e)]
+                                         (set! (.-value e) "")
+                                         (swap-editor! *state contr/type-in val)))})]))))}))
 
 (def main (el "div"
               #js {:style #js {:display :flex
                                :flex "1"}
                    :key "main"}
-              (el editor #js {:editorState state
-                              :key "editor"})))
+              [(el editor #js {:editorState state
+                                :key "editor"})]))
 
 
 (defn include-script [src]
@@ -517,7 +521,7 @@
                                                "/codemirror/mode/clojure/clojure.js"])))
       (a/<! (setup-font! state "Fira Code" 16 3))
       ;run lexer worker and setup atom watcher that will run lexer on changes
-      #_(attach-lexer! state)
+      (attach-lexer! state)
       (add-watch state :lexer
                  (fn [_ _ old-s new-s]
                    (let [old-ts (get-in old-s [:document :timestamp])
