@@ -19,7 +19,8 @@
                      [cljs.core.async.macros :refer [go]]))
 
 (defn el
-  ([tag props] (el tag props []))
+  ([tag props]
+   (.createElement js/React tag props))
   ([tag props children]
    (.createElement js/React tag props children)))
 
@@ -401,7 +402,7 @@
                                :flex "1"}
                    :key "main"}
               [(el editor #js {:editorState state
-                                :key "editor"})]))
+                               :key "editor"})]))
 
 
 (defn include-script [src]
