@@ -5,20 +5,23 @@
               [andel.controller :as contr]
               [andel.utils :as utils]
               [andel.intervals :as intervals]
-              [reagent.core :as reagent]
-              [reagent.ratom :refer [track]]
-              [reagent.session :as session]
               [andel.keybind :as keybind]
-              [garden.core :as g]
+	      [garden.core :as g]
               [clojure.core.async :as a]
               [cljs-http.client :as http]
-              [hiccups.runtime :as hiccups]
               [andel.text :as text]
               [andel.tree :as tree]
-              [clojure.core.reducers :as r])
+              [clojure.core.reducers :as r]
+
+              [create-react-class :as create-react-class]
+
+              [quiescent.core :as qc]
+              [quiescent.dom :as qd])
     (:require-macros [reagent.interop :refer [$ $!]]
-                     [reagent.ratom :refer [reaction]]
                      [cljs.core.async.macros :refer [go]]))
+
+(defn new-element [tag props & children]
+  (.createElement js/React (clj->js tag) (clj->js props) children))
 
 (defn head []
   (aget (js/document.getElementsByTagName "head") 0))
@@ -65,7 +68,7 @@
 
 (def swap-editor! swap!)
 
-(defonce state (reagent/atom (make-editor-state)))
+(defonce state (atom (make-editor-state)))
 
 (defn style [m]
   (reduce-kv (fn [s k v]
@@ -155,32 +158,31 @@
     res))
 
 (def real-dom
-  (reagent/create-class
-   {:component-will-update
-    (fn [this [_ elt]]
-      (let [node (reagent/dom-node this)
-            child (.-firstChild node)]
-        (when child
-          (.removeChild node child))
-        (.appendChild node elt)))
-    :component-did-mount
-    (fn [this]
-      (let [[_ elt] (reagent/argv this)
-            node (reagent/dom-node this)]
-        (.appendChild node elt)))
-    :render (fn [_] [:div])}))
-
-(defn translate3d [{:keys [x y z] :or {x 0 y 0 z 0}} c]
-  [:div
-   {:style {:transform (str "translate3d(" (px x) ", " (px y) ", " (px z))}}
-   c])
+  (js/createReactClass
+   #js {:componentWillUpdate
+        (fn []
+          (this-as this
+                   (let [elt (.. this -props -dom)
+                         node (.findDOMNode js/ReactDOM this)
+                         child (.-firstChild node)]
+                     (when child
+                       (.removeChild node child))
+                     (.appendChild node elt))))
+        :componentDidMount
+        (fn []
+          (this-as this
+                   (let [elt (.. this -props -dom)
+                         node (.findDOMNode js/ReactDOM this)]
+                     (.appendChild node elt))))
+        :render (fn [_] (new-element "div" {:key "realDOM"}))}))
 
 
+#_(defn translate-y [y c]
+  (new-element "div"
+               {:style {:transform (str "translate3d(0px, " (px y) ", 0px)")}}
+               c))
 
-(defn translate-y [y c]
-  [:div {:style {:transform (str "translate3d(0px, " (px y) ", 0px)")}} c])
-
-(defrecord LineInfo [line-text line-tokens line-markup selection caret-index index])
+(defrecord LineInfo [lineText lineTokens lineMarkup selection caretIndex index])
 
 (defn dom [el]
   (let  [tag (aget el 0)
@@ -200,19 +202,22 @@
                       children)
               attrs-map))))
 
-(defn render-line [line-info metrics]
-  (let [line-text (.-line-text line-info)
-        line-tokens (.-line-tokens line-info)
-        line-markup (.-line-markup line-info)
+(defn render-line [props]
+  (let [line-info (.-lineInfo props)
+        metrics (.-metrics props)
+        
+        line-text (.-lineText line-info)
+        line-tokens (.-lineTokens line-info)
+        line-markup (.-lineMarkup line-info)
         selection (.-selection line-info)
-        caret-index (.-caret-index line-info)]
-    [real-dom (dom
-               #js [:div {:class :render-line}
-                    (render-selection selection metrics)
-                    (render-text line-text line-tokens metrics)
-                    (when caret-index (render-caret caret-index metrics))
-                    (render-markup line-markup metrics)
-                    ])]))
+        caret-index (.-caretIndex line-info)]
+    
+    (new-element real-dom {:dom (dom
+                                 #js [:div {:class :render-line}
+                                      (render-selection selection metrics)
+                                      (render-text line-text line-tokens metrics)
+                                      (when caret-index (render-caret caret-index metrics))
+                                      #_(render-markup line-markup metrics)])})))
 
 (defn line-selection [[from to] [line-start-offset line-end-offset]]
   (cond (and (< from line-start-offset) (< line-start-offset to))
@@ -225,9 +230,80 @@
                                       :infinity)]
         :else nil))
 
-(defn init-viewport [state]
-  (fn [width height]
-    (swap-editor! state #(assoc-in % [:viewport :view-size] [width height]))))
+(defn scroll [props]
+  (let [child (.-child props)
+        on-resize (.-onResize props)
+        on-mouse-wheel (.-onMouseWheel props)]
+    (new-element "div" {:key "scroll"
+                        :style {:display :flex
+                                :flex "1"
+                                :overflow :hidden}
+                        :ref (fn [e]
+                               (when e
+                                 (on-resize (.-clientWidth e) (.-clientHeight e))))
+                        :onWheel on-mouse-wheel}
+                 child)))
+
+(defn editor-viewport [props]
+  (let [{:keys [editor document viewport]} @state
+        {:keys [pos view-size metrics]} viewport
+        line-height (utils/line-height metrics)
+        {:keys [text lines]} document
+        {:keys [caret selection]} editor
+        [_ from-y-offset] pos
+        [w h] view-size
+        from (int (/ from-y-offset line-height))
+        to (+ 5 (+ from (/ h line-height)))
+        y-shift (- (* line-height (- (/ from-y-offset line-height) from)))
+        line-zipper (text/scan-to-line (text/zipper text) from)
+        from-offset (text/offset line-zipper)
+        to-offset (dec (text/offset (text/scan-to-line line-zipper (inc to))))
+        caret-offset (get caret :offset)
+        markup (intervals/query-intervals (:markup document) (intervals/map->Marker {:from from-offset :to to-offset}))
+        _ (defstyle :render-line [:.render-line {:height (px (utils/line-height metrics))
+                                                 :position :relative}])
+        [_ hiccup] (reduce
+                    (fn [[line-start res] index]
+                      (let [next-line (text/scan-to-line line-start (inc index))
+                            line-start-offset (text/offset line-start)
+                            next-line-offset (text/offset next-line)
+                            len (- next-line-offset
+                                   line-start-offset)
+                            len (if (tree/end? next-line)
+                                  len
+                                  (dec len))
+                            line-text (text/text line-start len)
+                            line-end-offset (+ line-start-offset len)
+                            line-sel (line-selection selection [line-start-offset line-end-offset])
+                            line-caret (when (and (<= line-start-offset caret-offset) (<= caret-offset line-end-offset))
+                                         (- caret-offset line-start-offset))
+                            line-tokens (:tokens (get lines index))
+                            line-markup nil #_(prepare-markup markup line-start-offset line-end-offset)
+                            line-info (LineInfo. line-text line-tokens line-markup line-sel line-caret index)]
+                        [next-line (conj! res
+                                          (new-element "div" {:key (str index)
+                                                              :style {:transform (str "translate3d(0px, " (px y-shift) ", 0px)")}}
+                                                       (new-element render-line {:key (str "i" index)
+                                                                                 :lineInfo line-info
+                                                                                 :metrics metrics})))]))
+                    [line-zipper
+                     (transient [])]
+                    (range from to))]
+    (apply new-element "div" {:style {:background theme/background
+                                      :width "100%"}
+                              :key "viewport"
+                              :onMouseDown (fn [event]
+                                             (let [x ($ event :clientX)
+                                                   y ($ event :clientY)
+                                                   line-col (utils/pixels->grid-position [x y] from y-shift metrics)]
+                                               (swap-editor! state #(contr/set-caret-at-grid-pos % line-col false))))
+                              :onMouseMove  (fn [event]
+                                              (when (= ($ event :buttons) 1)
+                                                (let [x ($ event :clientX)
+                                                      y ($ event :clientY)
+                                                      line-col (utils/pixels->grid-position [x y] from y-shift metrics)]
+                                                  (swap-editor! state #(contr/set-caret-at-grid-pos % line-col true)))))}
+           (persistent! hiccup))))
 
 (defn scroll-on-event [state]
   (fn [evt]
@@ -239,138 +315,72 @@
       (swap-editor! state
                     #(update-in % [:viewport :pos]
                       (fn [[x y]]
-                        (let [dx (/ (.-wheelDeltaX evt) 2)
-                              dy (/ (.-wheelDeltaY evt) 2)]
+                        (let [dx (/ (.-deltaX evt) 2)
+                              dy (/ (.-deltaY evt) 2)]                          
                           (if (< (js/Math.abs dx) (js/Math.abs dy))
                             [x (min document-height (max 0 (- y dy)))]
                             [(max 0 (- x dx)) y])))))
       (.preventDefault evt))))
 
+(defn init-viewport [state]
+  (fn [width height]
+    (swap-editor! state #(assoc-in % [:viewport :view-size] [width height]))))
 
-(defn scroll [viewport init scroll-on-event]
-  (let [once (atom true)]
-    (fn []
-      [:div {:style {:display :flex
-                     :flex "1"
-                     :overflow :hidden}
-             :ref (fn [e]
-                    (when e
-                      (init (.-clientWidth e) (.-clientHeight e)))
-                    (when (and @once (some? e))
-                      (reset! once false)
-                      (.addEventListener
-                       e
-                       "mousewheel"
-                       scroll-on-event)))}
-       [viewport]])))
+(def editor
+  (js/createReactClass
+   #js {:componentDidMount
+        (fn []
+          (this-as this
+            (let [*state (.. this -props -editorState)]                                            
+              (add-watch *state :editor-view
+                         (fn [_ _ old-state new-state]
+                           (when (not (= old-state new-state))
+                             (.setState this new-state)))))))
+        
+        :componentWillUnmount
+        (fn []
+          (this-as this
+            (let [*state (.. this -props -editorState)]
+              (remove-watch *state :editor-view))))                                      
+        
+        :render
+        (fn []                                        
+          (this-as this
+            (let [*state (.. this -props -editorState)]
+              (new-element "div" {:key "editor"
+                                  :style {:display :flex
+                                          :flex 1}
+                                  :tabIndex -1
+                                  :onClick (fn [] (.. this -textInput focus))} 
+                           (new-element scroll {:key "viewport"
+                                                :onResize (init-viewport *state)
+                                                :onMouseWheel (scroll-on-event *state)
+                                                :child (new-element editor-viewport
+                                                                    {:key "editor-viewport"
+                                                                     :editorState state})})
+                           (new-element "textarea"
+                                        {:key "textarea"
+                                         :autoFocus true
+                                         :ref (fn [input]
+                                                (aset this "textInput" input))
+                                         :style {:opacity 0
+                                                 :pading  "0px"
+                                                 :border  :none
+                                                 :height  "0px"
+                                                 :width   "0px"}
+                                         :onInput (fn [evt]
+                                                    (let [e   (.-target evt)
+                                                          val (.-value e)]
+                                                      (set! (.-value e) "")
+                                                      (swap-editor! *state contr/type-in val)))})))))}))
 
-(defn prepare-markup [markup from to]
-  []
-  #_(->> markup
-      (filter (fn [marker]
-                (and (<= (:from marker) to)
-                     (<= from (:to marker)))))
-      (mapv (fn [marker]
-              (intervals/->Marker (max 0 (- (:from marker) from))
-                                  (max 0 (- (:to marker) from))
-                                  nil
-                                  nil)))))
+(def main (new-element "div"
+                       {:style {:display :flex
+                                :flex "1"}
+                        :key "main"}
+                       (new-element editor {:editorState state
+                                            :key "editor"})))
 
-;; Todo: untangle all this spaghetti bindings
-(defn editor-viewport [state]
-  (fn []
-    (let [{:keys [editor document viewport]} @state
-          {:keys [pos view-size metrics]} viewport
-          line-height (utils/line-height metrics)
-          {:keys [text lines]} document
-          {:keys [caret selection]} editor
-          [_ from-y-offset] pos
-          [w h] view-size
-          from (int (/ from-y-offset line-height))
-          to (+ 5 (+ from (/ h line-height)))
-          y-shift (- (* line-height (- (/ from-y-offset line-height) from)))
-          line-zipper (text/scan-to-line (text/zipper text) from)
-          from-offset (text/offset line-zipper)
-          to-offset (dec (text/offset (text/scan-to-line line-zipper (inc to))))
-          caret-offset (get caret :offset)
-          markup (intervals/query-intervals (:markup document) (intervals/map->Marker {:from from-offset :to to-offset}))
-          _ (defstyle :render-line [:.render-line {:height (px (utils/line-height metrics))
-                                                   :position :relative}])
-          [_ hiccup] (reduce
-                      (fn [[line-start res] index]
-                        (let [next-line (text/scan-to-line line-start (inc index))
-                              line-start-offset (text/offset line-start)
-                              next-line-offset (text/offset next-line)
-                              len (- next-line-offset
-                                     line-start-offset)
-                              len (if (tree/end? next-line)
-                                    len
-                                    (dec len))
-                              line-text (text/text line-start len)
-                              line-end-offset (+ line-start-offset len)
-                              line-sel (line-selection selection [line-start-offset line-end-offset])
-                              line-caret (when (and (<= line-start-offset caret-offset) (<= caret-offset line-end-offset))
-                                           (- caret-offset line-start-offset))
-                              line-tokens (:tokens (get lines index))
-                              line-markup (prepare-markup markup line-start-offset line-end-offset)
-                              line-info (LineInfo. line-text line-tokens line-markup line-sel line-caret index)]
-                          [next-line (conj! res
-                                            ^{:key index}
-                                            [translate-y y-shift [render-line line-info metrics]])]))
-                      [line-zipper
-                       (transient [:div {:style
-                                         {:background theme/background
-                                          :width "100%"}
-                                         :onMouseDown (fn [event]
-                                                        (let [x ($ event :clientX)
-                                                              y ($ event :clientY)
-                                                              line-col (utils/pixels->grid-position [x y] from y-shift metrics)]
-                                                          (swap-editor! state #(contr/set-caret-at-grid-pos % line-col false))))
-                                         :onMouseMove  (fn [event]
-                                                         (when (= ($ event :buttons) 1)
-                                                           (let [x ($ event :clientX)
-                                                                 y ($ event :clientY)
-                                                                 line-col (utils/pixels->grid-position [x y] from y-shift metrics)]
-                                                             (swap-editor! state #(contr/set-caret-at-grid-pos % line-col true)))))}])]
-                      (range from to))]
-      (persistent! hiccup))))
-
-(defn editor [state]
-  (let [dom-input (atom nil)
-        listener  (atom nil)]
-    (fn []
-      [:div
-       {:style     {:display :flex
-                    :flex    1}
-        :tab-index -1
-        :ref       (fn [this]
-                     (when-let [node (reagent/dom-node this)]
-                       (reset! listener true)
-                       (.addEventListener node "focus"
-                                          (fn []
-                                            (when @dom-input
-                                              (.focus @dom-input))))))}
-       [scroll (editor-viewport state) (init-viewport state) (scroll-on-event state)]
-       [:textarea
-        {:ref        (fn [this]
-                       (when-let [dom-node (reagent/dom-node this)]
-                         (reset! dom-input dom-node)))
-         :auto-focus true
-         :style      {:opacity 0
-                      :pading  "0px"
-                      :border  :none
-                      :height  "0px"
-                      :width   "0px"}
-         :on-input   (fn [evt]
-                       (let [e   (.-target evt)
-                             val (.-value e)]
-                         (set! (.-value e) "")
-                         (swap-editor! state contr/type-in val)))}]])))
-
-(defn main []
-  [:div {:style {:display :flex
-                 :flex "1"}}
-   [editor state]])
 
 (defn include-script [src]
   (let [e (js/document.createElement "script")
@@ -480,7 +490,7 @@
                                                "/codemirror/mode/clojure/clojure.js"])))
       (a/<! (setup-font! state "Fira Code" 16 3))
       ;run lexer worker and setup atom watcher that will run lexer on changes
-      (attach-lexer! state)
+      #_(attach-lexer! state)
       (add-watch state :lexer
                  (fn [_ _ old-s new-s]
                    (let [old-ts (get-in old-s [:document :timestamp])
@@ -506,152 +516,11 @@
 (defn mount-root []
   (go (a/<! ready)
       (let [root (.getElementById js/document "app")]
-        (reagent/render [main] root))))
+        (.render js/ReactDOM main root))))
 
 (defn init! []
   (mount-root))
 
-(defn capture [f]
-  (fn [evt _]
-    (f)
-    (.stopPropagation evt)
-    (.preventDefault evt)))
 
-(defn- bind-function! [key f & args]
-  (keybind/bind! key :global (capture #(swap-editor! state (fn [s] (apply f s args))))))
-
-(bind-function! "backspace" contr/backspace)
-(bind-function! "delete" contr/delete)
-(bind-function! "pgup" contr/pg-move :up false)
-(bind-function! "pgdown" contr/pg-move :down false)
-(bind-function! "shift-pgup" contr/pg-move :up true)
-(bind-function! "shift-pgdown" contr/pg-move :down true)
-(bind-function! "home" contr/home false)
-(bind-function! "shift-home" contr/home true)
-(bind-function! "end" contr/end false)
-(bind-function! "shift-end" contr/end true)
-(bind-function! "tab" (fn [state] (contr/type-in state "    ")))
-(bind-function! "left" contr/move-caret :left false)
-(bind-function! "right" contr/move-caret :right false)
-(bind-function! "up" contr/move-caret :up false)
-(bind-function! "down" contr/move-caret :down false)
-(bind-function! "shift-left" contr/move-caret :left true)
-(bind-function! "shift-right" contr/move-caret :right true)
-(bind-function! "shift-up" contr/move-caret :up true)
-(bind-function! "shift-down" contr/move-caret :down true)
-(bind-function! "esc" contr/drop-selection-on-esc)
-
-
-;; benchmarks
-
-(defn current-time! []
-  (.now js/Date))
-
-(defn text-tree-info [t]
-  (loop [acc {:nodes 0 :leafs 0}
-         loc (text/zipper t)]
-    (if (tree/end? loc)
-      (js/console.log (str "TEXT: " acc))
-      (if (tree/node? (tree/node loc))
-        (recur (update acc :nodes inc) (tree/next loc))
-        (recur (update acc :leafs inc) (tree/next loc))))))
-
-(defn intervals-tree-info [t]
-  (loop [acc {:nodes 0 :leafs 0}
-         loc (intervals/zipper t)]
-    (if (tree/end? loc)
-      (js/console.log (str "INTERVALS: " acc))
-      (if (tree/node? (tree/node loc))
-        (recur (update acc :nodes inc) (tree/next loc))
-        (recur (update acc :leafs inc) (tree/next loc))))))
-
-(defn bench [name f & {:keys [count] :or {count 10}}]
-  (let [start-time (current-time!)]
-    (js/console.log (str "START BENCH " name))
-    (mapv (fn [f] (f)) (repeat count f))
-    (let [end-time (current-time!)
-          total-time (- end-time start-time)]
-      (js/console.log (str "END BENCH: " name " "
-                            {:count count
-                             :total total-time
-                             :average (/ total-time count)})))))
-
-(defn bench-insert [markup]
-  (bench "TREE INSERT"
-         (fn []
-           (-> (intervals/make-interval-tree)
-               (intervals/add-intervals markup)))
-         :count 1))
-
-(defn bench-insert-base [markup]
-  (bench "BASE INSERT"
-   (fn []
-     (mapv (fn [m] (update m :from inc)) markup))
-   :count 100))
-
-(defn bench-query [markup]
-  (let [itree (-> (intervals/make-interval-tree)
-                  (intervals/add-intervals markup))]
-    (bench "TREE QUERY"
-           (fn []
-             (let [from (rand-int 160000)
-                   to (+ from 3200)]
-               (intervals/query-intervals itree (intervals/map->Marker {:from from :to to}))))
-           :count 10000)))
-
-(defn play-query [model {:keys [from to]}]
-  (vec (filter #(intervals/intersect % (intervals/map->Marker {:from from :to to})) model)))
-
-(defn bench-query-base [markup]
-  (bench "QUERY BASE"
-         (fn []
-           (let [from (rand-int 160000)
-                 to (+ from 3200)]
-             (play-query markup {:from from :to to})))
-         :count 1000))
-
-(defn bench-type-in [markup]
-  (let [itree (-> (intervals/make-interval-tree)
-                  (intervals/add-intervals markup))]
-    (bench "TYPE-IN BENCH"
-           (fn []
-             (let [offset (rand-int 160000)
-                   size 1]
-               (intervals/type-in itree [offset size])))
-           :count 1000)))
-
-(defn bench-delete [markup]
-  (let [itree (-> (intervals/make-interval-tree)
-                  (intervals/add-intervals markup))]
-    (bench "DELETE BENCH"
-           (fn []
-             (let [offset (rand-int 160000)
-                   size 1]
-               (intervals/delete-range itree [offset size])))
-           :count 1)))
-
-
-
-(defn bench-editing [markup]
-  (let [itree (-> (intervals/make-interval-tree)
-                  (intervals/add-intervals markup))]
-    (bench "TREE EDITING"
-           (fn []
-             (let [cmd (rand-nth [:insert :delete])]
-               (case cmd
-                 :insert ))))))
-
-(bind-function! "ctrl-b" (fn [s]
-                           (let [markup (:raw-markers s)
-                                 interval-tree (get-in s [:document :markup])
-                                 text-tree (get-in s [:document :text])]
-                             #_(text-tree-info text-tree)
-                             #_(intervals-tree-info interval-tree)
-                             (bench-insert markup)
-                             #_(bench-insert-base markup)
-                             #_(bench-query markup)
-                             #_(bench-query-base markup)
-                             #_(bench-type-in markup)
-                             #_(bench-delete markup))
-                           (js/alert "BENCH DONE")
-                           s))
+(defn foo []
+  (swap! state (fn [st] st)))
