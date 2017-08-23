@@ -11,7 +11,7 @@
                  [cljsjs/create-react-class "15.6.0-1"]
                  [reagent "0.7.0"]
                  [reagent-utils "0.2.1"]
-                 [quiescent/quiescent "0.3.0"]
+                 #_[quiescent/quiescent "0.3.0"]
                  [ring "1.5.1"]
                  [ring/ring-defaults "0.2.3"]
                  [compojure "1.5.2"]

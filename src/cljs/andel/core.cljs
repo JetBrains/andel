@@ -14,14 +14,17 @@
               [clojure.core.reducers :as r]
 
               [create-react-class :as create-react-class]
-
-              [quiescent.core :as qc]
-              [quiescent.dom :as qd])
+              [react-dom :as react-dom]
+              #_[quiescent.core :as qc]
+              #_[quiescent.dom :as qd])
     (:require-macros [reagent.interop :refer [$ $!]]
                      [cljs.core.async.macros :refer [go]]))
 
 (defn new-element [tag props & children]
   (.createElement js/React (clj->js tag) (clj->js props) children))
+
+(defn el [tag props & children]
+  (.createElement js/React tag props children))
 
 (defn head []
   (aget (js/document.getElementsByTagName "head") 0))
@@ -162,19 +165,20 @@
    #js {:componentWillUpdate
         (fn []
           (this-as this
-                   (let [elt (.. this -props -dom)
-                         node (.findDOMNode js/ReactDOM this)
-                         child (.-firstChild node)]
-                     (when child
-                       (.removeChild node child))
-                     (.appendChild node elt))))
+            (let [elt ($ ($ this :props) :dom)
+                  node (.findDOMNode js/ReactDOM this)
+                  child (.-firstChild node)]
+              (when child
+                (.removeChild node child))
+              (.appendChild node elt))))
         :componentDidMount
         (fn []
           (this-as this
-                   (let [elt (.. this -props -dom)
-                         node (.findDOMNode js/ReactDOM this)]
-                     (.appendChild node elt))))
-        :render (fn [_] (new-element "div" {:key "realDOM"}))}))
+            (let [elt ($ ($ this :props) :dom)
+                  node (.findDOMNode js/ReactDOM this)]
+              (.appendChild node elt))))
+        :render
+        (fn [_] (el "div" #js {:key "realDOM"}))}))
 
 
 #_(defn translate-y [y c]
@@ -202,22 +206,32 @@
                       children)
               attrs-map))))
 
-(defn render-line [props]
-  (let [line-info (.-lineInfo props)
-        metrics (.-metrics props)
+(def render-line
+  (js/createReactClass
+   #js {:shouldComponentUpdate
+        (fn [new-props new-state]
+          (this-as this
+            (let [old-props ($ this :props)]
+              (not= ($ old-props :lineInfo) ($ new-props :lineInfo)))))
         
-        line-text (.-lineText line-info)
-        line-tokens (.-lineTokens line-info)
-        line-markup (.-lineMarkup line-info)
-        selection (.-selection line-info)
-        caret-index (.-caretIndex line-info)]
-    
-    (new-element real-dom {:dom (dom
-                                 #js [:div {:class :render-line}
-                                      (render-selection selection metrics)
-                                      (render-text line-text line-tokens metrics)
-                                      (when caret-index (render-caret caret-index metrics))
-                                      #_(render-markup line-markup metrics)])})))
+        :render
+        (fn [_]
+          (this-as this
+            (let [props ($ this :props)
+                  line-info ($ props :lineInfo)
+                  metrics ($ props :metrics)
+                  
+                  line-text (.-lineText line-info)
+                  line-tokens (.-lineTokens line-info)
+                  line-markup (.-lineMarkup line-info)
+                  selection (.-selection line-info)
+                  caret-index (.-caretIndex line-info)]
+              (el real-dom #js {:dom (dom
+                                      #js [:div {:class :render-line}
+                                           (render-selection selection metrics)
+                                           (render-text line-text line-tokens metrics)
+                                           (when caret-index (render-caret caret-index metrics))
+                                           #_(render-markup line-markup metrics)])}))))}))
 
 (defn line-selection [[from to] [line-start-offset line-end-offset]]
   (cond (and (< from line-start-offset) (< line-start-offset to))
@@ -231,18 +245,19 @@
         :else nil))
 
 (defn scroll [props]
-  (let [child (.-child props)
-        on-resize (.-onResize props)
-        on-mouse-wheel (.-onMouseWheel props)]
-    (new-element "div" {:key "scroll"
-                        :style {:display :flex
-                                :flex "1"
-                                :overflow :hidden}
-                        :ref (fn [e]
-                               (when e
-                                 (on-resize (.-clientWidth e) (.-clientHeight e))))
-                        :onWheel on-mouse-wheel}
-                 child)))
+  (let [child ($ props :child)
+        on-resize ($ props :onResize)
+        on-mouse-wheel ($ props :onMouseWheel)]
+    (el "div" #js {:key "scroll"
+                   :style #js {:display :flex
+                               :flex "1"
+                               :overflow :hidden}
+                   #_:ref #_(fn [e]
+                          (when e
+                            (on-resize (.-clientWidth e) (.-clientHeight e))))
+                   :onWheel on-mouse-wheel}
+        child)))
+
 
 (defn editor-viewport [props]
   (let [{:keys [editor document viewport]} @state
@@ -253,7 +268,7 @@
         [_ from-y-offset] pos
         [w h] view-size
         from (int (/ from-y-offset line-height))
-        to (+ 5 (+ from (/ h line-height)))
+        to (+ 40 (+ from (/ h line-height)))
         y-shift (- (* line-height (- (/ from-y-offset line-height) from)))
         line-zipper (text/scan-to-line (text/zipper text) from)
         from-offset (text/offset line-zipper)
@@ -281,28 +296,28 @@
                             line-markup nil #_(prepare-markup markup line-start-offset line-end-offset)
                             line-info (LineInfo. line-text line-tokens line-markup line-sel line-caret index)]
                         [next-line (conj! res
-                                          (new-element "div" {:key (str index)
-                                                              :style {:transform (str "translate3d(0px, " (px y-shift) ", 0px)")}}
-                                                       (new-element render-line {:key (str "i" index)
-                                                                                 :lineInfo line-info
-                                                                                 :metrics metrics})))]))
+                                          (el "div" (js-obj "key" index
+                                                            "style" (js-obj "transform" (str "translate3d(0px, " (px y-shift) ", 0px)")))
+                                                       (el render-line #js {:key index
+                                                                            :lineInfo line-info
+                                                                            :metrics metrics})))]))
                     [line-zipper
                      (transient [])]
                     (range from to))]
-    (apply new-element "div" {:style {:background theme/background
-                                      :width "100%"}
-                              :key "viewport"
-                              :onMouseDown (fn [event]
-                                             (let [x ($ event :clientX)
-                                                   y ($ event :clientY)
-                                                   line-col (utils/pixels->grid-position [x y] from y-shift metrics)]
-                                               (swap-editor! state #(contr/set-caret-at-grid-pos % line-col false))))
-                              :onMouseMove  (fn [event]
-                                              (when (= ($ event :buttons) 1)
-                                                (let [x ($ event :clientX)
-                                                      y ($ event :clientY)
-                                                      line-col (utils/pixels->grid-position [x y] from y-shift metrics)]
-                                                  (swap-editor! state #(contr/set-caret-at-grid-pos % line-col true)))))}
+    (apply el "div" #js {:style #js {:background theme/background
+                                     :width "100%"}
+                         :key "viewport"
+                         :onMouseDown (fn [event]
+                                        (let [x ($ event :clientX)
+                                              y ($ event :clientY)
+                                              line-col (utils/pixels->grid-position [x y] from y-shift metrics)]
+                                          (swap-editor! state #(contr/set-caret-at-grid-pos % line-col false))))
+                         :onMouseMove  (fn [event]
+                                         (when (= ($ event :buttons) 1)
+                                           (let [x ($ event :clientX)
+                                                 y ($ event :clientY)
+                                                 line-col (utils/pixels->grid-position [x y] from y-shift metrics)]
+                                             (swap-editor! state #(contr/set-caret-at-grid-pos % line-col true)))))}
            (persistent! hiccup))))
 
 (defn scroll-on-event [state]
@@ -330,49 +345,49 @@
   (js/createReactClass
    #js {:componentDidMount
         (fn []
-          (this-as this
-            (let [*state (.. this -props -editorState)]                                            
+          (this-as cmp
+            (let [*state ($ ($ cmp :props) :editorState)]
               (add-watch *state :editor-view
                          (fn [_ _ old-state new-state]
                            (when (not (= old-state new-state))
-                             (.setState this new-state)))))))
+                             (.setState cmp new-state)))))))
         
         :componentWillUnmount
         (fn []
-          (this-as this
-            (let [*state (.. this -props -editorState)]
+          (this-as cmp
+            (let [*state ($ ($ cmp :props) :editorState)]
               (remove-watch *state :editor-view))))                                      
         
         :render
-        (fn []                                        
-          (this-as this
-            (let [*state (.. this -props -editorState)]
-              (new-element "div" {:key "editor"
-                                  :style {:display :flex
-                                          :flex 1}
-                                  :tabIndex -1
-                                  :onClick (fn [] (.. this -textInput focus))} 
-                           (new-element scroll {:key "viewport"
-                                                :onResize (init-viewport *state)
-                                                :onMouseWheel (scroll-on-event *state)
-                                                :child (new-element editor-viewport
-                                                                    {:key "editor-viewport"
-                                                                     :editorState state})})
-                           (new-element "textarea"
-                                        {:key "textarea"
-                                         :autoFocus true
-                                         :ref (fn [input]
-                                                (aset this "textInput" input))
-                                         :style {:opacity 0
-                                                 :pading  "0px"
-                                                 :border  :none
-                                                 :height  "0px"
-                                                 :width   "0px"}
-                                         :onInput (fn [evt]
-                                                    (let [e   (.-target evt)
-                                                          val (.-value e)]
-                                                      (set! (.-value e) "")
-                                                      (swap-editor! *state contr/type-in val)))})))))}))
+        (fn []
+          (this-as cmp
+            (let [*state ($ ($ cmp :props) :editorState)]
+              (el "div" #js {:key "editor"
+                             :style #js {:display :flex
+                                         :flex 1}
+                             :tabIndex -1
+                             :onClick (fn [] ($ ($ cmp :textInput) :focus))}
+                  (el scroll (js-obj "key" "viewport"
+                                     "child" (el editor-viewport
+                                                 #js {:key "editor-viewport"
+                                                      :editorState state})
+                                     "onResize" (init-viewport *state)
+                                     "onMouseWheel" (scroll-on-event *state)))
+                  (new-element "textarea"
+                               {:key "textarea"
+                                :autoFocus true
+                                :ref (fn [input]
+                                       (aset cmp "textInput" input))
+                                :style {:opacity 0
+                                        :pading  "0px"
+                                        :border  :none
+                                        :height  "0px"
+                                        :width   "0px"}
+                                :onInput (fn [evt]
+                                           (let [e   (.-target evt)
+                                                 val (.-value e)]
+                                             (set! (.-value e) "")
+                                             (swap-editor! *state contr/type-in val)))})))))}))
 
 (def main (new-element "div"
                        {:style {:display :flex
