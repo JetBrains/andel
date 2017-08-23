@@ -14,9 +14,7 @@
               [clojure.core.reducers :as r]
 
               [create-react-class :as create-react-class]
-              [react-dom :as react-dom]
-              #_[quiescent.core :as qc]
-              #_[quiescent.dom :as qd])
+              [react-dom :as react-dom])
     (:require-macros [reagent.interop :refer [$ $!]]
                      [cljs.core.async.macros :refer [go]]))
 
@@ -180,12 +178,6 @@
 
         :render
         (fn [_] (el "div" #js {:key "realDOM"}))}))
-
-
-#_(defn translate-y [y c]
-  (new-element "div"
-               {:style {:transform (str "translate3d(0px, " (px y) ", 0px)")}}
-               c))
 
 (defrecord LineInfo [lineText lineTokens lineMarkup selection caretIndex index])
 
@@ -358,8 +350,8 @@
             (let [*state ($ ($ cmp :props) :editorState)]
               (add-watch *state :editor-view
                          (fn [_ _ old-state new-state]
-                           (when (not (= old-state new-state))
-                             (.setState cmp new-state)))))))
+                           (when (not= old-state new-state)
+                             ($ cmp forceUpdate)))))))
 
         :componentWillUnmount
         (fn []
@@ -367,6 +359,10 @@
             (let [*state ($ ($ cmp :props) :editorState)]
               (remove-watch *state :editor-view))))
 
+        :shouldComponentUpdate
+        (fn []
+          false)
+        
         :render
         (fn []
           (this-as cmp
