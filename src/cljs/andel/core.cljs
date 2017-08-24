@@ -386,8 +386,7 @@
                              :tabIndex -1
                              :onFocus (fn []
                                         (let [ta ($ ($ cmp :refs) :textarea)]
-                                          (when ta (.focus ta))))
-                             #(.. cmp -refs -textarea focus)}
+                                          (when ta (.focus ta))))}
                   #js [(el scroll (js-obj "key" "viewport"
                                           "props" {:child (el editor-viewport
                                                               #js {:key "editor-viewport"
