@@ -254,9 +254,6 @@
                               :style #js {:display :flex
                                           :flex "1"
                                           :overflow :hidden}
-                              #_:ref #_(fn [e]
-                                         (when e
-                                                     (on-resize (.-clientWidth e) (.-clientHeight e))))
                               :onWheel on-mouse-wheel}
                    [child])))))
 
@@ -270,7 +267,7 @@
         [_ from-y-offset] pos
         [w h] view-size
         from (int (/ from-y-offset line-height))
-        to (+ 40 (+ from (/ h line-height)))
+        to (+ 5 (+ from (/ h line-height)))
         y-shift (- (* line-height (- (/ from-y-offset line-height) from)))
         line-zipper (text/scan-to-line (text/zipper text) from)
         from-offset (text/offset line-zipper)
@@ -340,8 +337,7 @@
       (.preventDefault evt))))
 
 (defn init-viewport [state]
-  (fn [width height]
-    (swap-editor! state #(assoc-in % [:viewport :view-size] [width height]))))
+  (swap-editor! state #(assoc-in % [:viewport :view-size] [(.-innerHeight js/window) (.-innerWidth js/window)])))
 
 (def editor
   (js/createReactClass
@@ -349,6 +345,7 @@
         (fn []
           (this-as cmp
             (let [*state ($ ($ cmp :props) :editorState)]
+              (init-viewport *state)
               (add-watch *state :editor-view
                          (fn [_ _ old-state new-state]
                            (when (not= old-state new-state)
@@ -363,7 +360,7 @@
         :shouldComponentUpdate
         (fn []
           false)
-        
+
         :render
         (fn []
           (this-as cmp
@@ -372,14 +369,14 @@
                              :style #js {:display :flex
                                          :flex 1}
                              :tabIndex -1
-                             :onFocus (fn []
+                             #_:onFocus #_(fn []
                                         (prn "FOCUS")
-                                        (.focus ($ cmp :textInput)))}
+                                        (when ($ cmp :textInput)
+                                          (.focus ($ cmp :textInput))))}
                   [(el scroll (js-obj "key" "viewport"
                                       "props" {:child (el editor-viewport
                                                           #js {:key "editor-viewport"
                                                                :editorState state})
-                                               :onResize (init-viewport *state)
                                                :onMouseWheel (scroll-on-event *state)}))
                    (el "textarea"
                        #js {:key "textarea"
