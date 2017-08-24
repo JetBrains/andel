@@ -355,14 +355,16 @@
    #js {:componentDidMount
         (fn []
           (this-as cmp
-            (let [*state ($ ($ cmp :props) :editorState)]
+            (let [*state ($ ($ cmp :props) :editorState)
+                  *scheduled? (atom false)]
               (init-viewport *state)
-              (js/console.log cmp)
               (add-watch *state :editor-view
                          (fn [_ _ old-state new-state]
-                           (next-tick
-                            #(when (not= old-state new-state)
-                               ($ cmp forceUpdate))))))))
+                           (when (and (not= old-state new-state) (not @*scheduled?))
+                             (reset! *scheduled? true)
+                             (next-tick (fn []
+                                          (reset! *scheduled? false)
+                                          ($ cmp forceUpdate)))))))))
 
         :componentWillUnmount
         (fn []
