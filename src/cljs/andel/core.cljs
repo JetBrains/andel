@@ -293,7 +293,7 @@
           from-offset (text/offset line-zipper)
           to-offset (dec (text/offset (text/scan-to-line line-zipper (inc to))))
           caret-offset (get caret :offset)
-          markup (intervals/query-intervals (:markup document) (intervals/map->Marker {:from from-offset :to to-offset}))
+          markup nil #_(intervals/query-intervals (:markup document) (intervals/map->Marker {:from from-offset :to to-offset}))
           _ (defstyle :render-line [:.render-line {:height (px (utils/line-height metrics))
                                                    :position :relative}])
           [_ hiccup] (reduce
@@ -473,11 +473,11 @@
   (let [loaded (a/promise-chan)]
     (go
       ;load CodeMirror first
-      (a/<! (wait-for-all (map include-script ["/codemirror/addon/runmode/runmode-standalone.js"
-                                               "/codemirror/addon/runmode/runmode-standalone.js"
-                                               "/codemirror/mode/javascript/javascript.js"
-                                               "/codemirror/mode/clike/clike.js"
-                                               "/codemirror/mode/clojure/clojure.js"])))
+      (a/<! (wait-for-all (map include-script ["resources/public/codemirror/addon/runmode/runmode-standalone.js"
+                                               "resources/public/codemirror/addon/runmode/runmode-standalone.js"
+                                               "resources/public/codemirror/mode/javascript/javascript.js"
+                                               "resources/public/codemirror/mode/clike/clike.js"
+                                               "resources/public/codemirror/mode/clojure/clojure.js"])))
       (a/<! (setup-font! state "Fira Code" 16 3))
       ;run lexer worker and setup atom watcher that will run lexer on changes
       (attach-lexer! state)
@@ -489,13 +489,13 @@
                      (when (not= old-ts new-ts)
                        (a/put! broker new-s)))))
       ;load sample document from the internet
-      (let [text (:body (a/<! (http/get "/EditorImpl.java")))]
+      (let [text (:body (a/<! (http/get "resources/public/EditorImpl.java")))]
         (swap-editor! state contr/set-text text))
-      (let [markup (->> (:body (a/<! (http/get "/markup.edn")))
+      #_(let [markup (->> (:body (a/<! (http/get "resources/public/markup.edn")))
                         (sort-by :from))]
         (js/console.log (str "MARKUP LOADED: " (count markup)))
-        (swap-editor! state (fn [s] (assoc-in s [:raw-markers] (map intervals/map->Marker markup))))
-        (swap-editor! state (fn [s] (assoc-in s [:document :markup] (-> (intervals/make-interval-tree)
+        #_(swap-editor! state (fn [s] (assoc-in s [:raw-markers] (map intervals/map->Marker markup))))
+        #_(swap-editor! state (fn [s] (assoc-in s [:document :markup] (-> (intervals/make-interval-tree)
                                                                         (intervals/add-intervals (map intervals/map->Marker markup)))))))
       ;deliver promise
       (a/>! loaded :done))

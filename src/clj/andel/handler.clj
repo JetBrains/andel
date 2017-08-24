@@ -34,7 +34,7 @@
   (GET "/" [] (loading-page))
   (GET "/about" [] (loading-page))
 
-  (resources "/")
+  (resources "/resources/public")
   (not-found "Not Found"))
 
 (def app (wrap-middleware #'routes))
