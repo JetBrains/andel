@@ -307,20 +307,20 @@
                      (transient [])]
                     (range from to))]
     (el "div" #js {:style #js {:background theme/background
-                                     :width "100%"}
-                         :key "viewport"
-                         :onMouseDown (fn [event]
-                                        (let [x ($ event :clientX)
-                                              y ($ event :clientY)
-                                              line-col (utils/pixels->grid-position [x y] from y-shift metrics)]
-                                          (swap-editor! state #(contr/set-caret-at-grid-pos % line-col false))))
-                         :onMouseMove  (fn [event]
-                                         (when (= ($ event :buttons) 1)
-                                           (let [x ($ event :clientX)
-                                                 y ($ event :clientY)
-                                                 line-col (utils/pixels->grid-position [x y] from y-shift metrics)]
-                                             (swap-editor! state #(contr/set-caret-at-grid-pos % line-col true)))))}
-           (persistent! hiccup))))
+                               :width "100%"}
+                   :key "viewport"
+                   :onMouseDown (fn [event]
+                                  (let [x ($ event :clientX)
+                                        y ($ event :clientY)
+                                        line-col (utils/pixels->grid-position [x y] from y-shift metrics)]
+                                    (swap-editor! state #(contr/set-caret-at-grid-pos % line-col false))))
+                   :onMouseMove  (fn [event]
+                                   (when (= ($ event :buttons) 1)
+                                     (let [x ($ event :clientX)
+                                           y ($ event :clientY)
+                                           line-col (utils/pixels->grid-position [x y] from y-shift metrics)]
+                                       (swap-editor! state #(contr/set-caret-at-grid-pos % line-col true)))))}
+        (persistent! hiccup))))
 
 (defn scroll-on-event [state]
   (fn [evt]
@@ -376,15 +376,16 @@
                                         (prn "FOCUS")
                                         (.focus ($ cmp :textInput)))}
                   [(el scroll (js-obj "key" "viewport"
-                                       "props" {:child (el editor-viewport
-                                                           #js {:key "editor-viewport"
-                                                                :editorState state})
-                                                :onResize (init-viewport *state)
-                                                :onMouseWheel (scroll-on-event *state)}))
+                                      "props" {:child (el editor-viewport
+                                                          #js {:key "editor-viewport"
+                                                               :editorState state})
+                                               :onResize (init-viewport *state)
+                                               :onMouseWheel (scroll-on-event *state)}))
                    (el "textarea"
                        #js {:key "textarea"
                             :autoFocus true
                             :ref (fn [input]
+                                   (prn "update input")
                                    (aset cmp "textInput" input))
                             :style #js {:opacity 0
                                         :pading  "0px"
