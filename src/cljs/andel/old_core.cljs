@@ -1,28 +1,24 @@
-(ns andel.core
+(ns andel.old-core
     (:require [andel.lexer :as lexer]
               [andel.theme :as theme]
               [andel.throttling :as throttling]
               [andel.controller :as contr]
               [andel.utils :as utils]
               [andel.intervals :as intervals]
+              [reagent.core :as reagent]
+              [reagent.ratom :refer [track]]
+              [reagent.session :as session]
               [andel.keybind :as keybind]
               [garden.core :as g]
               [clojure.core.async :as a]
               [cljs-http.client :as http]
+              [hiccups.runtime :as hiccups]
               [andel.text :as text]
               [andel.tree :as tree]
-              [clojure.core.reducers :as r]
-
-              [create-react-class :as create-react-class]
-              [react-dom :as react-dom])
+              [clojure.core.reducers :as r])
     (:require-macros [reagent.interop :refer [$ $!]]
+                     [reagent.ratom :refer [reaction]]
                      [cljs.core.async.macros :refer [go]]))
-
-(defn el
-  ([tag props]
-   (.createElement js/React tag props))
-  ([tag props children]
-   (.createElement js/React tag props children)))
 
 (defn head []
   (aget (js/document.getElementsByTagName "head") 0))
@@ -69,7 +65,7 @@
 
 (def swap-editor! swap!)
 
-(defonce state (atom (make-editor-state)))
+(defonce state (reagent/atom (make-editor-state)))
 
 (defn style [m]
   (reduce-kv (fn [s k v]
@@ -132,7 +128,6 @@
 
 (defstyle :line-text [:.line-text {:position :absolute
                                    :left 0
-                                   :user-select :none
                                    :top 0}])
 
 (defn push! [a x]
@@ -146,7 +141,7 @@
                                            (subs text i (+ i len))])])
                         [0 #js [:pre {:class :line-text}]]
                         tokens)]
-    (push! res #js [:span {} (subs text i)])))
+    (push! res #js [:span (subs text i)])))
 
 (defn render-markup [markup {:keys [height width spacing]}]
   (let [res (reduce (fn [res {:keys [from to]}]
@@ -160,79 +155,64 @@
     res))
 
 (def real-dom
-  (js/createReactClass
-   #js {:componentWillUpdate
-        (fn [next-props next-state]
-          (this-as this
-            (let [elt ($ next-props :dom)
-                  node (.findDOMNode js/ReactDOM this)
-                  child (.-firstChild node)]
-              (when child
-                (.removeChild node child))
-              (.appendChild node elt))))
-        :componentDidMount
-        (fn []
-          (this-as this
-            (let [elt ($ ($ this :props) :dom)
-                  node (.findDOMNode js/ReactDOM this)]
-              (.appendChild node elt))))
+  (reagent/create-class
+   {:component-will-update
+    (fn [this [_ elt]]
+      (let [node (reagent/dom-node this)
+            child (.-firstChild node)]
+        (when child
+          (.removeChild node child))
+        (.appendChild node elt)))
+    :component-did-mount
+    (fn [this]
+      (let [[_ elt] (reagent/argv this)
+            node (reagent/dom-node this)]
+        (.appendChild node elt)))
+    :render (fn [_] [:div])}))
 
-        :render
-        (fn [_] (el "div" #js {:key "realDOM"}))}))
+(defn translate3d [{:keys [x y z] :or {x 0 y 0 z 0}} c]
+  [:div
+   {:style {:transform (str "translate3d(" (px x) ", " (px y) ", " (px z))}}
+   c])
 
-(defrecord LineInfo [lineText lineTokens lineMarkup selection caretIndex index])
+
+
+(defn translate-y [y c]
+  [:div {:style {:transform (str "translate3d(0px, " (px y) ", 0px)")}} c])
+
+(defrecord LineInfo [line-text line-tokens line-markup selection caret-index index])
 
 (defn dom [el]
   (let  [tag (aget el 0)
-         attrs-map (aget el 1)
-         children (.slice el 2)]
+         x (aget el 1)
+         r (.slice el 2)]
     (assert (some? el))
-    (let [len (.-length children)
-          el-with-children (loop [i 0
-                                  n (make-node tag)]
-                             (if (< i len)
-                               (if-let [c (aget children i)]
-                                 (recur (inc i)
-                                        (conj-child! n (if (string? c)
-                                                         (make-text-node c)
-                                                         (dom c))))
-                                 (recur (inc i) n))
-                               n))]
-      (reduce-kv (fn [n a v]
-                   (assoc-attr! n a v))
-                 el-with-children
-                 attrs-map))))
+    (let [[attrs-map children] (if (map? x) [x r] [nil (cons x r)])]
+      (reduce (fn [n [a v]]
+                (assoc-attr! n a v))
+              (reduce (fn [n c]
+                        (if (some? c)
+                          (conj-child! n (if (string? c)
+                                           (make-text-node c)
+                                           (dom c)))
+                          n))
+                      (make-node tag)
+                      children)
+              attrs-map))))
 
-(defn def-fun [f]
-  (js/createReactClass
-   #js {:shouldComponentUpdate
-        (fn [new-props new-state]
-          (this-as this
-            (let [old-props ($ this :props)]
-              (not= (aget old-props "props") (aget new-props "props")))))
-        :render (fn [_]
-                  (this-as this
-                    (f (aget (aget this "props") "props"))))}))
-
-(def render-line
-  (def-fun
-    (fn [props]
-      (this-as this
-        (let [line-info (props :line-info)
-              metrics (props :metrics)
-
-              line-text (.-lineText line-info)
-              line-tokens (.-lineTokens line-info)
-              line-markup (.-lineMarkup line-info)
-              selection (.-selection line-info)
-              caret-index (.-caretIndex line-info)]
-          (el real-dom #js {:dom (dom
-                                  #js [:div {:class :render-line}
-                                       (render-selection selection metrics)
-                                       (render-text line-text line-tokens metrics)
-                                       (when caret-index (render-caret caret-index metrics))
-                                       (render-markup line-markup metrics)])}))))))
-
+(defn render-line [line-info metrics]
+  (let [line-text (.-line-text line-info)
+        line-tokens (.-line-tokens line-info)
+        line-markup (.-line-markup line-info)
+        selection (.-selection line-info)
+        caret-index (.-caret-index line-info)]
+    [real-dom (dom
+               #js [:div {:class :render-line}
+                    (render-selection selection metrics)
+                    (render-text line-text line-tokens metrics)
+                    (when caret-index (render-caret caret-index metrics))
+                    (render-markup line-markup metrics)
+                    ])]))
 
 (defn line-selection [[from to] [line-start-offset line-end-offset]]
   (cond (and (< from line-start-offset) (< line-start-offset to))
@@ -245,80 +225,9 @@
                                       :infinity)]
         :else nil))
 
-(def scroll
-  (def-fun (fn [props]
-             (let [child (props :child)
-                   on-resize (props :onResize)
-                   on-mouse-wheel (props :onMouseWheel)]
-               (el "div" #js {:key "scroll"
-                              :style #js {:display :flex
-                                          :flex "1"
-                                          :overflow :hidden}
-                              :onWheel on-mouse-wheel}
-                   [child])))))
-
-
-(defn editor-viewport [props]
-  (let [#_state #_(.-editorState props)
-        {:keys [editor document viewport]} @state
-        {:keys [pos view-size metrics]} viewport
-        line-height (utils/line-height metrics)
-        {:keys [text lines]} document
-        {:keys [caret selection]} editor
-        [_ from-y-offset] pos
-        [w h] view-size
-        from (int (/ from-y-offset line-height))
-        to (+ 5 (+ from (/ h line-height)))
-        y-shift (- (* line-height (- (/ from-y-offset line-height) from)))
-        line-zipper (text/scan-to-line (text/zipper text) from)
-        from-offset (text/offset line-zipper)
-        to-offset (dec (text/offset (text/scan-to-line line-zipper (inc to))))
-        caret-offset (get caret :offset)
-        markup nil #_(intervals/query-intervals (:markup document) (intervals/map->Marker {:from from-offset :to to-offset}))
-        _ (defstyle :render-line [:.render-line {:height (px (utils/line-height metrics))
-                                                 :position :relative}])
-        [_ hiccup] (reduce
-                    (fn [[line-start res] index]
-                      (let [next-line (text/scan-to-line line-start (inc index))
-                            line-start-offset (text/offset line-start)
-                            next-line-offset (text/offset next-line)
-                            len (- next-line-offset
-                                   line-start-offset)
-                            len (if (tree/end? next-line)
-                                  len
-                                  (dec len))
-                            line-text (text/text line-start len)
-                            line-end-offset (+ line-start-offset len)
-                            line-sel (line-selection selection [line-start-offset line-end-offset])
-                            line-caret (when (and (<= line-start-offset caret-offset) (<= caret-offset line-end-offset))
-                                         (- caret-offset line-start-offset))
-                            line-tokens (:tokens (get lines index))
-                            line-markup nil #_(prepare-markup markup line-start-offset line-end-offset)
-                            line-info (LineInfo. line-text line-tokens line-markup line-sel line-caret index)]
-                        [next-line (conj! res
-                                          (el "div" (js-obj "key" index
-                                                            "style" (js-obj "transform" (str "translate3d(0px, " (px y-shift) ", 0px)")))
-                                              [(el render-line #js {:key index
-                                                                     :props {:line-info line-info
-                                                                             :metrics metrics}})]))]))
-                    [line-zipper
-                     (transient [])]
-                    (range from to))]
-    (el "div" #js {:style #js {:background theme/background
-                               :width "100%"}
-                   :key "viewport"
-                   :onMouseDown (fn [event]
-                                  (let [x ($ event :clientX)
-                                        y ($ event :clientY)
-                                        line-col (utils/pixels->grid-position [x y] from y-shift metrics)]
-                                    (swap-editor! state #(contr/set-caret-at-grid-pos % line-col false))))
-                   :onMouseMove  (fn [event]
-                                   (when (= ($ event :buttons) 1)
-                                     (let [x ($ event :clientX)
-                                           y ($ event :clientY)
-                                           line-col (utils/pixels->grid-position [x y] from y-shift metrics)]
-                                       (swap-editor! state #(contr/set-caret-at-grid-pos % line-col true)))))}
-        (persistent! hiccup))))
+(defn init-viewport [state]
+  (fn [width height]
+    (swap-editor! state #(assoc-in % [:viewport :view-size] [width height]))))
 
 (defn scroll-on-event [state]
   (fn [evt]
@@ -330,87 +239,138 @@
       (swap-editor! state
                     #(update-in % [:viewport :pos]
                       (fn [[x y]]
-                        (let [dx (.-deltaX evt)
-                              dy (.-deltaY evt)]
+                        (let [dx (/ (.-wheelDeltaX evt) 2)
+                              dy (/ (.-wheelDeltaY evt) 2)]
                           (if (< (js/Math.abs dx) (js/Math.abs dy))
-                            [x (min document-height (max 0 (+ y dy)))]
-                            [(max 0 (+ x dx)) y])))))
+                            [x (min document-height (max 0 (- y dy)))]
+                            [(max 0 (- x dx)) y])))))
       (.preventDefault evt))))
 
-(defn init-viewport [state]
-  (swap-editor! state #(assoc-in % [:viewport :view-size] [(.-innerHeight js/window) (.-innerWidth js/window)])))
 
-(defn foo []
-  (swap! state update :foo #(if (nil? %) 1 (inc %))))
+(defn scroll [viewport init scroll-on-event]
+  (let [once (atom true)]
+    (fn []
+      [:div {:style {:display :flex
+                     :flex "1"
+                     :overflow :hidden}
+             :ref (fn [e]
+                    (when e
+                      (init (.-clientWidth e) (.-clientHeight e)))
+                    (when (and @once (some? e))
+                      (reset! once false)
+                      (.addEventListener
+                       e
+                       "mousewheel"
+                       scroll-on-event)))}
+       [viewport]])))
 
-(def next-tick
-  (let [w js/window]
-    (or ($ w :requestAnimationFrame)
-        ($ w :webkitRequestAnimationFrame)
-        ($ w :mozRequestAnimationFrame)
-        ($ w :msRequestAnimationFrame))))
+(defn prepare-markup [markup from to]
+  []
+  #_(->> markup
+      (filter (fn [marker]
+                (and (<= (:from marker) to)
+                     (<= from (:to marker)))))
+      (mapv (fn [marker]
+              (intervals/->Marker (max 0 (- (:from marker) from))
+                                  (max 0 (- (:to marker) from))
+                                  nil
+                                  nil)))))
 
-(def editor
-  (js/createReactClass
-   #js {:componentDidMount
-        (fn []
-          (this-as cmp
-            (let [*state ($ ($ cmp :props) :editorState)
-                  *scheduled? (atom false)]
-              (init-viewport *state)
-              (add-watch *state :editor-view
-                         (fn [_ _ old-state new-state]
-                           (when (and (not= old-state new-state) (not @*scheduled?))
-                             (reset! *scheduled? true)
-                             (next-tick (fn []
-                                          (reset! *scheduled? false)
-                                          ($ cmp forceUpdate)))))))))
+;; Todo: untangle all this spaghetti bindings
+(defn editor-viewport [state]
+  (fn []
+    (let [{:keys [editor document viewport]} @state
+          {:keys [pos view-size metrics]} viewport
+          line-height (utils/line-height metrics)
+          {:keys [text lines]} document
+          {:keys [caret selection]} editor
+          [_ from-y-offset] pos
+          [w h] view-size
+          from (int (/ from-y-offset line-height))
+          to (+ 5 (+ from (/ h line-height)))
+          y-shift (- (* line-height (- (/ from-y-offset line-height) from)))
+          line-zipper (text/scan-to-line (text/zipper text) from)
+          from-offset (text/offset line-zipper)
+          to-offset (dec (text/offset (text/scan-to-line line-zipper (inc to))))
+          caret-offset (get caret :offset)
+          markup (intervals/query-intervals (:markup document) (intervals/map->Marker {:from from-offset :to to-offset}))
+          _ (defstyle :render-line [:.render-line {:height (px (utils/line-height metrics))
+                                                   :position :relative}])
+          [_ hiccup] (reduce
+                      (fn [[line-start res] index]
+                        (let [next-line (text/scan-to-line line-start (inc index))
+                              line-start-offset (text/offset line-start)
+                              next-line-offset (text/offset next-line)
+                              len (- next-line-offset
+                                     line-start-offset)
+                              len (if (tree/end? next-line)
+                                    len
+                                    (dec len))
+                              line-text (text/text line-start len)
+                              line-end-offset (+ line-start-offset len)
+                              line-sel (line-selection selection [line-start-offset line-end-offset])
+                              line-caret (when (and (<= line-start-offset caret-offset) (<= caret-offset line-end-offset))
+                                           (- caret-offset line-start-offset))
+                              line-tokens (:tokens (get lines index))
+                              line-markup (prepare-markup markup line-start-offset line-end-offset)
+                              line-info (LineInfo. line-text line-tokens line-markup line-sel line-caret index)]
+                          [next-line (conj! res
+                                            ^{:key index}
+                                            [translate-y y-shift [render-line line-info metrics]])]))
+                      [line-zipper
+                       (transient [:div {:style
+                                         {:background theme/background
+                                          :width "100%"}
+                                         :onMouseDown (fn [event]
+                                                        (let [x ($ event :clientX)
+                                                              y ($ event :clientY)
+                                                              line-col (utils/pixels->grid-position [x y] from y-shift metrics)]
+                                                          (swap-editor! state #(contr/set-caret-at-grid-pos % line-col false))))
+                                         :onMouseMove  (fn [event]
+                                                         (when (= ($ event :buttons) 1)
+                                                           (let [x ($ event :clientX)
+                                                                 y ($ event :clientY)
+                                                                 line-col (utils/pixels->grid-position [x y] from y-shift metrics)]
+                                                             (swap-editor! state #(contr/set-caret-at-grid-pos % line-col true)))))}])]
+                      (range from to))]
+      (persistent! hiccup))))
 
-        :componentWillUnmount
-        (fn []
-          (this-as cmp
-            (let [*state ($ ($ cmp :props) :editorState)]
-              (remove-watch *state :editor-view))))
+(defn editor [state]
+  (let [dom-input (atom nil)
+        listener  (atom nil)]
+    (fn []
+      [:div
+       {:style     {:display :flex
+                    :flex    1}
+        :tab-index -1
+        :ref       (fn [this]
+                     (when-let [node (reagent/dom-node this)]
+                       (reset! listener true)
+                       (.addEventListener node "focus"
+                                          (fn []
+                                            (when @dom-input
+                                              (.focus @dom-input))))))}
+       [scroll (editor-viewport state) (init-viewport state) (scroll-on-event state)]
+       [:textarea
+        {:ref        (fn [this]
+                       (when-let [dom-node (reagent/dom-node this)]
+                         (reset! dom-input dom-node)))
+         :auto-focus true
+         :style      {:opacity 0
+                      :pading  "0px"
+                      :border  :none
+                      :height  "0px"
+                      :width   "0px"}
+         :on-input   (fn [evt]
+                       (let [e   (.-target evt)
+                             val (.-value e)]
+                         (set! (.-value e) "")
+                         (swap-editor! state contr/type-in val)))}]])))
 
-        :shouldComponentUpdate
-        (fn []
-          false)
-
-        :render
-        (fn []
-          (this-as cmp
-            (let [*state ($ ($ cmp :props) :editorState)]
-              (el "div" #js {:key "editor"
-                             :style #js {:display :flex
-                                         :flex 1}
-                             :tabIndex -1
-                             :onFocus #(.. cmp -refs -textarea focus)}
-                  #js [(el scroll (js-obj "key" "viewport"
-                                          "props" {:child (el editor-viewport
-                                                              #js {:key "editor-viewport"
-                                                                   :editorState state})
-                                                   :onMouseWheel (scroll-on-event *state)}))
-                       (el "textarea"
-                           #js {:key "textarea"
-                                :ref "textarea"
-                                :autoFocus true
-                                :style #js {:opacity 0
-                                            :pading  "0px"
-                                            :border  :none
-                                            :height  "0px"
-                                            :width   "0px"}
-                                :onInput (fn [evt]
-                                           (let [e   (.-target evt)
-                                                 val (.-value e)]
-                                             (set! (.-value e) "")
-                                             (swap-editor! *state contr/type-in val)))})]))))}))
-
-(def main  (el "div"
-               #js {:style #js {:display :flex
-                                :flex "1"}
-                    :key "main"}
-               [(el editor #js {:editorState state
-                                :key "editor"})]))
+(defn main []
+  [:div {:style {:display :flex
+                 :flex "1"}}
+   [editor state]])
 
 (defn include-script [src]
   (let [e (js/document.createElement "script")
@@ -508,21 +468,16 @@
                             :margin      "0px"}])
                         (assoc-in state [:viewport :metrics] metrics)))))))
 
-(def editor-text "public class Main {
-    public static void main(String[] args) {
-    }
-}")
-
 (defn load! []
   (js/window.addEventListener "keydown" (keybind/dispatcher) true)
   (let [loaded (a/promise-chan)]
     (go
       ;load CodeMirror first
-      (a/<! (wait-for-all (map include-script ["resources/public/codemirror/addon/runmode/runmode-standalone.js"
-                                               "resources/public/codemirror/addon/runmode/runmode-standalone.js"
-                                               "resources/public/codemirror/mode/javascript/javascript.js"
-                                               "resources/public/codemirror/mode/clike/clike.js"
-                                               "resources/public/codemirror/mode/clojure/clojure.js"])))
+      (a/<! (wait-for-all (map include-script ["/codemirror/addon/runmode/runmode-standalone.js"
+                                               "/codemirror/addon/runmode/runmode-standalone.js"
+                                               "/codemirror/mode/javascript/javascript.js"
+                                               "/codemirror/mode/clike/clike.js"
+                                               "/codemirror/mode/clojure/clojure.js"])))
       (a/<! (setup-font! state "Fira Code" 16 3))
       ;run lexer worker and setup atom watcher that will run lexer on changes
       (attach-lexer! state)
@@ -534,13 +489,13 @@
                      (when (not= old-ts new-ts)
                        (a/put! broker new-s)))))
       ;load sample document from the internet
-      (let [text (:body (a/<! (http/get "resources/public/EditorImpl.java")))]
+      (let [text (:body (a/<! (http/get "/EditorImpl.java")))]
         (swap-editor! state contr/set-text text))
-      #_(let [markup (->> (:body (a/<! (http/get "resources/public/markup.edn")))
+      (let [markup (->> (:body (a/<! (http/get "/markup.edn")))
                         (sort-by :from))]
         (js/console.log (str "MARKUP LOADED: " (count markup)))
-        #_(swap-editor! state (fn [s] (assoc-in s [:raw-markers] (map intervals/map->Marker markup))))
-        #_(swap-editor! state (fn [s] (assoc-in s [:document :markup] (-> (intervals/make-interval-tree)
+        (swap-editor! state (fn [s] (assoc-in s [:raw-markers] (map intervals/map->Marker markup))))
+        (swap-editor! state (fn [s] (assoc-in s [:document :markup] (-> (intervals/make-interval-tree)
                                                                         (intervals/add-intervals (map intervals/map->Marker markup)))))))
       ;deliver promise
       (a/>! loaded :done))
@@ -551,7 +506,7 @@
 (defn mount-root []
   (go (a/<! ready)
       (let [root (.getElementById js/document "app")]
-        (.render js/ReactDOM main root))))
+        (reagent/render [main] root))))
 
 (defn init! []
   (mount-root))
@@ -674,6 +629,8 @@
                    size 1]
                (intervals/delete-range itree [offset size])))
            :count 1)))
+
+
 
 (defn bench-editing [markup]
   (let [itree (-> (intervals/make-interval-tree)

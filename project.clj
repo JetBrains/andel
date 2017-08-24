@@ -6,6 +6,9 @@
 
   :dependencies [[org.clojure/clojure "1.9.0-alpha17"]
                  [ring-server "0.4.0"]
+                 [cljsjs/react-dom "15.6.1-1"]
+                 [cljsjs/react-dom-server "15.6.1-1"]
+                 [cljsjs/create-react-class "15.6.0-1"]
                  [reagent "0.7.0"]
                  [reagent-utils "0.2.1"]
                  [ring "1.5.1"]

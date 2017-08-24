@@ -17,7 +17,7 @@
    [:meta {:charset "utf-8"}]
    [:meta {:name "viewport"
            :content "width=device-width, initial-scale=1"}]
-   [:link {:href "https://cdn.rawgit.com/tonsky/FiraCode/master/distr/fira_code.css"
+   [:link {;; :href "https://cdn.rawgit.com/tonsky/FiraCode/master/distr/fira_code.css"
            :rel "stylesheet"
            :type "text/css"
            :async "false"}]])
