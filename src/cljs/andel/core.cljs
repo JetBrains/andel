@@ -259,7 +259,8 @@
 
 
 (defn editor-viewport [props]
-  (let [{:keys [editor document viewport]} @state
+  (let [#_state #_(.-editorState props)
+        {:keys [editor document viewport]} @state
         {:keys [pos view-size metrics]} viewport
         line-height (utils/line-height metrics)
         {:keys [text lines]} document
@@ -339,6 +340,16 @@
 (defn init-viewport [state]
   (swap-editor! state #(assoc-in % [:viewport :view-size] [(.-innerHeight js/window) (.-innerWidth js/window)])))
 
+(defn foo []
+  (swap! state update :foo #(if (nil? %) 1 (inc %))))
+
+(def next-tick
+  (let [w js/window]
+    (or ($ w :requestAnimationFrame)
+        ($ w :webkitRequestAnimationFrame)
+        ($ w :mozRequestAnimationFrame)
+        ($ w :msRequestAnimationFrame))))
+
 (def editor
   (js/createReactClass
    #js {:componentDidMount
@@ -346,10 +357,12 @@
           (this-as cmp
             (let [*state ($ ($ cmp :props) :editorState)]
               (init-viewport *state)
+              (js/console.log cmp)
               (add-watch *state :editor-view
                          (fn [_ _ old-state new-state]
-                           (when (not= old-state new-state)
-                             ($ cmp forceUpdate)))))))
+                           (next-tick
+                            #(when (not= old-state new-state)
+                               ($ cmp forceUpdate))))))))
 
         :componentWillUnmount
         (fn []
@@ -369,39 +382,33 @@
                              :style #js {:display :flex
                                          :flex 1}
                              :tabIndex -1
-                             #_:onFocus #_(fn []
-                                        (prn "FOCUS")
-                                        (when ($ cmp :textInput)
-                                          (.focus ($ cmp :textInput))))}
-                  [(el scroll (js-obj "key" "viewport"
-                                      "props" {:child (el editor-viewport
-                                                          #js {:key "editor-viewport"
-                                                               :editorState state})
-                                               :onMouseWheel (scroll-on-event *state)}))
-                   (el "textarea"
-                       #js {:key "textarea"
-                            :autoFocus true
-                            :ref (fn [input]
-                                   (prn "update input")
-                                   (aset cmp "textInput" input))
-                            :style #js {:opacity 0
-                                        :pading  "0px"
-                                        :border  :none
-                                        :height  "0px"
-                                        :width   "0px"}
-                            :onInput (fn [evt]
-                                       (let [e   (.-target evt)
-                                             val (.-value e)]
-                                         (set! (.-value e) "")
-                                         (swap-editor! *state contr/type-in val)))})]))))}))
+                             :onFocus #(.. cmp -refs -textarea focus)}
+                  #js [(el scroll (js-obj "key" "viewport"
+                                          "props" {:child (el editor-viewport
+                                                              #js {:key "editor-viewport"
+                                                                   :editorState state})
+                                                   :onMouseWheel (scroll-on-event *state)}))
+                       (el "textarea"
+                           #js {:key "textarea"
+                                :ref "textarea"
+                                :autoFocus true
+                                :style #js {:opacity 0
+                                            :pading  "0px"
+                                            :border  :none
+                                            :height  "0px"
+                                            :width   "0px"}
+                                :onInput (fn [evt]
+                                           (let [e   (.-target evt)
+                                                 val (.-value e)]
+                                             (set! (.-value e) "")
+                                             (swap-editor! *state contr/type-in val)))})]))))}))
 
-(def main (el "div"
-              #js {:style #js {:display :flex
-                               :flex "1"}
-                   :key "main"}
-              [(el editor #js {:editorState state
-                               :key "editor"})]))
-
+(def main  (el "div"
+               #js {:style #js {:display :flex
+                                :flex "1"}
+                    :key "main"}
+               [(el editor #js {:editorState state
+                                :key "editor"})]))
 
 (defn include-script [src]
   (let [e (js/document.createElement "script")
