@@ -547,6 +547,145 @@
 (defn init! []
   (mount-root))
 
+(defn capture [f]
+  (fn [evt _]
+    (f)
+    (.stopPropagation evt)
+    (.preventDefault evt)))
 
-(defn foo []
-  (swap! state (fn [st] st)))
+(defn- bind-function! [key f & args]
+  (keybind/bind! key :global (capture #(swap-editor! state (fn [s] (apply f s args))))))
+
+(bind-function! "backspace" contr/backspace)
+(bind-function! "delete" contr/delete)
+(bind-function! "pgup" contr/pg-move :up false)
+(bind-function! "pgdown" contr/pg-move :down false)
+(bind-function! "shift-pgup" contr/pg-move :up true)
+(bind-function! "shift-pgdown" contr/pg-move :down true)
+(bind-function! "home" contr/home false)
+(bind-function! "shift-home" contr/home true)
+(bind-function! "end" contr/end false)
+(bind-function! "shift-end" contr/end true)
+(bind-function! "tab" (fn [state] (contr/type-in state "    ")))
+(bind-function! "left" contr/move-caret :left false)
+(bind-function! "right" contr/move-caret :right false)
+(bind-function! "up" contr/move-caret :up false)
+(bind-function! "down" contr/move-caret :down false)
+(bind-function! "shift-left" contr/move-caret :left true)
+(bind-function! "shift-right" contr/move-caret :right true)
+(bind-function! "shift-up" contr/move-caret :up true)
+(bind-function! "shift-down" contr/move-caret :down true)
+(bind-function! "esc" contr/drop-selection-on-esc)
+
+
+;; benchmarks
+
+(defn current-time! []
+  (.now js/Date))
+
+(defn text-tree-info [t]
+  (loop [acc {:nodes 0 :leafs 0}
+         loc (text/zipper t)]
+    (if (tree/end? loc)
+      (js/console.log (str "TEXT: " acc))
+      (if (tree/node? (tree/node loc))
+        (recur (update acc :nodes inc) (tree/next loc))
+        (recur (update acc :leafs inc) (tree/next loc))))))
+
+(defn intervals-tree-info [t]
+  (loop [acc {:nodes 0 :leafs 0}
+         loc (intervals/zipper t)]
+    (if (tree/end? loc)
+      (js/console.log (str "INTERVALS: " acc))
+      (if (tree/node? (tree/node loc))
+        (recur (update acc :nodes inc) (tree/next loc))
+        (recur (update acc :leafs inc) (tree/next loc))))))
+
+(defn bench [name f & {:keys [count] :or {count 10}}]
+  (let [start-time (current-time!)]
+    (js/console.log (str "START BENCH " name))
+    (mapv (fn [f] (f)) (repeat count f))
+    (let [end-time (current-time!)
+          total-time (- end-time start-time)]
+      (js/console.log (str "END BENCH: " name " "
+                            {:count count
+                             :total total-time
+                             :average (/ total-time count)})))))
+
+(defn bench-insert [markup]
+  (bench "TREE INSERT"
+         (fn []
+           (-> (intervals/make-interval-tree)
+               (intervals/add-intervals markup)))
+         :count 1))
+
+(defn bench-insert-base [markup]
+  (bench "BASE INSERT"
+   (fn []
+     (mapv (fn [m] (update m :from inc)) markup))
+   :count 100))
+
+(defn bench-query [markup]
+  (let [itree (-> (intervals/make-interval-tree)
+                  (intervals/add-intervals markup))]
+    (bench "TREE QUERY"
+           (fn []
+             (let [from (rand-int 160000)
+                   to (+ from 3200)]
+               (intervals/query-intervals itree (intervals/map->Marker {:from from :to to}))))
+           :count 10000)))
+
+(defn play-query [model {:keys [from to]}]
+  (vec (filter #(intervals/intersect % (intervals/map->Marker {:from from :to to})) model)))
+
+(defn bench-query-base [markup]
+  (bench "QUERY BASE"
+         (fn []
+           (let [from (rand-int 160000)
+                 to (+ from 3200)]
+             (play-query markup {:from from :to to})))
+         :count 1000))
+
+(defn bench-type-in [markup]
+  (let [itree (-> (intervals/make-interval-tree)
+                  (intervals/add-intervals markup))]
+    (bench "TYPE-IN BENCH"
+           (fn []
+             (let [offset (rand-int 160000)
+                   size 1]
+               (intervals/type-in itree [offset size])))
+           :count 1000)))
+
+(defn bench-delete [markup]
+  (let [itree (-> (intervals/make-interval-tree)
+                  (intervals/add-intervals markup))]
+    (bench "DELETE BENCH"
+           (fn []
+             (let [offset (rand-int 160000)
+                   size 1]
+               (intervals/delete-range itree [offset size])))
+           :count 1)))
+
+(defn bench-editing [markup]
+  (let [itree (-> (intervals/make-interval-tree)
+                  (intervals/add-intervals markup))]
+    (bench "TREE EDITING"
+           (fn []
+             (let [cmd (rand-nth [:insert :delete])]
+               (case cmd
+                 :insert ))))))
+
+(bind-function! "ctrl-b" (fn [s]
+                           (let [markup (:raw-markers s)
+                                 interval-tree (get-in s [:document :markup])
+                                 text-tree (get-in s [:document :text])]
+                             #_(text-tree-info text-tree)
+                             #_(intervals-tree-info interval-tree)
+                             (bench-insert markup)
+                             #_(bench-insert-base markup)
+                             #_(bench-query markup)
+                             #_(bench-query-base markup)
+                             #_(bench-type-in markup)
+                             #_(bench-delete markup))
+                           (js/alert "BENCH DONE")
+                           s))
