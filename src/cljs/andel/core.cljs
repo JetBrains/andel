@@ -384,7 +384,10 @@
                              :style #js {:display :flex
                                          :flex 1}
                              :tabIndex -1
-                             :onFocus #(.. cmp -refs -textarea focus)}
+                             :onFocus (fn []
+                                        (let [ta ($ ($ cmp :refs) :textarea)]
+                                          (when ta (.focus ta))))
+                             #(.. cmp -refs -textarea focus)}
                   #js [(el scroll (js-obj "key" "viewport"
                                           "props" {:child (el editor-viewport
                                                               #js {:key "editor-viewport"
