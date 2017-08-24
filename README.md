@@ -2,6 +2,8 @@
 
 Current stage of the project is work in progress. It's not ready to use by any means.
 
+[Try editor sample app](https://jetbrains.github.io/andel/) 
+
 ## Dev
 * `lein figwheel`
 * go to http://localhost:3449
