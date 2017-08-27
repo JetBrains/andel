@@ -251,7 +251,7 @@
                    on-resize (props :onResize)
                    on-mouse-wheel (props :onMouseWheel)]
                (el "div" #js {:key "scroll"
-                              :style #js {:display :flex
+                              :style #js {:display "flex"
                                           :flex "1"
                                           :overflow :hidden}
                               :onWheel on-mouse-wheel}
@@ -381,8 +381,8 @@
           (this-as cmp
             (let [*state ($ ($ cmp :props) :editorState)]
               (el "div" #js {:key "editor"
-                             :style #js {:display :flex
-                                         :flex 1}
+                             :style #js {:display "flex"
+                                         :flex "1"}
                              :tabIndex -1
                              :onFocus (fn []
                                         (let [ta ($ ($ cmp :refs) :textarea)]
@@ -408,11 +408,12 @@
                                              (swap-editor! *state contr/type-in val)))})]))))}))
 
 (def main  (el "div"
-               #js {:style #js {:display :flex
+               #js {:style #js {:display "flex"
                                 :flex "1"}
-                    :key "main"}
+                         :key "main"}
                [(el editor #js {:editorState state
-                                :key "editor"})]))
+                                :key "editor"
+                                })]))
 
 (defn include-script [src]
   (let [e (js/document.createElement "script")
