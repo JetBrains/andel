@@ -245,23 +245,6 @@
                                       :infinity)]
         :else nil))
 
-#_(def scroll
-  (def-fun (fn [props]
-             (let [child (props :child)
-                   on-resize (props :onResize)
-                   on-mouse-wheel (props :onMouseWheel)]
-               (el "div" #js {:key "scroll"
-                              :style #js {:display "flex"
-                                          :flex "1"
-                                          :overflow :hidden}
-                              :onWheel on-mouse-wheel
-                              :ref (fn [node]
-                                     (when node
-                                       (let [height ($ node :clientHeight)
-                                             width ($ node :clientWidth)]
-                                         (on-resize width height))))}
-                   [child])))))
-
 (def scroll
   (js/createReactClass
    #js {:shouldComponentUpdate
@@ -269,6 +252,21 @@
           (this-as this
             (let [old-props ($ this :props)]
               (not= (aget old-props "props") (aget new-props "props")))))
+        :componentDidMount
+        (fn []
+          (this-as cmp
+            (let [props (aget (aget cmp "props") "props")
+                  node (.findDOMNode js/ReactDOM cmp)
+                  on-resize (fn []
+                              (let [height ($ node :clientHeight)
+                                    width ($ node :clientWidth)]
+                                 ;; paint flashing on linux when viewport bigger than screen size
+                                ((props :onResize) (- width 0) (- height 3))))]
+              (on-resize)
+              (.addEventListener
+               js/window ;; replace with erd
+               "resize"
+               on-resize))))
         :render (fn [_]
                   (this-as this
                     (let [props (aget (aget this "props") "props")
@@ -279,12 +277,7 @@
                                      :style #js {:display "flex"
                                                  :flex "1"
                                                  :overflow :hidden}
-                                     :onWheel on-mouse-wheel
-                                     :ref (fn [node]
-                                           (when node
-                                              (let [height ($ node :clientHeight)
-                                                    width ($ node :clientWidth)]
-                                                (on-resize (- width 5) (- height 5)))))}
+                                     :onWheel on-mouse-wheel}
                           [child]))))}))
 
 
