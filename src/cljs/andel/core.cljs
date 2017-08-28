@@ -245,7 +245,7 @@
                                       :infinity)]
         :else nil))
 
-(def scroll
+#_(def scroll
   (def-fun (fn [props]
              (let [child (props :child)
                    on-resize (props :onResize)
@@ -254,8 +254,38 @@
                               :style #js {:display "flex"
                                           :flex "1"
                                           :overflow :hidden}
-                              :onWheel on-mouse-wheel}
+                              :onWheel on-mouse-wheel
+                              :ref (fn [node]
+                                     (when node
+                                       (let [height ($ node :clientHeight)
+                                             width ($ node :clientWidth)]
+                                         (on-resize width height))))}
                    [child])))))
+
+(def scroll
+  (js/createReactClass
+   #js {:shouldComponentUpdate
+        (fn [new-props new-state]
+          (this-as this
+            (let [old-props ($ this :props)]
+              (not= (aget old-props "props") (aget new-props "props")))))
+        :render (fn [_]
+                  (this-as this
+                    (let [props (aget (aget this "props") "props")
+                          child (props :child)
+                          on-resize (props :onResize)
+                          on-mouse-wheel (props :onMouseWheel)]
+                      (el "div" #js {:key "scroll"
+                                     :style #js {:display "flex"
+                                                 :flex "1"
+                                                 :overflow :hidden}
+                                     :onWheel on-mouse-wheel
+                                     :ref (fn [node]
+                                           (when node
+                                              (let [height ($ node :clientHeight)
+                                                    width ($ node :clientWidth)]
+                                                (on-resize (- width 5) (- height 5)))))}
+                          [child]))))}))
 
 
 (defn editor-viewport [props]
@@ -268,7 +298,7 @@
         [_ from-y-offset] pos
         [w h] view-size
         from (int (/ from-y-offset line-height))
-        to (+ 5 (+ from (/ h line-height)))
+        to (+ from (/ h line-height))
         y-shift (- (* line-height (- (/ from-y-offset line-height) from)))
         line-zipper (text/scan-to-line (text/zipper text) from)
         from-offset (text/offset line-zipper)
@@ -337,8 +367,8 @@
                             [(max 0 (+ x dx)) y])))))
       (.preventDefault evt))))
 
-(defn init-viewport [state]
-  (swap-editor! state #(assoc-in % [:viewport :view-size] [(.-innerHeight js/window) (.-innerWidth js/window)])))
+(defn set-viewport-size [state width height]
+  (swap-editor! state #(assoc-in % [:viewport :view-size] [width height])))
 
 (defn foo []
   (swap! state update :foo #(if (nil? %) 1 (inc %))))
@@ -356,8 +386,7 @@
         (fn []
           (this-as cmp
             (let [*state ($ ($ cmp :props) :editorState)
-                  *scheduled? (atom false)]
-              (init-viewport *state)
+                  *scheduled? (atom false)]              
               (add-watch *state :editor-view
                          (fn [_ _ old-state new-state]
                            (when (and (not= old-state new-state) (not @*scheduled?))
@@ -391,6 +420,7 @@
                                           "props" {:child (el editor-viewport
                                                               #js {:key "editor-viewport"
                                                                    :editorState state})
+                                                   :onResize (partial set-viewport-size *state)
                                                    :onMouseWheel (scroll-on-event *state)}))
                        (el "textarea"
                            #js {:key "textarea"
