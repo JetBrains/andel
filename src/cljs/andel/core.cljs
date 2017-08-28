@@ -259,7 +259,7 @@
 
 
 (defn editor-viewport [props]
-  (let [#_state #_(.-editorState props)
+  (let [state ($ props :editorState)
         {:keys [editor document viewport]} @state
         {:keys [pos view-size metrics]} viewport
         line-height (utils/line-height metrics)
@@ -299,8 +299,8 @@
                                           (el "div" (js-obj "key" index
                                                             "style" (js-obj "transform" (str "translate3d(0px, " (px y-shift) ", 0px)")))
                                               [(el render-line #js {:key index
-                                                                     :props {:line-info line-info
-                                                                             :metrics metrics}})]))]))
+                                                                    :props {:line-info line-info
+                                                                            :metrics metrics}})]))]))
                     [line-zipper
                      (transient [])]
                     (range from to))]
