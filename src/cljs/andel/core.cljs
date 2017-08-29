@@ -7,6 +7,7 @@
               [andel.intervals :as intervals]
               [andel.keybind :as keybind]
               [garden.core :as g]
+              [garden.stylesheet :refer [at-keyframes]]
               [clojure.core.async :as a]
               [cljs-http.client :as http]
               [andel.text :as text]
@@ -112,14 +113,26 @@
                          "100%"
                          (px (* (- to from) width)))})}])
 
+(defstyle (garden.stylesheet/at-keyframes "blinker"
+                                          ["50%" {:opacity "0"}]))
+
 (defn render-caret [col {:keys [width] :as metrics}]
-  #js [:div {:style (style {:width "1px"
-                            :animation "blinker 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite"
-                            :top 0
-                            :background-color "red"
-                            :position :absolute
-                            :left (px (* col width))
-                            :height (px (inc (utils/line-height metrics)))})}])
+  #js [:div {}
+       #js [:div {:style (style {:height (px (inc (utils/line-height metrics)))
+                                 :width "100%"
+                                 :background-color (:bg-05 theme/zenburn)
+                                 :position :absolute
+                                 :left 0
+                                 :top 0
+                                 :z-index "-1"})}]
+       
+       #js [:div {:style (style {:width (px 1)
+                                 :animation "blinker 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite"
+                                 :top 0
+                                 :background-color "white"
+                                 :position :absolute
+                                 :left (px (* col width))
+                                 :height (px (inc (utils/line-height metrics)))})}]])
 
 (def token-class
   (let [tokens-cache #js {}]
@@ -178,6 +191,7 @@
                                     :style (style {:left (px (* from width))
                                                    :width (px (* width (- to from)))
                                                    :height (px (+ height spacing))
+                                                   ;:z-index "-1"
                                                    :position :absolute})}])
               res))
           #js [:pre {}]
