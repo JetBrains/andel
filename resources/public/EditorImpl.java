@@ -206,6 +206,11 @@ public final class EditorImpl extends UserDataHolderBase implements EditorEx, Hi
   private final PropertyChangeSupport myPropertyChangeSupport = new PropertyChangeSupport(this);
   private MyEditable myEditable;
 
+  void foo() {
+    int x = 42;
+    int y = x + x;
+  }
+
   @NotNull
   private EditorColorsScheme myScheme;
   private boolean myIsViewer;
@@ -4612,3 +4617,4 @@ public final class EditorImpl extends UserDataHolderBase implements EditorEx, Hi
     }
   }
 }
+

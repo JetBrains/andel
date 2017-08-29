@@ -16,7 +16,9 @@
                             (map->Marker {:from (min a b)
                                           :to (max a b)
                                           :greedy-left? g-l?
-                                          :greedy-right? g-r?}))
+                                          :greedy-right? g-r?
+                                          :background "bg"
+                                          :foreground "fg"}))
                           (g/tuple (g/large-integer* {:min 0 :max 10000})
                                    (g/large-integer* {:min 0 :max 10000})
                                    g/boolean
@@ -118,8 +120,8 @@
   (g/bind intervals-bulk-gen
           (fn [bulk] (g/tuple (g/return bulk)
                               (g/vector (query-gen (->> bulk
-                                                       (map :to)
-                                                       (apply max 0))))))))
+                                                        (map :to)
+                                                        (apply max 0))))))))
 
 (deftest query-test
   (is (:result (tc/quick-check 100

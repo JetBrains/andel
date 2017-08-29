@@ -12,6 +12,8 @@
               [andel.text :as text]
               [andel.tree :as tree]
               [clojure.core.reducers :as r]
+              [clojure.set]
+              [clojure.tools.reader.edn :as edn]
 
               [create-react-class :as create-react-class]
               [react-dom :as react-dom])
@@ -139,25 +141,47 @@
   (.push a x)
   a)
 
-(defn render-text [text tokens {:keys [height]}]
-  (let [[i res] (reduce (fn [[i res] [len tt]]
-                          [(+ i len)
-                           (push! res #js [:span {:class (token-class tt)}
-                                           (subs text i (+ i len))])])
-                        [0 #js [:pre {:class :line-text}]]
-                        tokens)]
-    (push! res #js [:span {} (subs text i)])))
-
-(defn render-markup [markup {:keys [height width spacing]}]
-  (let [res (reduce (fn [res {:keys [from to]}]
-                      (push! res #js [:div {:style (style {:background-color "red"
-                                                           :left (px (* from width))
-                                                           :width (px (* width (- to from)))
-                                                           :height (px (+ height spacing))
-                                                           :position :absolute})}]))
-                    #js [:pre {:class :line-markup}]
-                    markup)]
+(defn render-text [text tokens markup {:keys [height]}]
+  (let [markup (filter :foreground markup)
+        events (concat (mapcat (fn [m]
+                                 [{:pos (:from m) :add (:foreground m)}
+                                  {:pos (:to m) :remove (:foreground m)}]) markup)
+                       (second (reduce (fn [[i res] [len tt]]
+                                         [(+ i len)
+                                          (conj res {:pos i :add (token-class tt)}
+                                                    {:pos (+ i len) :remove (token-class tt)})])
+                                       [0 []] tokens)))
+        events' (->> events
+                     (sort-by :pos)
+                     (partition-by :pos)
+                     (map (fn [es]
+                            {:pos (:pos (first es))
+                             :add (set (map :add es))
+                             :remove (set (map :remove es))})))
+        res (:res (reduce (fn [{:keys [prev res styles]} {:keys [pos add remove]}]
+                              {:prev pos
+                               :styles (clojure.set/union (clojure.set/difference styles remove) add)
+                               :res (push! res #js [:span {:class (->> styles
+                                                                       (interpose " ")
+                                                                       (apply str))}
+                                                    (subs text prev pos)])})
+                            {:prev 0
+                             :styles (:add (first events'))
+                             :res #js [:pre {:class :line-text}]}
+                            (next events')))]
     res))
+
+(defn render-background-markup [markup {:keys [height width spacing]}]
+  (reduce (fn [res {:keys [from to background]}]
+            (if background
+              (push! res #js [:div {:class background
+                                    :style (style {:left (px (* from width))
+                                                   :width (px (* width (- to from)))
+                                                   :height (px (+ height spacing))
+                                                   :position :absolute})}])
+              res))
+          #js [:pre {}]
+          markup))
 
 (def real-dom
   (js/createReactClass
@@ -220,7 +244,6 @@
       (this-as this
         (let [line-info (props :line-info)
               metrics (props :metrics)
-
               line-text (.-lineText line-info)
               line-tokens (.-lineTokens line-info)
               line-markup (.-lineMarkup line-info)
@@ -228,10 +251,10 @@
               caret-index (.-caretIndex line-info)]
           (el real-dom #js {:dom (dom
                                   #js [:div {:class :render-line}
+                                       (render-background-markup line-markup metrics)
                                        (render-selection selection metrics)
-                                       (render-text line-text line-tokens metrics)
-                                       (when caret-index (render-caret caret-index metrics))
-                                       (render-markup line-markup metrics)])}))))))
+                                       (render-text line-text line-tokens line-markup metrics)
+                                       (when caret-index (render-caret caret-index metrics))])}))))))
 
 
 (defn line-selection [[from to] [line-start-offset line-end-offset]]
@@ -281,6 +304,20 @@
                           [child]))))}))
 
 
+
+(defn prepare-markup [markup from to]
+  (->> markup
+       (filter (fn [marker]
+                 (and (<= (.-from marker) to)
+                      (<= from (.-to marker)))))
+       (map (fn [marker]
+              (intervals/->Marker (max 0 (- (.-from marker) from))
+                                  (max 0 (- (.-to marker) from))
+                                  false
+                                  false
+                                  (.-background marker)
+                                  (.-foreground marker))))))
+
 (defn editor-viewport [props]
   (let [state ($ props :editorState)
         {:keys [editor document viewport]} @state
@@ -297,7 +334,7 @@
         from-offset (text/offset line-zipper)
         to-offset (dec (text/offset (text/scan-to-line line-zipper (inc to))))
         caret-offset (get caret :offset)
-        markup nil #_(intervals/query-intervals (:markup document) (intervals/map->Marker {:from from-offset :to to-offset}))
+        markup (intervals/query-intervals (:markup document) {:from from-offset :to to-offset})
         _ (defstyle :render-line [:.render-line {:height (px (utils/line-height metrics))
                                                  :position :relative}])
         [_ hiccup] (reduce
@@ -316,7 +353,7 @@
                             line-caret (when (and (<= line-start-offset caret-offset) (<= caret-offset line-end-offset))
                                          (- caret-offset line-start-offset))
                             line-tokens (:tokens (get lines index))
-                            line-markup nil #_(prepare-markup markup line-start-offset line-end-offset)
+                            line-markup (prepare-markup markup line-start-offset line-end-offset)
                             line-info (LineInfo. line-text line-tokens line-markup line-sel line-caret index)]
                         [next-line (conj! res
                                           (el "div" (js-obj "key" index
@@ -539,6 +576,40 @@
     }
 }")
 
+(defn style->class [style]
+  (let [name (str "style__" (hash-coll style))]
+    (defstyle [(str "." name) style])
+    name))
+
+;; proto-marker-map -> marker-record
+(defn create-marker [proto-marker]
+  (letfn [(class-by-keys [ks style]
+            (let [style (select-keys style ks)]
+              (when (not-empty style)
+                (style->class style))))
+          (classes-by-keys [ks styles]
+            (let [classes (->> styles
+                               (map (partial class-by-keys ks))
+                               (filter some?))]
+              (when (not-empty classes)
+                (->> classes
+                     (interpose " ")
+                     (apply str)))))]
+    (-> proto-marker
+        intervals/map->Marker
+        (assoc :foreground (classes-by-keys
+                            [:color
+                             :font-weight
+                             :font-style]
+                            (:style proto-marker)))
+        (assoc :background (classes-by-keys
+                            [:background-color
+                             :border-bottom-style
+                             :border-color
+                             :border-width
+                             :border-radius]
+                            (:style proto-marker))))))
+ 
 (defn load! []
   (js/window.addEventListener "keydown" (keybind/dispatcher) true)
   (let [loaded (a/promise-chan)]
@@ -562,12 +633,13 @@
       ;load sample document from the internet
       (let [text (:body (a/<! (http/get "resources/public/EditorImpl.java")))]
         (swap-editor! state contr/set-text text))
-      #_(let [markup (->> (:body (a/<! (http/get "resources/public/markup.edn")))
-                        (sort-by :from))]
-        (js/console.log (str "MARKUP LOADED: " (count markup)))
+      (let [markup (->> (:body (a/<! (http/get "resources/public/markup.txt")))
+                        edn/read-string
+                        (sort-by :from))]      
+        (js/console.log (str "MARKUP LOADED: " (count  markup)))
         #_(swap-editor! state (fn [s] (assoc-in s [:raw-markers] (map intervals/map->Marker markup))))
-        #_(swap-editor! state (fn [s] (assoc-in s [:document :markup] (-> (intervals/make-interval-tree)
-                                                                        (intervals/add-intervals (map intervals/map->Marker markup)))))))
+        (swap-editor! state (fn [s] (assoc-in s [:document :markup] (-> (intervals/make-interval-tree)
+                                                                        (intervals/add-intervals (map create-marker markup)))))))
       ;deliver promise
       (a/>! loaded :done))
     loaded))
@@ -667,11 +739,11 @@
            (fn []
              (let [from (rand-int 160000)
                    to (+ from 3200)]
-               (intervals/query-intervals itree (intervals/map->Marker {:from from :to to}))))
+               (intervals/query-intervals itree {:from from :to to})))
            :count 10000)))
 
 (defn play-query [model {:keys [from to]}]
-  (vec (filter #(intervals/intersect % (intervals/map->Marker {:from from :to to})) model)))
+  (vec (filter #(intervals/intersect % {:from from :to to}) model)))
 
 (defn bench-query-base [markup]
   (bench "QUERY BASE"
@@ -715,8 +787,8 @@
                                  interval-tree (get-in s [:document :markup])
                                  text-tree (get-in s [:document :text])]
                              #_(text-tree-info text-tree)
-                             #_(intervals-tree-info interval-tree)
-                             (bench-insert markup)
+                             (intervals-tree-info interval-tree)
+                             #_(bench-insert markup)
                              #_(bench-insert-base markup)
                              #_(bench-query markup)
                              #_(bench-query-base markup)

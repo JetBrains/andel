@@ -6,8 +6,9 @@
                       :clj Integer/MAX_VALUE #_100000 #_Double/POSITIVE_INFINITY))
 
 (defrecord IntervalNode [offset length rightest])
-(defrecord IntervalLeaf [offset length rightest greedy-left? greedy-right?])
-(defrecord Marker [from to greedy-left? greedy-right?])
+;; todo: g-l g-r bg fg -> marker-attrs
+(defrecord IntervalLeaf [offset length rightest greedy-left? greedy-right? background foreground])
+(defrecord Marker [from to greedy-left? greedy-right? background foreground])
 
 (defn reducing-fn
   ([] nil)
@@ -68,7 +69,9 @@
     (Marker. from
              (+ from length)
              (.-greedy-left? leaf-data)
-             (.-greedy-right? leaf-data))))
+             (.-greedy-right? leaf-data)
+             (.-background leaf-data)
+             (.-foreground leaf-data))))
 
 (defn offset->tree-basis [offset]
   (inc offset))
@@ -77,8 +80,10 @@
   (let [from (.-from interval)
         to (.-to interval)
         g-l? (.-greedy-left? interval)
-        g-r? (.-greedy-right? interval)]
-    (Marker. (offset->tree-basis from) (offset->tree-basis to) g-l? g-r?)))
+        g-r? (.-greedy-right? interval)
+        bg (.-background interval)
+        fg (.-foreground interval)]
+    (Marker. (offset->tree-basis from) (offset->tree-basis to) g-l? g-r? bg fg)))
 
 (defn tree-basis->offset [offset]
   (dec offset))
@@ -87,9 +92,10 @@
   (let [from (.-from interval)
         to (.-to interval)
         g-l? (.-greedy-left? interval)
-        g-r? (.-greedy-right? interval)]
-    (Marker. (tree-basis->offset from) (tree-basis->offset to) g-l? g-r?))
-  )
+        g-r? (.-greedy-right? interval)
+        bg (.-background interval)
+        fg (.-foreground interval)]
+    (Marker. (tree-basis->offset from) (tree-basis->offset to) g-l? g-r? bg fg)))
 
 (defn update-leaf [loc f]
   (assert (tree/leaf? (tree/node loc)) "update-leaf should recieve leaf")
@@ -104,16 +110,20 @@
                                     length (.-length data)
                                     rightest (.-rightest data)
                                     g-l? (.-greedy-left? data)
-                                    g-r? (.-greedy-right? data)]
-                                (IntervalLeaf. (f offset) length rightest g-l? g-r?)))))
+                                    g-r? (.-greedy-right? data)
+                                    bg (.-background data)
+                                    fg (.-foreground data)]
+                                (IntervalLeaf. (f offset) length rightest g-l? g-r? bg fg)))))
 
 (defn update-leaf-length [loc f]
   (update-leaf loc (fn [data] (let [offset (.-offset data)
                                     length (.-length data)
                                     rightest (.-rightest data)
                                     g-l? (.-greedy-left? data)
-                                    g-r? (.-greedy-right? data)]
-                                (IntervalLeaf. offset (f length) rightest g-l? g-r?)))))
+                                    g-r? (.-greedy-right? data)
+                                    bg (.-background data)
+                                    fg (.-foreground data)]
+                                (IntervalLeaf. offset (f length) rightest g-l? g-r? bg fg)))))
 
 (defn tree->intervals [tr]
   (loop [loc (zipper tr)
@@ -151,12 +161,12 @@
                      offset (.-offset node-metrics)
                      length (.-length node-metrics)
                      from (+ offset rightest)]
-                 (intersect (Marker. from (+ from length) nil nil)
+                 (intersect (Marker. from (+ from length) nil nil nil nil)
                             interval)))))
 
 
-(defn make-leaf [offset length greedy-left? greedy-right?]
-  (tree/make-leaf (IntervalLeaf. offset length 0 greedy-left? greedy-right?)
+(defn make-leaf [offset length greedy-left? greedy-right? background foreground]
+  (tree/make-leaf (IntervalLeaf. offset length 0 greedy-left? greedy-right? background foreground)
                   tree-config))
 
 (defn intervals->tree [intervals]
@@ -167,8 +177,8 @@
       (root)))
 
 (defn make-interval-tree []
-  (intervals->tree [(IntervalLeaf. 0 0 0 false false) ;; left sentinel
-                    (IntervalLeaf. plus-infinity 0 0 false false)] ;; right sentinel
+  (intervals->tree [(IntervalLeaf. 0 0 0 false false nil nil) ;; left sentinel
+                    (IntervalLeaf. plus-infinity 0 0 false false nil nil)] ;; right sentinel
                    ))
 
 (defn insert-one [loc interval]
@@ -176,6 +186,8 @@
         to (.-to interval)
         greedy-left? (.-greedy-left? interval)
         greedy-right? (.-greedy-right? interval)
+        bg (.-background interval)
+        fg (.-foreground interval)
         r-sibling-loc (tree/scan loc (by-offset from))
         r-offset (-> r-sibling-loc tree/node .-metrics .-offset)
         r-sibling-marker (loc->Marker r-sibling-loc)
@@ -185,7 +197,7 @@
         new-r-offset (- r-from from)
         offset (- r-offset new-r-offset)]
     (-> r-sibling-loc
-        (tree/insert-left (make-leaf offset len greedy-left? greedy-right?))
+        (tree/insert-left (make-leaf offset len greedy-left? greedy-right? bg fg))
         (update-leaf-offset (constantly new-r-offset)))))
 
 (defn add-intervals [itree intervals]
@@ -280,7 +292,7 @@
                          length (.-length node-metrics)
                          from (+ node-offset rightest)
                          to (+ from length)]
-                     (or (intersect-inclusive (Marker. from to nil nil) (Marker. offset (+ offset size) nil nil))
+                     (or (intersect-inclusive (Marker. from to nil nil nil nil) (Marker. offset (+ offset size) nil nil nil nil))
                          (< (+ offset size) (+ (.-offset metrics) (.-rightest metrics))))))]
     (loop [loc (zipper itree)
            acc (transient [])]
@@ -299,13 +311,17 @@
         to (.-to interval)
         g-l? (.-greedy-left? interval)
         g-r? (.-greedy-right? interval)
+        bg (.-background interval)
+        fg (.-foreground interval)
         update-point (fn [point offset length] (if (< offset point)
                                                  (max offset (- point length))
                                                  point))]
     (Marker. (update-point from offset length)
              (update-point to offset length)
              g-l?
-             g-r?)))
+             g-r?
+             bg
+             fg)))
 
 (defn delete-range [itree [offset size]]
   (let [offset (offset->tree-basis offset)
@@ -316,7 +332,7 @@
          root)))
 
 (defn query-intervals [itree interval]
-  (let [interval (map->Marker (interval->tree-basis interval))
+  (let [interval (interval->tree-basis (map->Marker interval))
         from (.-from interval)
         to (.-to interval)]
     (loop [loc (zipper itree)
