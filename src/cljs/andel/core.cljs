@@ -125,7 +125,7 @@
                                  :left 0
                                  :top 0
                                  :z-index "-1"})}]
-       
+
        #js [:div {:style (style {:width (px 1)
                                  :animation "blinker 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite"
                                  :top 0
@@ -430,7 +430,7 @@
         (fn []
           (this-as cmp
             (let [*state ($ ($ cmp :props) :editorState)
-                  *scheduled? (atom false)]              
+                  *scheduled? (atom false)]
               (add-watch *state :editor-view
                          (fn [_ _ old-state new-state]
                            (when (and (not= old-state new-state) (not @*scheduled?))
@@ -623,7 +623,7 @@
                              :border-width
                              :border-radius]
                             (:style proto-marker))))))
- 
+
 (defn load! []
   (js/window.addEventListener "keydown" (keybind/dispatcher) true)
   (let [loaded (a/promise-chan)]
@@ -649,7 +649,7 @@
         (swap-editor! state contr/set-text text))
       (let [markup (->> (:body (a/<! (http/get "resources/public/markup.txt")))
                         edn/read-string
-                        (sort-by :from))]      
+                        (sort-by :from))]
         (js/console.log (str "MARKUP LOADED: " (count  markup)))
         #_(swap-editor! state (fn [s] (assoc-in s [:raw-markers] (map intervals/map->Marker markup))))
         (swap-editor! state (fn [s] (assoc-in s [:document :markup] (-> (intervals/make-interval-tree)
@@ -697,6 +697,8 @@
 (bind-function! "shift-up" contr/move-caret :up true)
 (bind-function! "shift-down" contr/move-caret :down true)
 (bind-function! "esc" contr/drop-selection-on-esc)
+(bind-function! "enter" contr/on-enter)
+
 
 
 ;; benchmarks

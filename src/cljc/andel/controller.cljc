@@ -1,5 +1,6 @@
 (ns andel.controller
-  (:require [andel.utils :as utils]
+  (:require [clojure.string :as cstring]
+            [andel.utils :as utils]
             [andel.text :as text]
             [andel.intervals :as intervals]))
 
@@ -104,6 +105,24 @@
         (update-in st [:editor :caret] translate-caret (-> st :document :text) str-len)
         (update-in st [:editor] set-selection-under-caret))))
 
+(defn get-caret-line [caret text]
+  (let [{caret-offset :offset} caret
+        line (utils/offset->line caret-offset text)]
+    line))
+
+(defn get-line-ident [text line]
+  (let [loc (text/scan-to-line (text/zipper text) line)
+        line-text (text/text loc (text/line-length loc))
+        trimmed (cstring/triml line-text)
+        ident-size (- (count line-text) (count trimmed))]
+    (subs line-text 0 ident-size)))
+
+(defn on-enter [{:keys [editor document] :as state}]
+  (let [text (:text document)
+        line (get-caret-line (:caret editor) text)
+        identation (get-line-ident text line)]
+    (type-in state (str "\n" identation))))
+
 (defn set-caret-at-grid-pos [{:keys [editor document] :as state} line-col selection?]
   (let [{:keys [caret selection]} editor
         {:keys [text]} document
@@ -190,11 +209,6 @@
     (-> state
         (update-in [:editor :caret] translate-caret-verticaly text (sign view-size-in-lines))
         (move-view-if-needed))))
-
-(defn get-caret-line [caret text]
-  (let [{caret-offset :offset} caret
-        line (utils/offset->line caret-offset text)]
-    line))
 
 (defn home [{{:keys [caret]} :editor
              {:keys [text]} :document
