@@ -1,6 +1,8 @@
 (ns andel.controller
-  (:require [andel.utils :as utils]
-            [andel.text :as text]))
+  (:require [clojure.string :as cstring]
+            [andel.utils :as utils]
+            [andel.text :as text]
+            [andel.intervals :as intervals]))
 
 (defn drop-virtual-position [caret]
   (assoc caret :v-col 0))
@@ -84,10 +86,11 @@
   (let [{:keys [selection]} editor
         [sel-from sel-to] selection
         sel-len (- sel-to sel-from)]
-    (-> state
-        (edit-at-offset sel-from #(text/delete % sel-len))
-        (update-in [:editor :caret] set-caret-at-offset (:text document) sel-from)
-        (update :editor drop-selection))))
+    (as-> state st
+        (edit-at-offset st sel-from #(text/delete % sel-len))
+        (update-in st [:editor :caret] set-caret-at-offset (:text document) sel-from)
+        (update-in st [:document :markup] intervals/delete-range [(-> st :editor :caret :offset) sel-len])
+        (update st :editor drop-selection))))
 
 (defn set-selection-under-caret [editor]
   (let [caret-offset (get-in editor [:caret :offset])]
@@ -98,8 +101,27 @@
     (as-> state st
         (delete-under-selection st)
         (edit-at-caret st #(text/insert % str))
+        (update-in st [:document :markup] intervals/type-in [(-> st :editor :caret :offset) str-len])
         (update-in st [:editor :caret] translate-caret (-> st :document :text) str-len)
         (update-in st [:editor] set-selection-under-caret))))
+
+(defn get-caret-line [caret text]
+  (let [{caret-offset :offset} caret
+        line (utils/offset->line caret-offset text)]
+    line))
+
+(defn get-line-ident [text line]
+  (let [loc (text/scan-to-line (text/zipper text) line)
+        line-text (text/text loc (text/line-length loc))
+        trimmed (cstring/triml line-text)
+        ident-size (- (count line-text) (count trimmed))]
+    (subs line-text 0 ident-size)))
+
+(defn on-enter [{:keys [editor document] :as state}]
+  (let [text (:text document)
+        line (get-caret-line (:caret editor) text)
+        identation (get-line-ident text line)]
+    (type-in state (str "\n" identation))))
 
 (defn set-caret-at-grid-pos [{:keys [editor document] :as state} line-col selection?]
   (let [{:keys [caret selection]} editor
@@ -127,10 +149,11 @@
           (delete-under-selection state)
 
           (< 0 caret-offset)
-          (-> state
-              (update-in [:editor :caret] translate-caret (:text document) -1)
-              (edit-at-caret #(text/delete % 1))
-              (update :editor drop-selection))
+          (as-> state st
+            (update-in st [:document :markup] intervals/delete-range [(dec (-> st :editor :caret :offset)) 1])
+            (update-in st [:editor :caret] translate-caret (:text document) -1)
+            (edit-at-caret st #(text/delete % 1))
+            (update st :editor drop-selection))
 
           :else state)))
 
@@ -142,7 +165,9 @@
           (delete-under-selection state)
 
           (< caret-offset (text/text-length text))
-          (edit-at-caret state #(text/delete % 1))
+          (as-> state st
+            (edit-at-caret st #(text/delete % 1))
+            (update-in st [:document :markup] intervals/delete-range [(-> st :editor :caret :offset) 1]))
 
           :else state)))
 
@@ -184,11 +209,6 @@
     (-> state
         (update-in [:editor :caret] translate-caret-verticaly text (sign view-size-in-lines))
         (move-view-if-needed))))
-
-(defn get-caret-line [caret text]
-  (let [{caret-offset :offset} caret
-        line (utils/offset->line caret-offset text)]
-    line))
 
 (defn home [{{:keys [caret]} :editor
              {:keys [text]} :document
