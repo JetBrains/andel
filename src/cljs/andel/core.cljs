@@ -156,9 +156,7 @@
 
 (defn render-text [text tokens markup {:keys [height]}]
   (let [markup (filter :foreground markup)
-        events (concat [{:pos 0 :add #{}}
-                        {:pos (count text) :remove #{}}]
-                       (mapcat (fn [m]
+        events (concat (mapcat (fn [m]
                                  [{:pos (:from m) :add (:foreground m)}
                                   {:pos (:to m) :remove (:foreground m)}]) markup)
                        (second (reduce (fn [[i res] [len tt]]
@@ -339,7 +337,7 @@
         {:keys [editor document viewport]} @state
         {:keys [pos view-size metrics]} viewport
         line-height (utils/line-height metrics)
-        {:keys [text lines]} document
+        {:keys [text lines hashes]} document
         {:keys [caret selection]} editor
         [_ from-y-offset] pos
         [w h] view-size
@@ -368,7 +366,7 @@
                             line-sel (line-selection selection [line-start-offset line-end-offset])
                             line-caret (when (and (<= line-start-offset caret-offset) (<= caret-offset line-end-offset))
                                          (- caret-offset line-start-offset))
-                            line-tokens (:tokens (get lines index))
+                            line-tokens (or (get hashes (hash line-text)) (:tokens (get lines index)))
                             line-markup (prepare-markup markup line-start-offset line-end-offset)
                             line-info (LineInfo. line-text line-tokens line-markup line-sel line-caret index)]
                         [next-line (conj! res
@@ -510,13 +508,14 @@
       (.setAttribute "href" src))
     (.appendChild (head) e)))
 
-(defn deliver-lexems! [{:keys [req-ts tokens index]} state-ref]
+(defn deliver-lexems! [{:keys [req-ts tokens index text]} state-ref]
   (let [res (swap-editor! state-ref
                          (fn [{:keys [document] :as state}]
                            (let [{:keys [timestamp]} document]
                              (if (= timestamp req-ts)
                                (-> state
                                    (assoc-in [:document :lines index :tokens] tokens)
+                                   (assoc-in [:document :hashes (hash text)] tokens)
                                    (assoc-in [:document :first-invalid] (inc index)))
                                state))))]
        (= (get-in res [:document :timestamp]) req-ts)))
