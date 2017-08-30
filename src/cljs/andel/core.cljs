@@ -156,13 +156,15 @@
 
 (defn render-text [text tokens markup {:keys [height]}]
   (let [markup (filter :foreground markup)
-        events (concat (mapcat (fn [m]
+        events (concat [{:pos 0 :add #{}}
+                        {:pos (count text) :remove #{}}]
+                       (mapcat (fn [m]
                                  [{:pos (:from m) :add (:foreground m)}
                                   {:pos (:to m) :remove (:foreground m)}]) markup)
                        (second (reduce (fn [[i res] [len tt]]
                                          [(+ i len)
                                           (conj res {:pos i :add (token-class tt)}
-                                                    {:pos (+ i len) :remove (token-class tt)})])
+                                                {:pos (+ i len) :remove (token-class tt)})])
                                        [0 []] tokens)))
         events' (->> events
                      (sort-by :pos)
