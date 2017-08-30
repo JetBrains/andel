@@ -190,8 +190,7 @@
               (push! res #js [:div {:class background
                                     :style (style {:left (px (* from width))
                                                    :width (px (* width (- to from)))
-                                                   :height (px (+ height spacing))
-                                                   ;:z-index "-1"
+                                                   :height (px height)
                                                    :position :absolute})}])
               res))
           #js [:pre {}]
