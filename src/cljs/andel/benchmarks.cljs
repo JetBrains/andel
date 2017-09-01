@@ -1,5 +1,6 @@
 (ns andel.benchmarks
   (:require [andel.text :as text]
+            [andel.intervals :as intervals]
             [andel.tree :as tree]))
 
 

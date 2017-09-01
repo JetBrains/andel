@@ -62,6 +62,11 @@
       (assoc-in [:document :first-invalid] 0)
       (update-in [:document :timestamp] inc)))
 
+(defn add-markup
+  [state markup]
+  (update-in state [:document :markup] (fn [markup-tree]
+                                         (intervals/add-intervals markup-tree markup))))
+
 (defn edit-at-offset
   [{:keys [document] :as state} offset f]
   (let [{:keys [text]} document
