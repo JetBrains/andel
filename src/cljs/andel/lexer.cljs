@@ -4,7 +4,7 @@
                    [reagent.interop :refer [$]]))
 
 (defn- modespec->mode [modespec]
-  ($  js/CodeMirror getMode #js{:indentUnit 2} modespec))
+  ($ js/CodeMirror getMode #js{:indentUnit 2} modespec))
 
 (defn- copy-state [mode state]
   (letfn

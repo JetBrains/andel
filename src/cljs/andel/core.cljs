@@ -490,10 +490,10 @@
 (defn include-script [src]
   (let [e (js/document.createElement "script")
         res (a/promise-chan)]
-    (aset e "onload" #(a/put! res :done))
     (doto e
       (.setAttribute "type" "text/javascript")
       (.setAttribute "src" src))
+    (aset e "onload" #(a/put! res :done))
     (.appendChild (head) e)
     res))
 
@@ -545,8 +545,7 @@
               (= port input) (recur state line start-time'))))))))
 
 (defn wait-for-all [cs]
-  (let [m (a/merge cs)]
-    (go (dotimes [i (count cs)] (a/<! m)))))
+  (go (doseq [pr cs] (a/<! pr))))
 
 (defn font->str [font-name height]
   (str height "px " font-name))
@@ -629,7 +628,6 @@
     (go
       ;load CodeMirror first
       (a/<! (wait-for-all (map include-script ["resources/public/codemirror/addon/runmode/runmode-standalone.js"
-                                               "resources/public/codemirror/addon/runmode/runmode-standalone.js"
                                                "resources/public/codemirror/mode/javascript/javascript.js"
                                                "resources/public/codemirror/mode/clike/clike.js"
                                                "resources/public/codemirror/mode/clojure/clojure.js"])))
