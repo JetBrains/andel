@@ -427,7 +427,8 @@
         caret-offset (get caret :offset)
         markup (intervals/query-intervals (:markup document) {:from from-offset :to to-offset})
         _ (styles/defstyle :render-line [:.render-line {:height (styles/px (utils/line-height metrics))
-                                                        :position :relative}])
+                                                        :position :relative
+                                                        :overflow :hidden}])
         [_ hiccup] (reduce
                     (fn [[line-start res] index]
                       (let [next-line (text/scan-to-line line-start (inc index))
@@ -545,8 +546,8 @@
                                 :ref "textarea"
                                 :autoFocus true
                                 :style #js {:opacity 0
-                                            :pading  "0px"
-                                            :border  :none
+                                            :padding  "0px"
+                                            :border  "none"
                                             :height  "0px"
                                             :width   "0px"}
                                 :onInput (fn [evt]
