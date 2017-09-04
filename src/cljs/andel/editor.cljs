@@ -51,11 +51,11 @@
 (defn load-editors-common! []
   (let [loaded (a/promise-chan)]
     (go
-      (dotimes [pr (map styles/include-script ["resources/public/codemirror/addon/runmode/runmode-standalone.js"
-                                               "resources/public/codemirror/addon/runmode/runmode-standalone.js"
-                                               "resources/public/codemirror/mode/javascript/javascript.js"
-                                               "resources/public/codemirror/mode/clike/clike.js"
-                                               "resources/public/codemirror/mode/clojure/clojure.js"])]
+      (dotimes [pr (map styles/include-script ["codemirror/addon/runmode/runmode-standalone.js"
+                                               "codemirror/addon/runmode/runmode-standalone.js"
+                                               "codemirror/mode/javascript/javascript.js"
+                                               "codemirror/mode/clike/clike.js"
+                                               "codemirror/mode/clojure/clojure.js"])]
         (a/<! pr))
       (let [{:keys [height font-name] :as font-metrics} (a/<! (measure-async "Fira Code" 16 3))]
         (styles/defstyle :editor
