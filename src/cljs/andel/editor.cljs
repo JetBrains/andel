@@ -233,46 +233,59 @@
   (.push a x)
   a)
 
-(defn render-text [text tokens markup {:keys [height]}]
-  (let [markup (filter :foreground markup)
-        events (concat (mapcat (fn [m]
-                                 [{:pos (:from m) :add (:foreground m)}
-                                  {:pos (:to m) :remove (:foreground m)}]) markup)
-                       (second (reduce (fn [[i res] [len tt]]
-                                         [(+ i len)
-                                          (conj res {:pos i :add (token-class tt)}
-                                                {:pos (+ i len) :remove (token-class tt)})])
-                                       [0 []] tokens)))
+(defrecord HighlightEvent [pos add remove])
+
+(defrecord EventAcc [prev styles res])
+
+(defn event-comp [e1 e2]
+  (< (.-pos e1) (.-pos e2)))
+
+(defn render-text [text tokens foreground-markup {:keys [height]}]
+  (let [markup-events (persistent!
+                       (reduce (fn [res m]
+                                 (conj! res (HighlightEvent. (:from m) (:foreground m) nil)
+                                            (HighlightEvent. (:to m) nil (:foreground m))))
+                               (transient []) foreground-markup))
+        token-events (persistent!
+                      (second (reduce (fn [[i res] [len tt]]
+                                        [(+ i len)
+                                         (conj! res (HighlightEvent. i (token-class tt) nil)
+                                                    (HighlightEvent. (+ i len) nil (token-class tt)))])
+                                      [0 (transient [])] tokens)))
+        events (concat markup-events token-events)
         events' (->> events
-                     (sort-by :pos)
+                     (sort event-comp)
                      (partition-by :pos)
                      (map (fn [es]
-                            {:pos (:pos (first es))
-                             :add (set (map :add es))
-                             :remove (set (map :remove es))})))]
-    (:res (reduce (fn [{:keys [prev res styles]} {:keys [pos add remove]}]
-                              {:prev pos
-                               :styles (clojure.set/union (clojure.set/difference styles remove) add)
-                               :res (push! res #js [:span {:class (->> styles
-                                                                       (interpose " ")
-                                                                       (apply str))}
-                                                    (subs text prev pos)])})
-                            {:prev 0
-                             :styles (:add (first events'))
-                             :res #js [:pre {:class :line-text}]}
-                            (next events')))))
+                            (HighlightEvent. (.-pos (first es))
+                                             (set (map #(.-add %) es))
+                                             (set (map #(.-remove %) es))))))]
+    (:res (reduce (fn [event-acc event]
+                    (let [prev (.-prev event-acc)
+                          res (.-res event-acc)
+                          styles (.-styles event-acc)
+                          pos (.-pos event)
+                          add (.-add event)
+                          remove (.-remove event)]
+                      (EventAcc. pos
+                                 (clojure.set/union (clojure.set/difference styles remove) add)
+                                 (push! res #js [:span {:class (->> styles
+                                                                    (interpose " ")
+                                                                    (apply str))}
+                                                 (subs text prev pos)]))))
+                  (EventAcc. 0 (some-> (first events') .-add) #js [:pre {:class :line-text}])
+                  (next events')))))
 
-(defn render-background-markup [markup {:keys [height width spacing]}]
+(defn render-background-markup [background-markup {:keys [height width spacing]}]
   (reduce (fn [res {:keys [from to background]}]
-            (if background
-              (push! res #js [:div {:class background
-                                    :style (style {:left (styles/px (* from width))
-                                                   :width (styles/px (* width (- to from)))
-                                                   :height (styles/px height)
-                                                   :position :absolute})}])
-              res))
+            (push! res #js [:div {:class background
+                                  :style (style {:left (styles/px (* from width))
+                                                 :width (styles/px (* width (- to from)))
+                                                 :height (styles/px height)
+                                                 :position :absolute})}])
+            res)
           #js [:pre {}]
-          markup))
+          background-markup))
 
 (def real-dom
   (js/createReactClass
@@ -295,7 +308,7 @@
         :render
         (fn [_] (el "div" #js {:key "realDOM"}))}))
 
-(defrecord LineInfo [lineText lineTokens lineMarkup selection caretIndex index])
+(defrecord LineInfo [lineText lineTokens lineForegroundMarkup lineBackgroundMarkup selection caretIndex index])
 
 (defn dom [el]
   (let  [tag (aget el 0)
@@ -337,14 +350,15 @@
               metrics (props :metrics)
               line-text (.-lineText line-info)
               line-tokens (.-lineTokens line-info)
-              line-markup (.-lineMarkup line-info)
+              line-foreground-markup (.-lineForegroundMarkup line-info)
+              line-background-markup (.-lineBackgroundMarkup line-info)
               selection (.-selection line-info)
               caret-index (.-caretIndex line-info)]
           (el real-dom #js {:dom (dom
                                   #js [:div {:class :render-line}
-                                       (render-background-markup line-markup metrics)
+                                       (render-background-markup line-background-markup metrics)
                                        (render-selection selection metrics)
-                                       (render-text line-text line-tokens line-markup metrics)
+                                       (render-text line-text line-tokens line-foreground-markup metrics)
                                        (when caret-index (render-caret caret-index metrics))])}))))))
 
 
@@ -394,8 +408,7 @@
                                      :onWheel on-mouse-wheel}
                           [child]))))}))
 
-
-
+;; proto-marker -> (foreground markup, background markup)
 (defn prepare-markup [markup from to]
   (->> markup
        (filter (fn [marker]
@@ -407,7 +420,9 @@
                                   false
                                   false
                                   (.-background marker)
-                                  (.-foreground marker))))))
+                                  (.-foreground marker))))
+       ((fn [ms] [(filter :foreground ms)
+                  (filter :background ms)]))))
 
 (defn editor-viewport [props]
   (let [state ($ props :editorState)
@@ -445,8 +460,8 @@
                             line-caret (when (and (<= line-start-offset caret-offset) (<= caret-offset line-end-offset))
                                          (- caret-offset line-start-offset))
                             line-tokens (or (get hashes (hash line-text)) (:tokens (get lines index)))
-                            line-markup (prepare-markup markup line-start-offset line-end-offset)
-                            line-info (LineInfo. line-text line-tokens line-markup line-sel line-caret index)]
+                            [line-foreground-markup line-background-markup] (prepare-markup markup line-start-offset line-end-offset)
+                            line-info (LineInfo. line-text line-tokens line-foreground-markup line-background-markup line-sel line-caret index)]
                         [next-line (conj! res
                                           (el "div" (js-obj "key" index
                                                             "style" (js-obj "transform" (str "translate3d(0px, " (styles/px y-shift) ", 0px)")))
