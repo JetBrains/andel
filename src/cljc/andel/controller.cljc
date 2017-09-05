@@ -134,9 +134,9 @@
         caret-offset' (utils/line-col->offset line-col text)
         caret' (set-caret-at-offset caret text caret-offset')
         selection' (update-selection selection caret caret' selection?)]
-    (as-> state st
-          (assoc-in st [:editor :caret] caret')
-          (assoc-in st [:editor :selection] selection'))))
+    (-> state
+        (assoc-in [:editor :caret] caret')
+        (assoc-in [:editor :selection] selection'))))
 
 (defn set-caret-at-line-begining
   [state line selection?]

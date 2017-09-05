@@ -143,7 +143,28 @@
                                       }
                              :viewport {:pos [0 0]
                                         :view-size [0 0]
-                                        :metrics nil}})]
+                                        :metrics nil}
+                             :keymap { "backspace" controller/backspace
+                                       "delete" controller/delete
+                                       "pgup" #(controller/pg-move % :up false)
+                                       "pgdown" #(controller/pg-move % :down false)
+                                       "shift-pgup" #(controller/pg-move % :up true)
+                                       "shift-pgdown" #(controller/pg-move % :down true)
+                                       "home" #(controller/home % false)
+                                       "shift-home" #(controller/home % true)
+                                       "end" #(controller/end % false)
+                                       "shift-end" #(controller/end % true)
+                                       "tab" (fn [state] (controller/type-in state "    "))
+                                       "left" #(controller/move-caret % :left false)
+                                       "right" #(controller/move-caret % :right false)
+                                       "up" #(controller/move-caret % :up false)
+                                       "down" #(controller/move-caret % :down false)
+                                       "shift-left" #(controller/move-caret % :left true)
+                                       "shift-right" #(controller/move-caret % :right true)
+                                       "shift-up" #(controller/move-caret % :up true)
+                                       "shift-down" #(controller/move-caret % :down true)
+                                       "esc" controller/drop-selection-on-esc
+                                       "enter" controller/on-enter}})]
     (attach-lexer! *editor-state)
     *editor-state))
 
@@ -457,17 +478,18 @@
                      (transient [])]
                     (range from to))]
     (el "div" #js {:style #js {:background theme/background
-                               :width "100%"}
+                               :width "100%"
+                               :overflow "hidden"}
                    :key "viewport"
                    :onMouseDown (fn [event]
-                                  (let [x ($ event :clientX)
-                                        y ($ event :clientY)
+                                  (let [x (- ($ event :clientX) (-> event .-currentTarget .-offsetLeft))
+                                        y (- ($ event :clientY) (-> event .-currentTarget .-offsetTop))
                                         line-col (utils/pixels->grid-position [x y] from y-shift metrics)]
                                     (swap! state #(controller/set-caret-at-grid-pos % line-col false))))
                    :onMouseMove  (fn [event]
                                    (when (= ($ event :buttons) 1)
-                                     (let [x ($ event :clientX)
-                                           y ($ event :clientY)
+                                     (let [x (- ($ event :clientX) (-> event .-currentTarget .-offsetLeft))
+                                           y (- ($ event :clientY) (-> event .-currentTarget .-offsetTop))
                                            line-col (utils/pixels->grid-position [x y] from y-shift metrics)]
                                        (swap! state #(controller/set-caret-at-grid-pos % line-col true)))))}
         (persistent! hiccup))))
@@ -505,7 +527,9 @@
         (fn []
           (this-as cmp
             (let [*state ($ ($ cmp :props) :editorState)
-                  *scheduled? (atom false)]
+                  *scheduled? (atom false)
+                  *bindings (atom (keybind/make-bindings (:keymap @*state)))]
+              (aset cmp "bindings" *bindings)
               (add-watch *state :editor-view
                          (fn [_ _ old-state new-state]
                            (when (and (not= old-state new-state) (not @*scheduled?))
@@ -532,7 +556,8 @@
         :render
         (fn []
           (this-as cmp
-            (let [*state ($ ($ cmp :props) :editorState)]
+            (let [*state ($ ($ cmp :props) :editorState)
+                  *bindings ($ cmp :bindings)]
               (if (ready-to-view? @*state)
                 (el "div" #js {:key "editor"
                                :style #js {:display "flex"
@@ -556,6 +581,13 @@
                                               :border  "none"
                                               :height  "0px"
                                               :width   "0px"}
+                                  :onKeyDown (fn [evt]
+                                               (when *bindings
+                                                 (let [[bindings' cb] (keybind/dispatch @*bindings evt)]
+                                                   (reset! *bindings bindings')
+                                                   (when cb
+                                                     (swap! *state cb)))))
+
                                   :onInput (fn [evt]
                                              (let [e   (.-target evt)
                                                    val (.-value e)]

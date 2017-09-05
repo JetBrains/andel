@@ -7,43 +7,11 @@
               [andel.intervals :as intervals]
               [andel.keybind :as keybind]
               [andel.styles :as styles]
+              [andel.intervals :as intervals]
               
               #_[andel.benchmarks])
     (:require-macros [reagent.interop :refer [$ $!]]
                      [cljs.core.async.macros :refer [go]]))
-
-
-(defn bind-keymap! [*editor-state]
-  (letfn [(capture [f]
-            (fn [evt _]
-              (f)
-              (.stopPropagation evt)
-              (.preventDefault evt)))
-          (bind-function! [key f & args]
-            (keybind/bind! key :global (capture #(swap! *editor-state (fn [s] (apply f s args))))))]
-    (js/window.addEventListener "keydown" (keybind/dispatcher) true)
-    (bind-function! "backspace" controller/backspace)
-    (bind-function! "delete" controller/delete)
-    (bind-function! "pgup" controller/pg-move :up false)
-    (bind-function! "pgdown" controller/pg-move :down false)
-    (bind-function! "shift-pgup" controller/pg-move :up true)
-    (bind-function! "shift-pgdown" controller/pg-move :down true)
-    (bind-function! "home" controller/home false)
-    (bind-function! "shift-home" controller/home true)
-    (bind-function! "end" controller/end false)
-    (bind-function! "shift-end" controller/end true)
-    (bind-function! "tab" (fn [state] (controller/type-in state "    ")))
-    (bind-function! "left" controller/move-caret :left false)
-    (bind-function! "right" controller/move-caret :right false)
-    (bind-function! "up" controller/move-caret :up false)
-    (bind-function! "down" controller/move-caret :down false)
-    (bind-function! "shift-left" controller/move-caret :left true)
-    (bind-function! "shift-right" controller/move-caret :right true)
-    (bind-function! "shift-up" controller/move-caret :up true)
-    (bind-function! "shift-down" controller/move-caret :down true)
-    (bind-function! "esc" controller/drop-selection-on-esc)
-    (bind-function! "enter" controller/on-enter)))
-
 
 ;; proto-marker-map -> marker-record
 (defn create-marker [proto-marker]
@@ -74,10 +42,16 @@
                              :border-radius]
                             (:style proto-marker))))))
 
+(defn insert-markers [editor markers]
+  (let [intervals (->> markers
+                       (mapv create-marker)
+                       (sort-by (fn [m] (.-from m))))]
+    (update-in editor [:document :markup] intervals/add-intervals intervals)))
+
 (defn update-selection [editor selection caret]
   (-> editor
       (assoc-in [:editor :selection] selection)
-      (assoc-in [:editor :caret] caret)))
+      (assoc-in [:editor :caret] {:offset caret :v-col 0})))
 
 (defn insert-at-offset [editor offset insertion]
   (-> editor

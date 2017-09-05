@@ -72,11 +72,6 @@
   (into {} (for [[k v] KEYS]
              [v k])))
 
-;; Data
-
-(defonce BINDINGS (atom {}))
-(defonce PRESSED (atom []))
-
 ;; Behavior
 
 (defn parse-chord [keystring]
@@ -97,21 +92,8 @@
   (into {} (for [[key attr] KEYATTRS]
              [key (aget e attr)])))
 
-(defn reset-sequence! []
-  (swap! PRESSED empty))
-
-(defn dispatch [e bindings]
-  (let [chord    (e->chord e)
-        sequence (conj @PRESSED chord)
-        inner    (get-in bindings sequence)
-        handlers (:handlers inner)]
-    (cond
-      (not inner) (reset-sequence!)
-      handlers    (do
-                    (doseq [[_ handler] (:handlers inner)]
-                      (handler e sequence))
-                    (reset-sequence!))
-      :else       (reset! PRESSED sequence))))
+(defn reset-sequence [state]
+  (update state :pressed empty))
 
 (defn bind [bindings spec key cb]
   "Same as `bind!`, just modifies `bindings` map, you have to handle
@@ -127,29 +109,16 @@
 
 ;; Main external API
 
-(defn bind! [spec key cb]
-  "Binds a sequence of button presses, specified by `spec`, to `cb` when
-  pressed. Keys must be unique per `spec`, and can be used to remove keybinding
-  with `unbind!`.
+(defn make-bindings [keymap]
+  {:bindings (reduce (fn [m [spec cb]] (bind m spec :whatever cb)) {} keymap)
+   :pressed []})
 
-  `spec` format is emacs-like strings a-la \"ctrl-c k\", \"meta-shift-k\", etc."
-  (swap! BINDINGS bind spec key cb))
-
-(defn unbind! [spec key]
-  "Removes a callback, identified by `key`, from button sequence `spec`."
-  (swap! BINDINGS unbind spec key))
-
-(defn unbind-all! []
-  "Remove all BINDINGS"
-  (reset-sequence!)
-  (swap! BINDINGS empty))
-
-(defn dispatcher []
-  "Return a function to be bound on `keydown` event, preferably globally.
-  Accepts atom with bindings.
-
-  Is bound by default with `keycode/BINDINGS` atom, so you don't need to use
-  that."
-  (fn [e]
-    (when (get KNOWN-KEYS (.-keyCode e))
-      (dispatch e @BINDINGS))))
+(defn dispatch [{:keys [pressed bindings] :as state} e]
+  (let [chord    (e->chord e)
+        sequence (conj pressed chord)
+        inner    (get-in bindings sequence)
+        handlers (:handlers inner)]
+    (cond
+      (not inner)  [(reset-sequence state) nil]
+      handlers     [(reset-sequence state) (first (vals handlers))]
+      :else        [(assoc state :pressed sequence) nil])))
