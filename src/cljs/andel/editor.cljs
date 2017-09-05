@@ -233,6 +233,10 @@
   (.push a x)
   a)
 
+(defn aset! [coll key value]
+  (aset coll key value)
+  coll)
+
 (defrecord HighlightEvent [pos add remove])
 
 (defrecord EventAcc [prev styles res])
@@ -240,41 +244,54 @@
 (defn event-comp [e1 e2]
   (< (.-pos e1) (.-pos e2)))
 
+(defn partition-by-pos [events]
+  (reduce (fn [acc e]
+            (if e
+              (let [pos (.-pos e)
+                    add (.-add e)
+                    remove (.-remove e)]
+                (if (aget acc pos)
+                  (aset! acc pos (push! (aget acc pos) e))
+                  (aset! acc pos #js [e])))))
+          #js []
+          events))
+
 (defn render-text [text tokens foreground-markup {:keys [height]}]
-  (let [markup-events (persistent!
-                       (reduce (fn [res m]
-                                 (conj! res (HighlightEvent. (:from m) (:foreground m) nil)
-                                            (HighlightEvent. (:to m) nil (:foreground m))))
-                               (transient []) foreground-markup))
-        token-events (persistent!
-                      (second (reduce (fn [[i res] [len tt]]
-                                        [(+ i len)
-                                         (conj! res (HighlightEvent. i (token-class tt) nil)
-                                                    (HighlightEvent. (+ i len) nil (token-class tt)))])
-                                      [0 (transient [])] tokens)))
-        events (concat markup-events token-events)
+  (let [markup-events (reduce (fn [res m]
+                                (push! res (HighlightEvent. (:from m) (:foreground m) nil))
+                                (push! res (HighlightEvent. (:to m) nil (:foreground m))))
+                              #js [] foreground-markup)
+        token-events (second (reduce (fn [[i res] [len tt]]
+                                       [(+ i len)
+                                        (push! res (HighlightEvent. i (token-class tt) nil))
+                                        (push! res (HighlightEvent. (+ i len) nil (token-class tt)))])
+                                     [0 #js []] tokens))
+        events (.concat markup-events token-events)
         events' (->> events
-                     (sort event-comp)
-                     (partition-by :pos)
-                     (map (fn [es]
-                            (HighlightEvent. (.-pos (first es))
-                                             (set (map #(.-add %) es))
-                                             (set (map #(.-remove %) es))))))]
-    (:res (reduce (fn [event-acc event]
-                    (let [prev (.-prev event-acc)
-                          res (.-res event-acc)
-                          styles (.-styles event-acc)
-                          pos (.-pos event)
-                          add (.-add event)
-                          remove (.-remove event)]
-                      (EventAcc. pos
-                                 (clojure.set/union (clojure.set/difference styles remove) add)
-                                 (push! res #js [:span {:class (->> styles
-                                                                    (interpose " ")
-                                                                    (apply str))}
-                                                 (subs text prev pos)]))))
-                  (EventAcc. 0 (some-> (first events') .-add) #js [:pre {:class :line-text}])
-                  (next events')))))
+                     ((fn [es] (.sort es event-comp)))
+                     partition-by-pos
+
+                     ((fn [es] (.map es (fn [e]
+                                          (HighlightEvent. (.-pos (first e))
+                                                           (set (map #(.-add %) e))
+                                                           (set (map #(.-remove %) e))))))))]
+    (.-res (reduce (fn [event-acc event]
+                    (if event
+                      (let [prev (.-prev event-acc)
+                            res (.-res event-acc)
+                            styles (.-styles event-acc)
+                            pos (.-pos event)
+                            add (.-add event)
+                            remove (.-remove event)]
+                        (EventAcc. pos
+                                   (clojure.set/union (clojure.set/difference styles remove) add)
+                                   (push! res #js [:span {:class (->> styles
+                                                                      (interpose " ")
+                                                                      (apply str))}
+                                                   (subs text prev pos)])))
+                      event-acc))
+                  (EventAcc. 0 (some-> (aget events' 0) .-add) #js [:pre {:class :line-text}])
+                  (.slice events' 1)))))
 
 (defn render-background-markup [background-markup {:keys [height width spacing]}]
   (reduce (fn [res {:keys [from to background]}]
