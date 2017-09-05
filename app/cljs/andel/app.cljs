@@ -15,7 +15,7 @@
 
 (defonce editor-state-promise (let [promise (a/promise-chan)]
                                 (go
-                                  (let [*editor-state (a/<! (editor/make-editor-state))
+                                  (let [*editor-state (editor/make-editor-state)
                                         text (:body (a/<! (http/get "EditorImpl.java")))
                                         markup (->> (:body (a/<! (http/get "markup.txt")))
                                                     edn/read-string

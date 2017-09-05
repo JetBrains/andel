@@ -3,6 +3,7 @@
               
               [andel.editor :as editor]
               [andel.controller :as controller]
+              [andel.text :as text]
               [andel.intervals :as intervals]
               [andel.keybind :as keybind]
               [andel.styles :as styles]
@@ -73,3 +74,17 @@
                              :border-radius]
                             (:style proto-marker))))))
 
+(defn update-selection [editor selection caret]
+  (-> editor
+      (assoc-in [:editor :selection] selection)
+      (assoc-in [:editor :caret] caret)))
+
+(defn insert-at-offset [editor offset insertion]
+  (-> editor
+      (controller/edit-at-offset offset #(text/insert % insertion))
+      (update-in [:document :markup] intervals/type-in [offset (count insertion)])))
+
+(defn delete-at-offset [editor offset length]
+  (-> editor
+      (controller/edit-at-offset offset #(text/delete % length))
+      (update-in [:document :markup] intervals/delete-range [offset length])))

@@ -13,10 +13,6 @@
   js/document.body)
 
 
-(defn wait-for-all [prs]
-  )
-
-
 (defn include-script [src]
   (let [e (js/document.createElement "script")
         res (a/promise-chan)]

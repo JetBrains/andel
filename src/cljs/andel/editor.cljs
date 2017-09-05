@@ -2,8 +2,8 @@
   (:require [clojure.core.async :as a]
             [clojure.set]
 
-            [create-react-class :as create-react-class]
-            [react-dom :as react-dom]
+            [cljsjs.create-react-class]
+            [cljsjs.react.dom]
             [garden.core :as g]
             [garden.stylesheet :refer [at-keyframes]]
 
@@ -58,15 +58,17 @@
                                                "codemirror/mode/clojure/clojure.js"])]
         (a/<! pr))
       (let [{:keys [height font-name] :as font-metrics} (a/<! (measure-async "Fira Code" 16 3))]
-        (styles/defstyle :editor
-          [:pre
-           {:font-family font-name
-            :font-size   (styles/px height)
-            :color       theme/foreground
-            :margin      "0px"}])
         (styles/defstyle (garden.stylesheet/at-keyframes "blinker"
                                                          ["50%" {:opacity "0"}]))
         (styles/defstyle :line-text [:.line-text {:position :absolute
+                                                  :padding "0px"
+                                                  :margin "0px"
+                                                  :background "inherit"
+                                                  :border-radius "0px"
+                                                  :border-width "0px"
+                                                  :font-family font-name
+                                                  :font-size (styles/px height)
+                                                  :color theme/foreground
                                                   :left 0
                                                   :user-select :none
                                                   :top 0}])
@@ -127,29 +129,26 @@
                  (when (not= old-ts new-ts)
                    (a/put! broker new-s))))))
 
-
 (defn make-editor-state []
-  (let [promise (a/promise-chan)]
-    (go
-      (let [editors-common (a/<! *editors-common)
-            *editor-state (atom {:document {:text (text/make-text "")
-                                            :markup (intervals/make-interval-tree)
-                                            :lexer-broker (a/chan)
-                                            :modespec "text/x-java"
-                                            :timestamp 0
-                                            :lines []
-                                            :first-invalid 0}
-                                 :editor {:caret {:offset 0 :v-col 0}
-                                          :selection [0 0]
-                                          ;; :carets [{:caret 0 :virtual-col 0 :selection {:from 0 :to 0}}]
-                                          }
-                                 :viewport {:pos [0 0]
-                                            :view-size [0 0]
-                                            :metrics (:font-metrics editors-common)}})]
-        (attach-lexer! *editor-state)
-        (a/>! promise *editor-state)))
-    promise))
+  (let [*editor-state (atom {:document {:text (text/make-text "")
+                                        :markup (intervals/make-interval-tree)
+                                        :lexer-broker (a/chan)
+                                        :modespec "text/x-java"
+                                        :timestamp 0
+                                        :lines []
+                                        :first-invalid 0}
+                             :editor {:caret {:offset 0 :v-col 0}
+                                      :selection [0 0]
+                                      ;; :carets [{:caret 0 :virtual-col 0 :selection {:from 0 :to 0}}]
+                                      }
+                             :viewport {:pos [0 0]
+                                        :view-size [0 0]
+                                        :metrics nil}})]
+    (attach-lexer! *editor-state)
+    *editor-state))
 
+(defn ready-to-view? [editor-state]
+  (some? (get-in editor-state [:viewport :metrics])))
 
 ;; renderring
 
@@ -235,7 +234,8 @@
 
 (defn render-text [text tokens markup {:keys [height]}]
   (let [markup (filter :foreground markup)
-        events (concat (mapcat (fn [m]
+        events (concat [{:pos 0 :add #{}} {:pos (count text) :remove #{}}]
+                       (mapcat (fn [m]
                                  [{:pos (:from m) :add (:foreground m)}
                                   {:pos (:to m) :remove (:foreground m)}]) markup)
                        (second (reduce (fn [[i res] [len tt]]
@@ -271,7 +271,7 @@
                                                    :height (styles/px height)
                                                    :position :absolute})}])
               res))
-          #js [:pre {}]
+          #js [:div {}]
           markup))
 
 (def real-dom
@@ -512,7 +512,12 @@
                              (reset! *scheduled? true)
                              (next-tick (fn []
                                           (reset! *scheduled? false)
-                                          ($ cmp forceUpdate)))))))))
+                                          ($ cmp forceUpdate))))))
+              (when (not (ready-to-view? @*state))
+                (go
+                  (let [metrics (:font-metrics (a/<! *editors-common))]
+                    (js/console.log "METRICS: " metrics)
+                    (swap! *state assoc-in [:viewport :metrics] metrics)))))))
 
         :componentWillUnmount
         (fn []
@@ -528,33 +533,35 @@
         (fn []
           (this-as cmp
             (let [*state ($ ($ cmp :props) :editorState)]
-              (el "div" #js {:key "editor"
-                             :style #js {:display "flex"
-                                         :flex "1"}
-                             :tabIndex -1
-                             :onFocus (fn []
-                                        (let [ta ($ ($ cmp :refs) :textarea)]
-                                          (when ta (.focus ta))))}
-                  #js [(el scroll (js-obj "key" "viewport"
-                                          "props" {:child (el editor-viewport
-                                                              #js {:key "editor-viewport"
-                                                                   :editorState *state})
-                                                   :onResize (partial set-viewport-size *state)
-                                                   :onMouseWheel (scroll-on-event *state)}))
-                       (el "textarea"
-                           #js {:key "textarea"
-                                :ref "textarea"
-                                :autoFocus true
-                                :style #js {:opacity 0
-                                            :padding  "0px"
-                                            :border  "none"
-                                            :height  "0px"
-                                            :width   "0px"}
-                                :onInput (fn [evt]
-                                           (let [e   (.-target evt)
-                                                 val (.-value e)]
-                                             (set! (.-value e) "")
-                                             (swap! *state controller/type-in val)))})]))))}))
+              (if (ready-to-view? @*state)
+                (el "div" #js {:key "editor"
+                               :style #js {:display "flex"
+                                           :flex "1"}
+                               :tabIndex -1
+                               :onFocus (fn []
+                                          (let [ta ($ ($ cmp :refs) :textarea)]
+                                            (when ta (.focus ta))))}
+                    #js [(el scroll (js-obj "key" "viewport"
+                                            "props" {:child (el editor-viewport
+                                                                #js {:key "editor-viewport"
+                                                                     :editorState *state})
+                                                     :onResize (partial set-viewport-size *state)
+                                                     :onMouseWheel (scroll-on-event *state)}))
+                         (el "textarea"
+                             #js {:key "textarea"
+                                  :ref "textarea"
+                                  :autoFocus true
+                                  :style #js {:opacity 0
+                                              :padding  "0px"
+                                              :border  "none"
+                                              :height  "0px"
+                                              :width   "0px"}
+                                  :onInput (fn [evt]
+                                             (let [e   (.-target evt)
+                                                   val (.-value e)]
+                                               (set! (.-value e) "")
+                                               (swap! *state controller/type-in val)))})])
+                (el "div" #js {:key "editor-placeholder"} #js ["EDITOR PLACEHOLDER"])))))}))
 
 (defn editor-view [*editor-state]
   (el editor-cmp #js {:editorState *editor-state

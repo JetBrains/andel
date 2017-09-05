@@ -5,15 +5,12 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
 
   :dependencies [[org.clojure/clojure "1.9.0-alpha19"]                 
-                 [cljsjs/react-dom "15.6.1-1"]
-                 [cljsjs/react-dom-server "15.6.1-1"]
+                 [cljsjs/react "16.0.0-beta.5-1"]
+                 [cljsjs/react-dom "16.0.0-beta.5-1"]
                  [cljsjs/create-react-class "15.6.0-1"]
                  [reagent "0.7.0"]
                  [reagent-utils "0.2.1"]                                  
-                 [compojure "1.5.2"]
-                 #_[hiccup "1.0.5"]               
-                 [org.clojure/clojurescript "1.9.908"
-                  :scope "provided"]
+                 [org.clojure/clojurescript "1.9.908" :scope "provided"]
                  [cljs-http "0.1.43"]
                  [garden "1.3.2"]
                  [org.clojure/core.async "0.3.443"]]
@@ -31,7 +28,7 @@
    [:cljsbuild :builds :app :compiler :output-dir]
    [:cljsbuild :builds :app :compiler :output-to]]
 
-  :source-paths ["src/clj" "src/cljc"]
+  :source-paths ["src/cljc" "src/cljs"]
   :resource-paths ["resources" "target/cljsbuild"]
 
   :minify-assets
@@ -48,7 +45,7 @@
               :pseudo-names true
               :source-map "target/cljsbuild/public/js/app.js.map"
               :pretty-print  false
-              :language-in :es5}}
+              :language-in :ecmascript5}}
             :app
             {:source-paths ["src/cljs" "src/cljc" "app/cljs"]
              :figwheel {:on-jsload "andel.app/init!"}
@@ -64,7 +61,7 @@
 
   :figwheel
   {:http-server-root "public"
-   :server-port 3449
+   :server-port 3450
    :nrepl-port 7002
    :nrepl-middleware ["cemerick.piggieback/wrap-cljs-repl"]
    :css-dirs ["resources/public/css"]
@@ -81,17 +78,10 @@
                                   [org.clojure/tools.nrepl "0.2.13"]
                                   [com.cemerick/piggieback "0.2.2-SNAPSHOT"]
                                   [pjstadig/humane-test-output "0.8.1"]]
-
+                   :source-paths ["tests/clj"]
                    :plugins [[lein-figwheel "0.5.10"]]
 
                    :injections [(require 'pjstadig.humane-test-output)
                                 (pjstadig.humane-test-output/activate!)]
 
-                   :env {:dev true}}
-
-             :uberjar {:hooks [minify-assets.plugin/hooks]
-                       :source-paths ["env/prod/clj"]
-                       :prep-tasks ["compile" ["cljsbuild" "once" "min"]]
-                       :env {:production true}
-                       :aot :all
-                       :omit-source true}})
+                   :env {:dev true}}})
