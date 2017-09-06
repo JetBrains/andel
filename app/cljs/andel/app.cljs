@@ -23,7 +23,6 @@
                                                     (mapv core/create-marker))]
                                     (swap! *editor-state controller/set-text text)
                                     (swap! *editor-state controller/add-markup markup)
-                                    (core/bind-keymap! *editor-state)
                                     (a/>! promise *editor-state)))
                                 promise))
 
