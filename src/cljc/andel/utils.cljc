@@ -8,17 +8,21 @@
 (defn pixels->grid-position
   "transforms relative position in pixels into absolute [line col] value
    CAUTION! col might be bigger, than length of line."
-  [[pix-x pix-y] start-line shift {:keys [width] :as metrics}]
-  (let [line-height (line-height metrics)
+  [[pix-x pix-y] {:keys [metrics pos] :as viewport}]
+  (let [[_ top-px] pos
+        line-height (line-height metrics)
+        font-width (:width metrics)
+        top-line (int (/ top-px line-height))
+        y-shift (- (* line-height (- (/ top-px line-height) top-line)))
         x pix-x
-        y (- (- pix-y shift) (/ line-height 2))
+        y (- (- pix-y y-shift) (/ line-height 2))
         rel-line (Math/round (/ y line-height))
-        abs-line (+ start-line rel-line)
-        abs-col (Math/round (/ x width))]
+        abs-line (+ top-line rel-line)
+        abs-col (Math/round (/ x font-width))]
     {:line abs-line
      :col abs-col}))
 
-(defn line-col->offset
+(defn grid-pos->offset
   "transforms [line col] value into absolute offset value"
   [{:keys [line col]} text]
   (let [line-loc (text/scan-to-line (text/zipper text) line)
@@ -31,14 +35,7 @@
 (defn line->offset
   "transforms line value into absolute offset value"
   [line text]
-  (line-col->offset {:line line :col 0} text))
-
-(defn pixels->offset
-  "transforms relative position in pixels into absolute offset value"
-  [[pix-x pix-y] start-line shift metrics text]
-  (-> [pix-x pix-y]
-      (pixels->grid-position start-line shift metrics)
-      (line-col->offset text)))
+  (grid-pos->offset {:line line :col 0} text))
 
 (defn offset->line
   "transforms absolute offset into absolute line value ignoring col"
@@ -48,14 +45,14 @@
       (text/scan-to-offset offset)
       (text/line)))
 
-(defn line->length [line text]
+(defn line-length [line text]
   (text/line-length (text/scan-to-line (text/zipper text) line)))
 
 (defn offset->line-col
   "transforms absolute offset into absolute [line col] value"
   [offset text]
   (let [line (offset->line offset text)
-        line-offset (line-col->offset {:line line :col 0} text)
+        line-offset (grid-pos->offset {:line line :col 0} text)
         col (- offset line-offset)]
     {:line line
      :col col}))

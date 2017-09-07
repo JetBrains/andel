@@ -1,20 +1,16 @@
 (ns andel.core
   (:require   [clojure.core.async :as a]
-              
-              [andel.editor :as editor]
-              [andel.controller :as controller]
+              [andel.utils :as utils]
               [andel.text :as text]
               [andel.intervals :as intervals]
-              [andel.keybind :as keybind]
               [andel.styles :as styles]
               [andel.intervals :as intervals]
-              
               #_[andel.benchmarks])
     (:require-macros [reagent.interop :refer [$ $!]]
                      [cljs.core.async.macros :refer [go]]))
 
 ;; proto-marker-map -> marker-record
-(defn create-marker [proto-marker]
+(defn- create-marker [proto-marker]
   (letfn [(class-by-keys [ks style]
             (let [style (select-keys style ks)]
               (when (not-empty style)
@@ -42,23 +38,62 @@
                              :border-radius]
                             (:style proto-marker))))))
 
-(defn insert-markers [editor markers]
+(defn- edit-at-offset
+  [{:keys [document] :as state} offset f]
+  (let [{:keys [text]} document
+        edit-point (utils/offset->loc offset text)]
+    (-> state
+        (assoc-in [:document :text] (-> edit-point
+                                        (f)
+                                        (text/root)))
+        (update-in [:document :timestamp] inc)
+        (update-in [:document :first-invalid] min (utils/loc->line edit-point)))))
+
+(defn caret-offset [state]
+  (get-in state [:editor :caret :offset]))
+
+(defn selection [state]
+  (get-in state [:editor :selection]))
+
+(defn insert-markers [state markers]
   (let [intervals (->> markers
                        (mapv create-marker)
                        (sort-by (fn [m] (.-from m))))]
-    (update-in editor [:document :markup] intervals/add-intervals intervals)))
+    (update-in state [:document :markup] intervals/add-intervals intervals)))
 
-(defn update-selection [editor selection caret]
-  (-> editor
+(defn set-selection [state selection caret-offset]
+  (-> state
       (assoc-in [:editor :selection] selection)
-      (assoc-in [:editor :caret] {:offset caret :v-col 0})))
+      (assoc-in [:editor :caret :offset] caret-offset)
+      (update :log conj {:kind :selection
+                         :selection selection
+                         :caret-offset caret-offset})))
 
-(defn insert-at-offset [editor offset insertion]
-  (-> editor
-      (controller/edit-at-offset offset #(text/insert % insertion))
-      (update-in [:document :markup] intervals/type-in [offset (count insertion)])))
+(defn insert-at-offset [state offset insertion]
+  (let [[sel-from sel-to] (selection state)
+        added-length (count insertion)
+        caret-offset (caret-offset state)]
+    (-> state
+        (edit-at-offset offset #(text/insert % insertion))
+        (update-in [:document :markup] intervals/type-in [offset (count insertion)])
+        (cond->
+          (<= offset sel-from) (update-in [:editor :selection 0] #(+ % added-length))
+          (<= offset caret-offset) (update-in [:editor :caret :offset] #(+ % added-length))
+          (<= offset sel-to) (update-in [:editor :selection 1] #(+ % added-length)))
+        (update :log conj {:kind :insert
+                           :offset offset
+                           :insert insertion}))))
 
-(defn delete-at-offset [editor offset length]
-  (-> editor
-      (controller/edit-at-offset offset #(text/delete % length))
-      (update-in [:document :markup] intervals/delete-range [offset length])))
+(defn delete-at-offset [state offset length]
+  (let [[sel-from sel-to] (selection state)
+        caret-offset (caret-offset state)]
+    (-> state
+        (edit-at-offset offset #(text/delete % length))
+        (update-in [:document :markup] intervals/delete-range [offset length])
+        (cond->
+          (<= offset sel-from) (update-in [:editor :selection 0] #(max offset (- % length)))
+          (<= offset caret-offset) (update-in [:editor :caret :offset] #(max offset (- % length)))
+          (<= offset sel-to) (update-in [:editor :selection 1] #(max offset (- % length))))
+        (update :log conj {:kind :delete
+                           :offset offset
+                           :lenght length}))))

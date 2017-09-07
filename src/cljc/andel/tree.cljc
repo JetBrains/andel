@@ -308,14 +308,6 @@
         (recur (skip loc) pred)))))
 
 
-
-(comment
-
-  (let [[n & r] (cons 1 nil)]
-    n)
-
-  )
-
 (defn insert-left [loc x]
   (let [reducing-fn (.-reducing-fn (.-ops loc))]
     (-> loc

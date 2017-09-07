@@ -143,28 +143,8 @@
                                       }
                              :viewport {:pos [0 0]
                                         :view-size [0 0]
-                                        :metrics nil}
-                             :keymap { "backspace" controller/backspace
-                                       "delete" controller/delete
-                                       "pgup" #(controller/pg-move % :up false)
-                                       "pgdown" #(controller/pg-move % :down false)
-                                       "shift-pgup" #(controller/pg-move % :up true)
-                                       "shift-pgdown" #(controller/pg-move % :down true)
-                                       "home" #(controller/home % false)
-                                       "shift-home" #(controller/home % true)
-                                       "end" #(controller/end % false)
-                                       "shift-end" #(controller/end % true)
-                                       "tab" (fn [state] (controller/type-in state "    "))
-                                       "left" #(controller/move-caret % :left false)
-                                       "right" #(controller/move-caret % :right false)
-                                       "up" #(controller/move-caret % :up false)
-                                       "down" #(controller/move-caret % :down false)
-                                       "shift-left" #(controller/move-caret % :left true)
-                                       "shift-right" #(controller/move-caret % :right true)
-                                       "shift-up" #(controller/move-caret % :up true)
-                                       "shift-down" #(controller/move-caret % :down true)
-                                       "esc" controller/drop-selection-on-esc
-                                       "enter" controller/on-enter}})]
+                                        :metrics nil
+                                        :focused? false}})]
     (attach-lexer! *editor-state)
     *editor-state))
 
@@ -253,35 +233,78 @@
   (.push a x)
   a)
 
-(defn render-text [text tokens markup {:keys [height]}]
-  (let [markup (filter :foreground markup)
-        events (concat [{:pos 0 :add #{}} {:pos (count text) :remove #{}}]
-                       (mapcat (fn [m]
-                                 [{:pos (:from m) :add (:foreground m)}
-                                  {:pos (:to m) :remove (:foreground m)}]) markup)
-                       (second (reduce (fn [[i res] [len tt]]
-                                         [(+ i len)
-                                          (conj res {:pos i :add (token-class tt)}
-                                                {:pos (+ i len) :remove (token-class tt)})])
-                                       [0 []] tokens)))
-        events' (->> events
-                     (sort-by :pos)
-                     (partition-by :pos)
-                     (map (fn [es]
-                            {:pos (:pos (first es))
-                             :add (set (map :add es))
-                             :remove (set (map :remove es))})))]
-    (:res (reduce (fn [{:keys [prev res styles]} {:keys [pos add remove]}]
-                              {:prev pos
-                               :styles (clojure.set/union (clojure.set/difference styles remove) add)
-                               :res (push! res #js [:span {:class (->> styles
-                                                                       (interpose " ")
-                                                                       (apply str))}
-                                                    (subs text prev pos)])})
-                            {:prev 0
-                             :styles (:add (first events'))
-                             :res #js [:pre {:class :line-text}]}
-                            (next events')))))
+(defn measure-time [name f]
+  (fn [& args]
+    (let [start (str name "-start")
+          end   (str name "-end")]
+      (js/performance.mark start)
+      (let [result (apply f args)]
+        (js/performance.mark end)
+        (js/performance.measure (str name) start end)
+        result))))
+
+(comment
+  (defn intersect-markers
+    "Takes possibly intersecting markers; returns markers without intersection"
+    [markers]
+    (when (seq markers)
+      (loop [[m1 & rest] markers
+             result (transient [])
+             pending (sorted-map)]
+        (let [m2 (min-key :from (first rest) (second (first pending)))
+              {from1 :from to1 :to} m1
+              {from2 :from to2 :to} m2]
+          (cond
+            (nil? m2) (persistent! (conj! result m1))
+            (<= to1 from2) (recur rest (conj! result m1) pending)
+            :else (recur rest
+                         (conj! result {:from from1
+                                        :to from2
+                                        :foreground (get m1 :foreground)})
+                         (assoc pending
+                           from2 {:from from2
+                                  :to to1
+                                  :foreground (str (:foreground m1) " " (:foreground m2))}
+                           to1 {:from to1
+                                :to to2
+                                :foreground (:foreground m2)}))
+            ))
+        ))
+    )
+
+  )
+
+(def render-text
+  (measure-time "render-text"
+                (fn [text tokens markup {:keys [height]}]
+                  (let [markup (filter :foreground markup)
+                        events (concat [{:pos 0 :add #{}} {:pos (count text) :remove #{}}]
+                                       (mapcat (fn [m]
+                                                 [{:pos (:from m) :add (:foreground m)}
+                                                  {:pos (:to m) :remove (:foreground m)}]) markup)
+                                       (second (reduce (fn [[i res] [len tt]]
+                                                         [(+ i len)
+                                                          (conj res {:pos i :add (token-class tt)}
+                                                                {:pos (+ i len) :remove (token-class tt)})])
+                                                       [0 []] tokens)))
+                        events' (->> events
+                                     (sort-by :pos)
+                                     (partition-by :pos)
+                                     (map (fn [es]
+                                            {:pos (:pos (first es))
+                                             :add (set (map :add es))
+                                             :remove (set (map :remove es))})))]
+                    (:res (reduce (fn [{:keys [prev res styles]} {:keys [pos add remove]}]
+                                    {:prev pos
+                                     :styles (clojure.set/union (clojure.set/difference styles remove) add)
+                                     :res (push! res #js [:span {:class (->> styles
+                                                                             (interpose " ")
+                                                                             (apply str))}
+                                                          (subs text prev pos)])})
+                                  {:prev 0
+                                   :styles (:add (first events'))
+                                   :res #js [:pre {:class :line-text}]}
+                                  (next events')))))))
 
 (defn render-background-markup [markup {:keys [height width spacing]}]
   (reduce (fn [res {:keys [from to background]}]
@@ -412,7 +435,9 @@
                                      :style #js {:display "flex"
                                                  :flex "1"
                                                  :overflow :hidden}
-                                     :onWheel on-mouse-wheel}
+                                     :onWheel (fn [evt]
+                                                (on-mouse-wheel (.-deltaX evt) (.-deltaY evt))
+                                                (.preventDefault evt))}
                           [child]))))}))
 
 
@@ -432,6 +457,8 @@
 
 (defn editor-viewport [props]
   (let [state ($ props :editorState)
+        on-mouse-down (aget props "onMouseDown")
+        on-drag-selection (aget props "onDragSelection")
         {:keys [editor document viewport]} @state
         {:keys [pos view-size metrics]} viewport
         line-height (utils/line-height metrics)
@@ -439,12 +466,12 @@
         {:keys [caret selection]} editor
         [_ from-y-offset] pos
         [w h] view-size
-        from (int (/ from-y-offset line-height))
-        to (+ from (/ h line-height))
-        y-shift (- (* line-height (- (/ from-y-offset line-height) from)))
-        line-zipper (text/scan-to-line (text/zipper text) from)
+        top-line (int (/ from-y-offset line-height))
+        bottom-line (+ top-line (/ h line-height))
+        y-shift (- (* line-height (- (/ from-y-offset line-height) top-line)))
+        line-zipper (text/scan-to-line (text/zipper text) top-line)
         from-offset (text/offset line-zipper)
-        to-offset (dec (text/offset (text/scan-to-line line-zipper (inc to))))
+        to-offset (dec (text/offset (text/scan-to-line line-zipper (inc bottom-line))))
         caret-offset (get caret :offset)
         markup (intervals/query-intervals (:markup document) {:from from-offset :to to-offset})
         _ (styles/defstyle :render-line [:.render-line {:height (styles/px (utils/line-height metrics))
@@ -476,43 +503,23 @@
                                                                             :metrics metrics}})]))]))
                     [line-zipper
                      (transient [])]
-                    (range from to))]
+                    (range top-line bottom-line))]
     (el "div" #js {:style #js {:background theme/background
                                :width "100%"
                                :overflow "hidden"}
                    :key "viewport"
                    :onMouseDown (fn [event]
-                                  (let [x (- ($ event :clientX) (-> event .-currentTarget .-offsetLeft))
-                                        y (- ($ event :clientY) (-> event .-currentTarget .-offsetTop))
-                                        line-col (utils/pixels->grid-position [x y] from y-shift metrics)]
-                                    (swap! state #(controller/set-caret-at-grid-pos % line-col false))))
+                                  (when on-mouse-down
+                                    (let [x (- ($ event :clientX) (-> event .-currentTarget .-offsetLeft))
+                                          y (- ($ event :clientY) (-> event .-currentTarget .-offsetTop))]
+                                      (on-mouse-down x y))))
                    :onMouseMove  (fn [event]
-                                   (when (= ($ event :buttons) 1)
-                                     (let [x (- ($ event :clientX) (-> event .-currentTarget .-offsetLeft))
-                                           y (- ($ event :clientY) (-> event .-currentTarget .-offsetTop))
-                                           line-col (utils/pixels->grid-position [x y] from y-shift metrics)]
-                                       (swap! state #(controller/set-caret-at-grid-pos % line-col true)))))}
+                                   (when on-drag-selection
+                                     (when (= ($ event :buttons) 1)
+                                       (let [x (- ($ event :clientX) (-> event .-currentTarget .-offsetLeft))
+                                             y (- ($ event :clientY) (-> event .-currentTarget .-offsetTop))]
+                                         (on-drag-selection x y)))))}
         (persistent! hiccup))))
-
-(defn scroll-on-event [state]
-  (fn [evt]
-    (let [{:keys [viewport document]} @state
-          screen-height (get-in viewport [:view-size 1])
-          line-height (utils/line-height (:metrics viewport))
-          lines-count (text/lines-count (get document :text))
-          document-height (- (* lines-count line-height) (/ screen-height 2))]
-      (swap! state
-             #(update-in % [:viewport :pos]
-                         (fn [[x y]]
-                           (let [dx (.-deltaX evt)
-                                 dy (.-deltaY evt)]
-                          (if (< (js/Math.abs dx) (js/Math.abs dy))
-                            [x (min document-height (max 0 (+ y dy)))]
-                            [(max 0 (+ x dx)) y])))))
-      (.preventDefault evt))))
-
-(defn set-viewport-size [state width height]
-  (swap! state #(assoc-in % [:viewport :view-size] [width height])))
 
 (def next-tick
   (let [w js/window]
@@ -520,6 +527,44 @@
         ($ w :webkitRequestAnimationFrame)
         ($ w :mozRequestAnimationFrame)
         ($ w :msRequestAnimationFrame))))
+
+(def hidden-text-area-cmp
+  (js/createReactClass
+   #js {:componentDidMount
+        (fn []
+          (this-as cmp
+            (let [props    (aget cmp "props")
+                  focused? (aget props "isFocused")
+                  dom-node (aget (aget cmp "refs") "textarea")]
+              (when focused?
+                (.focus dom-node)))))
+        :componentDidUpdate
+        (fn []
+          (this-as cmp
+            (let [props    (aget cmp "props")
+                  focused? (aget props "isFocused")
+                  dom-node (aget (aget cmp "refs") "textarea")]
+              (when focused?
+                (.focus dom-node)))))
+        :render
+        (fn []
+          (this-as cmp
+            (let [props    (aget cmp "props")
+                  focused? (aget props "isFocused")
+                  on-input (aget props "onInput")]
+              (el "textarea"
+                  #js {:key       "textarea"
+                       :ref       "textarea"
+                       :style     #js {:opacity 0
+                                       :padding "0px"
+                                       :border  "none"
+                                       :height  "0px"
+                                       :width   "0px"}
+                       :onInput   (fn [evt]
+                                    (let [e   (.-target evt)
+                                          val (.-value e)]
+                                      (set! (.-value e) "")
+                                      (on-input val)))}))))}))
 
 (def editor-cmp
   (js/createReactClass
@@ -534,7 +579,7 @@
                          (fn [_ _ old-state new-state]
                            (when (and (not= old-state new-state) (not @*scheduled?))
                              (reset! *scheduled? true)
-                             (next-tick (fn []
+                             (next-tick (fn [time]
                                           (reset! *scheduled? false)
                                           ($ cmp forceUpdate))))))
               (when (not (ready-to-view? @*state))
@@ -556,45 +601,32 @@
         :render
         (fn []
           (this-as cmp
-            (let [*state ($ ($ cmp :props) :editorState)
+            (let [props ($ cmp :props)
+                  *state ($ props :editorState)
+                  {:keys [on-input on-mouse-down on-drag-selection on-resize on-scroll on-focus] :as callbacks} ($ props :callbacks)
                   *bindings ($ cmp :bindings)]
               (if (ready-to-view? @*state)
                 (el "div" #js {:key "editor"
                                :style #js {:display "flex"
-                                           :flex "1"}
+                                           :flex "1"
+                                           :outline "transparent"}
                                :tabIndex -1
-                               :onFocus (fn []
-                                          (let [ta ($ ($ cmp :refs) :textarea)]
-                                            (when ta (.focus ta))))}
+                               :onFocus on-focus}
                     #js [(el scroll (js-obj "key" "viewport"
                                             "props" {:child (el editor-viewport
-                                                                #js {:key "editor-viewport"
-                                                                     :editorState *state})
-                                                     :onResize (partial set-viewport-size *state)
-                                                     :onMouseWheel (scroll-on-event *state)}))
-                         (el "textarea"
+                                                                #js {:key             "editor-viewport"
+                                                                     :editorState     *state
+                                                                     :onMouseDown     on-mouse-down
+                                                                     :onDragSelection on-drag-selection})
+                                                     :onResize on-resize
+                                                     :onMouseWheel on-scroll}))
+                         (el hidden-text-area-cmp
                              #js {:key "textarea"
-                                  :ref "textarea"
-                                  :autoFocus true
-                                  :style #js {:opacity 0
-                                              :padding  "0px"
-                                              :border  "none"
-                                              :height  "0px"
-                                              :width   "0px"}
-                                  :onKeyDown (fn [evt]
-                                               (when *bindings
-                                                 (let [[bindings' cb] (keybind/dispatch @*bindings evt)]
-                                                   (reset! *bindings bindings')
-                                                   (when cb
-                                                     (swap! *state cb)))))
-
-                                  :onInput (fn [evt]
-                                             (let [e   (.-target evt)
-                                                   val (.-value e)]
-                                               (set! (.-value e) "")
-                                               (swap! *state controller/type-in val)))})])
+                                  :isFocused (get-in @*state [:viewport :focused?])
+                                  :onInput on-input})])
                 (el "div" #js {:key "editor-placeholder"} #js ["EDITOR PLACEHOLDER"])))))}))
 
-(defn editor-view [*editor-state]
+(defn editor-view [*editor-state callbacks]
   (el editor-cmp #js {:editorState *editor-state
+                      :callbacks callbacks
                       :key "editor"}))
