@@ -5,7 +5,8 @@
             
             [andel.core :as core]
             [andel.editor :as editor]
-            [andel.controller :as controller])
+            [andel.controller :as controller]
+            [andel.keybind :as keybind])
   (:require-macros [reagent.interop :refer [$ $!]]
                    [cljs.core.async.macros :refer [go]]))
 
@@ -36,21 +37,66 @@
 
 (defonce editor-state-promise (let [promise (a/promise-chan)]
                                 (go
-                                  (let [*editor-state (editor/make-editor-state)
-                                        text (:body (a/<! (http/get "EditorImpl.java")))
-                                        markup (edn/read-string (:body (a/<! (http/get "markup.txt"))))]
-                                    (swap! *editor-state core/insert-at-offset 0 text)
-                                    (swap! *editor-state core/insert-markers markup)
-                                    (a/>! promise *editor-state)))
+                                  (let [text (:body (a/<! (http/get "EditorImpl.java")))
+                                        markup (edn/read-string (:body (a/<! (http/get "markup.txt"))))
+                                        metrics (:font-metrics (a/<! andel.editor/*editors-common))
+                                        editor-state (-> (editor/make-editor-state)
+                                                         (assoc-in [:viewport :focused?] true)
+                                                         (assoc-in [:viewport :metrics] metrics)
+                                                         (core/insert-at-offset 0 text)
+                                                         (core/insert-markers markup))]
+                                    (a/>! promise editor-state)))
                                 promise))
 
+(def next-tick
+  (let [w js/window]
+    (or ($ w :requestAnimationFrame)
+        ($ w :webkitRequestAnimationFrame)
+        ($ w :mozRequestAnimationFrame)
+        ($ w :msRequestAnimationFrame))))
 
 (defn init! []
   (go
-    (let [*editor-state (a/<! editor-state-promise)
-          root (.getElementById js/document "app")]
-      (.render js/ReactDOM
-               (editor/editor-view *editor-state)
-               root))))
+    (let [*editor-state (atom (a/<! editor-state-promise))
+          *keybindings (atom (keybind/make-bindings keymap))
+          root (.getElementById js/document "app")
+          *scheduled? (atom false)
+          render (fn []
+                   (.render js/ReactDOM
+                            (editor/editor-view @*editor-state
+                                                {:on-cursor-activity (fn [line-col]
+                                                                       (swap! *editor-state (fn [state] state)))
+                                                 :on-input           (fn [input]
+                                                                       (swap! *editor-state #(controller/type-in % input)))
+                                                 :on-mouse-down      (fn [x y]
+                                                                       (swap! *editor-state (fn [state]
+                                                                                              (let [viewport (:viewport state)
+                                                                                                    line-col (andel.utils/pixels->grid-position [x y] viewport)]
+                                                                                                (controller/set-caret-at-grid-pos state line-col false)))))
+                                                 :on-drag-selection  (fn [x y]
+                                                                       (swap! *editor-state (fn [state]
+                                                                                              (let [viewport (:viewport state)
+                                                                                                    line-col (andel.utils/pixels->grid-position [x y] viewport)]
+                                                                                                (controller/set-caret-at-grid-pos state line-col true)))))
+                                                 :on-scroll          (fn [dx dy]
+                                                                       (swap! *editor-state #(controller/scroll % dx dy)))
+                                                 :on-resize          (fn [width height]
+                                                                       (swap! *editor-state #(controller/resize % width height)))
+                                                 :on-focus           (fn [] nil)
+                                                 :on-key-down        (fn [evt]
+                                                                       (let [[bindings' callback] (keybind/dispatch @*keybindings evt)]
+                                                                         (reset! *keybindings bindings')
+                                                                         (when callback
+                                                                           (swap! *editor-state callback))))})
+                            root))]
+      (andel.editor/attach-lexer! *editor-state)
+      (add-watch *editor-state :editor-view
+                         (fn [_ _ old-state new-state]
+                           (when (and (not= old-state new-state) (not @*scheduled?))
+                             (reset! *scheduled? true)
+                             (next-tick (fn []
+                                          (reset! *scheduled? false)
+                                          (render))))))
+      (render))))
 
 (init!)

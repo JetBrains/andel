@@ -549,7 +549,8 @@
           (this-as cmp
             (let [props    (aget cmp "props")
                   focused? (aget props "isFocused")
-                  on-input (aget props "onInput")]
+                  on-input (aget props "onInput")
+                  on-key-down (aget props "onKeyDown")]
               (el "textarea"
                   #js {:key       "textarea"
                        :ref       "textarea"
@@ -562,7 +563,8 @@
                                     (let [e   (.-target evt)
                                           val (.-value e)]
                                       (set! (.-value e) "")
-                                      (on-input val)))}))))}))
+                                      (on-input val)))
+                       :onKeyDown on-key-down}))))}))
 
 (def editor-cmp
   (js/createReactClass
@@ -602,9 +604,8 @@
           (this-as cmp
             (let [props ($ cmp :props)
                   state ($ props :editorState)
-                  {:keys [on-input on-mouse-down on-drag-selection on-resize on-scroll on-focus] :as callbacks} ($ props :callbacks)
+                  {:keys [on-input on-mouse-down on-drag-selection on-resize on-scroll on-focus on-key-down] :as callbacks} ($ props :callbacks)
                   *bindings ($ cmp :bindings)]
-              (js/console.log "RENDER!")
               (if (ready-to-view? state)
                 (el "div" #js {:key "editor"
                                :style #js {:display "flex"
@@ -623,7 +624,8 @@
                          (el hidden-text-area-cmp
                              #js {:key "textarea"
                                   :isFocused (get-in state [:viewport :focused?])
-                                  :onInput on-input})])
+                                  :onInput on-input
+                                  :onKeyDown on-key-down})])
                 (el "div" #js {:key "editor-placeholder"} #js ["EDITOR PLACEHOLDER"])))))}))
 
 (defn editor-view [editor-state callbacks]
