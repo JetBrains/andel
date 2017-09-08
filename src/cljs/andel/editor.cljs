@@ -13,7 +13,6 @@
             [andel.lexer :as lexer]
             [andel.text :as text]
             [andel.intervals :as intervals]
-            [andel.controller :as controller]
             [andel.utils :as utils]
             [andel.tree :as tree])
   (:require-macros [reagent.interop :refer [$ $!]]
@@ -129,22 +128,35 @@
                  (when (not= old-ts new-ts)
                    (a/put! broker new-s))))))
 
-(defn make-editor-state []
-  {:document {:text (text/make-text "")
-              :markup (intervals/make-interval-tree)
-              :lexer-broker (a/chan)
-              :modespec "text/x-java"
-              :timestamp 0
-              :lines []
-              :first-invalid 0}
-   :editor {:caret {:offset 0 :v-col 0}
-            :selection [0 0]
-            ;; :carets [{:caret 0 :virtual-col 0 :selection {:from 0 :to 0}}]
-            }
-   :viewport {:pos [0 0]
-              :view-size [0 0]
-              :metrics nil
-              :focused? false}})
+
+;; proto-marker-map -> marker-record
+(defn- create-marker [proto-marker]
+  (letfn [(class-by-keys [ks style]
+                         (let [style (select-keys style ks)]
+                           (when (not-empty style)
+                             (styles/style->class style))))
+          (classes-by-keys [ks styles]
+                           (let [classes (->> styles
+                                              (map (partial class-by-keys ks))
+                                              (filter some?))]
+                             (when (not-empty classes)
+                               (->> classes
+                                    (interpose " ")
+                                    (apply str)))))]
+    (-> proto-marker
+        intervals/map->Marker
+        (assoc :foreground (classes-by-keys
+                             [:color
+                              :font-weight
+                              :font-style]
+                             (:style proto-marker)))
+        (assoc :background (classes-by-keys
+                             [:background-color
+                              :border-bottom-style
+                              :border-color
+                              :border-width
+                              :border-radius]
+                             (:style proto-marker))))))
 
 (defn ready-to-view? [editor-state]
   (some? (get-in editor-state [:viewport :metrics])))

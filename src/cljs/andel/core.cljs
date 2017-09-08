@@ -1,42 +1,25 @@
 (ns andel.core
-  (:require   [clojure.core.async :as a]
-              [andel.utils :as utils]
-              [andel.text :as text]
-              [andel.intervals :as intervals]
-              [andel.styles :as styles]
-              [andel.intervals :as intervals]
-              #_[andel.benchmarks])
-    (:require-macros [reagent.interop :refer [$ $!]]
-                     [cljs.core.async.macros :refer [go]]))
+  (:require [clojure.core.async :as a]
+            [andel.utils :as utils]
+            [andel.text :as text]
+            [andel.intervals :as intervals]))
 
-;; proto-marker-map -> marker-record
-(defn- create-marker [proto-marker]
-  (letfn [(class-by-keys [ks style]
-            (let [style (select-keys style ks)]
-              (when (not-empty style)
-                (styles/style->class style))))
-          (classes-by-keys [ks styles]
-            (let [classes (->> styles
-                               (map (partial class-by-keys ks))
-                               (filter some?))]
-              (when (not-empty classes)
-                (->> classes
-                     (interpose " ")
-                     (apply str)))))]
-    (-> proto-marker
-        intervals/map->Marker
-        (assoc :foreground (classes-by-keys
-                            [:color
-                             :font-weight
-                             :font-style]
-                            (:style proto-marker)))
-        (assoc :background (classes-by-keys
-                            [:background-color
-                             :border-bottom-style
-                             :border-color
-                             :border-width
-                             :border-radius]
-                            (:style proto-marker))))))
+(defn make-editor-state []
+  {:document {:text (text/make-text "")
+              :markup (intervals/make-interval-tree)
+              :lexer-broker (a/chan)
+              :modespec "text/x-java"
+              :timestamp 0
+              :lines []
+              :first-invalid 0}
+   :editor {:caret {:offset 0 :v-col 0}
+            :selection [0 0]
+            ;; :carets [{:caret 0 :virtual-col 0 :selection {:from 0 :to 0}}]
+            }
+   :viewport {:pos [0 0]
+              :view-size [0 0]
+              :metrics nil
+              :focused? false}})
 
 (defn- edit-at-offset
   [{:keys [document] :as state} offset f]
@@ -55,11 +38,8 @@
 (defn selection [state]
   (get-in state [:editor :selection]))
 
-(defn insert-markers [state markers]
-  (let [intervals (->> markers
-                       (mapv create-marker)
-                       (sort-by (fn [m] (.-from m))))]
-    (update-in state [:document :markup] intervals/add-intervals intervals)))
+(defn insert-markers [state intervals]
+  (update-in state [:document :markup] intervals/add-intervals intervals))
 
 (defn set-selection [state selection caret-offset]
   (-> state

@@ -38,9 +38,11 @@
 (defonce editor-state-promise (let [promise (a/promise-chan)]
                                 (go
                                   (let [text (:body (a/<! (http/get "EditorImpl.java")))
-                                        markup (edn/read-string (:body (a/<! (http/get "markup.txt"))))
+                                        markup (->> (edn/read-string (:body (a/<! (http/get "markup.txt"))))
+                                                    (mapv editor/create-marker)
+                                                    (sort-by (fn [m] (.-from m))))
                                         metrics (:font-metrics (a/<! andel.editor/*editors-common))
-                                        editor-state (-> (editor/make-editor-state)
+                                        editor-state (-> (core/make-editor-state)
                                                          (assoc-in [:viewport :focused?] true)
                                                          (assoc-in [:viewport :metrics] metrics)
                                                          (core/insert-at-offset 0 text)
@@ -89,7 +91,6 @@
                                                                          (when callback
                                                                            (swap! *editor-state callback))))})
                             root))]
-      (andel.editor/attach-lexer! *editor-state)
       (add-watch *editor-state :editor-view
                          (fn [_ _ old-state new-state]
                            (when (and (not= old-state new-state) (not @*scheduled?))
@@ -97,6 +98,7 @@
                              (next-tick (fn []
                                           (reset! *scheduled? false)
                                           (render))))))
+      (andel.editor/attach-lexer! *editor-state)
       (render))))
 
 (init!)
