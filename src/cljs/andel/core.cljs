@@ -64,15 +64,13 @@
 (defn set-selection [state selection caret-offset]
   (-> state
       (assoc-in [:editor :selection] selection)
-      (assoc-in [:editor :caret :offset] caret-offset)
-      (update :log conj {:kind :selection
-                         :selection selection
-                         :caret-offset caret-offset})))
+      (assoc-in [:editor :caret :offset] caret-offset)))
 
 (defn insert-at-offset [state offset insertion]
   (let [[sel-from sel-to] (selection state)
         added-length (count insertion)
-        caret-offset (caret-offset state)]
+        caret-offset (caret-offset state)
+        text-length (text/text-length (-> state :document :text))]
     (-> state
         (edit-at-offset offset #(text/insert % insertion))
         (update-in [:document :markup] intervals/type-in [offset (count insertion)])
@@ -80,13 +78,17 @@
           (<= offset sel-from) (update-in [:editor :selection 0] #(+ % added-length))
           (<= offset caret-offset) (update-in [:editor :caret :offset] #(+ % added-length))
           (<= offset sel-to) (update-in [:editor :selection 1] #(+ % added-length)))
-        (update :log conj {:kind :insert
-                           :offset offset
-                           :insert insertion}))))
+        (update :log (fn [l]
+                       (conj (or l []) [[:retain offset] [:insert insertion] [:retain (- text-length offset)]]))))))
 
 (defn delete-at-offset [state offset length]
   (let [[sel-from sel-to] (selection state)
-        caret-offset (caret-offset state)]
+        caret-offset (caret-offset state)
+        text (-> state :document :text)
+        old-text (-> (text/zipper text)
+                     (text/scan-to-offset offset)
+                     (text/text length))
+        text-length (text/text-length text)]
     (-> state
         (edit-at-offset offset #(text/delete % length))
         (update-in [:document :markup] intervals/delete-range [offset length])
@@ -94,6 +96,5 @@
           (<= offset sel-from) (update-in [:editor :selection 0] #(max offset (- % length)))
           (<= offset caret-offset) (update-in [:editor :caret :offset] #(max offset (- % length)))
           (<= offset sel-to) (update-in [:editor :selection 1] #(max offset (- % length))))
-        (update :log conj {:kind :delete
-                           :offset offset
-                           :lenght length}))))
+        (update :log (fn [l]
+                       (conj (or l []) [[:retain offset] [:delete old-text] [:retain (- text-length offset length)]]))))))

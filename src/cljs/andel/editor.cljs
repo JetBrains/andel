@@ -130,23 +130,21 @@
                    (a/put! broker new-s))))))
 
 (defn make-editor-state []
-  (let [*editor-state (atom {:document {:text (text/make-text "")
-                                        :markup (intervals/make-interval-tree)
-                                        :lexer-broker (a/chan)
-                                        :modespec "text/x-java"
-                                        :timestamp 0
-                                        :lines []
-                                        :first-invalid 0}
-                             :editor {:caret {:offset 0 :v-col 0}
-                                      :selection [0 0]
-                                      ;; :carets [{:caret 0 :virtual-col 0 :selection {:from 0 :to 0}}]
-                                      }
-                             :viewport {:pos [0 0]
-                                        :view-size [0 0]
-                                        :metrics nil
-                                        :focused? false}})]
-    (attach-lexer! *editor-state)
-    *editor-state))
+  {:document {:text (text/make-text "")
+              :markup (intervals/make-interval-tree)
+              :lexer-broker (a/chan)
+              :modespec "text/x-java"
+              :timestamp 0
+              :lines []
+              :first-invalid 0}
+   :editor {:caret {:offset 0 :v-col 0}
+            :selection [0 0]
+            ;; :carets [{:caret 0 :virtual-col 0 :selection {:from 0 :to 0}}]
+            }
+   :viewport {:pos [0 0]
+              :view-size [0 0]
+              :metrics nil
+              :focused? false}})
 
 (defn ready-to-view? [editor-state]
   (some? (get-in editor-state [:viewport :metrics])))
@@ -459,7 +457,7 @@
   (let [state ($ props :editorState)
         on-mouse-down (aget props "onMouseDown")
         on-drag-selection (aget props "onDragSelection")
-        {:keys [editor document viewport]} @state
+        {:keys [editor document viewport]} state
         {:keys [pos view-size metrics]} viewport
         line-height (utils/line-height metrics)
         {:keys [text lines hashes]} document
@@ -568,44 +566,46 @@
 
 (def editor-cmp
   (js/createReactClass
-   #js {:componentDidMount
-        (fn []
+   #js {;;:componentDidMount
+        #_(fn []
           (this-as cmp
             (let [*state ($ ($ cmp :props) :editorState)
-                  *scheduled? (atom false)
-                  *bindings (atom (keybind/make-bindings (:keymap @*state)))]
+                  *scheduled? (atom false) ]
               (aset cmp "bindings" *bindings)
-              (add-watch *state :editor-view
+              #_(add-watch *state :editor-view
                          (fn [_ _ old-state new-state]
                            (when (and (not= old-state new-state) (not @*scheduled?))
                              (reset! *scheduled? true)
                              (next-tick (fn [time]
                                           (reset! *scheduled? false)
                                           ($ cmp forceUpdate))))))
-              (when (not (ready-to-view? @*state))
+             #_(when (not (ready-to-view? @*state))
                 (go
                   (let [metrics (:font-metrics (a/<! *editors-common))]
                     (js/console.log "METRICS: " metrics)
                     (swap! *state assoc-in [:viewport :metrics] metrics)))))))
 
-        :componentWillUnmount
-        (fn []
+        ;;:componentWillUnmount
+        #_(fn []
           (this-as cmp
             (let [*state ($ ($ cmp :props) :editorState)]
               (remove-watch *state :editor-view))))
 
         :shouldComponentUpdate
-        (fn []
-          false)
+        (fn [new-props new-state]
+          (this-as this
+                   (let [old-props ($ this :props)]
+                     (not= (aget old-props "editorState") (aget new-props "editorState")))))
 
-        :render
+         :render
         (fn []
           (this-as cmp
             (let [props ($ cmp :props)
-                  *state ($ props :editorState)
+                  state ($ props :editorState)
                   {:keys [on-input on-mouse-down on-drag-selection on-resize on-scroll on-focus] :as callbacks} ($ props :callbacks)
                   *bindings ($ cmp :bindings)]
-              (if (ready-to-view? @*state)
+              (js/console.log "RENDER!")
+              (if (ready-to-view? state)
                 (el "div" #js {:key "editor"
                                :style #js {:display "flex"
                                            :flex "1"
@@ -615,18 +615,18 @@
                     #js [(el scroll (js-obj "key" "viewport"
                                             "props" {:child (el editor-viewport
                                                                 #js {:key             "editor-viewport"
-                                                                     :editorState     *state
+                                                                     :editorState     state
                                                                      :onMouseDown     on-mouse-down
                                                                      :onDragSelection on-drag-selection})
                                                      :onResize on-resize
                                                      :onMouseWheel on-scroll}))
                          (el hidden-text-area-cmp
                              #js {:key "textarea"
-                                  :isFocused (get-in @*state [:viewport :focused?])
+                                  :isFocused (get-in state [:viewport :focused?])
                                   :onInput on-input})])
                 (el "div" #js {:key "editor-placeholder"} #js ["EDITOR PLACEHOLDER"])))))}))
 
-(defn editor-view [*editor-state callbacks]
-  (el editor-cmp #js {:editorState *editor-state
+(defn editor-view [editor-state callbacks]
+  (el editor-cmp #js {:editorState editor-state
                       :callbacks callbacks
                       :key "editor"}))
