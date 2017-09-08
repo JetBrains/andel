@@ -129,15 +129,15 @@
                    (a/put! broker new-s))))))
 
 
+
 ;; proto-marker-map -> marker-record
 (defn- create-marker [proto-marker]
-  (letfn [(class-by-keys [ks style]
-                         (let [style (select-keys style ks)]
-                           (when (not-empty style)
-                             (styles/style->class style))))
-          (classes-by-keys [ks styles]
+  (letfn [(classes-by-keys [ks styles]
                            (let [classes (->> styles
-                                              (map (partial class-by-keys ks))
+                                              (map (fn [style]
+                                                     (let [style (select-keys style ks)]
+                                                       (when (not-empty style)
+                                                         (styles/style->class style)))) )
                                               (filter some?))]
                              (when (not-empty classes)
                                (->> classes

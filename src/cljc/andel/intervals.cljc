@@ -201,10 +201,7 @@
         (update-leaf-offset (constantly new-r-offset)))))
 
 (defn add-intervals [itree intervals]
-  (->> intervals
-       (map interval->tree-basis)
-       (reduce insert-one (zipper itree))
-       root))
+  (root (reduce (fn [t i] (insert-one t (interval->tree-basis i))) (zipper itree) intervals)))
 
 (defn remove-leaf [loc]
   (let [data (loc->data loc)

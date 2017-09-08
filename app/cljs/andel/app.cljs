@@ -6,7 +6,9 @@
             [andel.core :as core]
             [andel.editor :as editor]
             [andel.controller :as controller]
-            [andel.keybind :as keybind])
+            [andel.keybind :as keybind]
+            [andel.benchmarks :as bench]
+            [andel.intervals :as intervals])
   (:require-macros [reagent.interop :refer [$ $!]]
                    [cljs.core.async.macros :refer [go]]))
 
@@ -33,7 +35,16 @@
    "shift-right"  #(controller/move-caret % :right true)
    "shift-up"     #(controller/move-caret % :up true)
    "shift-down"   #(controller/move-caret % :down true)
-   "esc"          controller/drop-selection-on-esc})
+   "esc"          controller/drop-selection-on-esc
+   "ctrl-b"       (fn [state]
+                    (let [itree (get-in state [:document :markup])]
+                      (bench/bench "TYPE-IN BENCH"
+                                   (fn []
+                                     (let [offset (rand-int 160000)
+                                           size 1]
+                                       (andel.intervals/type-in itree [offset size])))
+                                   :count 10000))
+                    state)})
 
 (defonce editor-state-promise (let [promise (a/promise-chan)]
                                 (go

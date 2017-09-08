@@ -33,9 +33,11 @@
 (defn type-in [{:keys [editor] :as state} str]
   (let [str-len (count str)
         caret-offset (core/caret-offset state)
-        selection (core/selection state)]
+        selection (core/selection state)
+        selection-len (selection-length selection)]
     (-> state
-        (core/delete-at-offset (first selection) (selection-length selection))
+        (cond-> (< 0 selection-len)
+                (core/delete-at-offset (first selection) selection-len))
         (core/insert-at-offset caret-offset str))))
 
 (defn caret->offset [{:keys [offset] :as caret}]
