@@ -253,80 +253,76 @@
         (js/performance.measure (str name) start end)
         result))))
 
-(comment
-  (defn intersect-markers
-    "Takes possibly intersecting markers; returns markers without intersection"
-    [markers]
-    (when (seq markers)
-      (loop [[m1 & rest] markers
-             result (transient [])
-             pending (sorted-map)]
-        (let [m2 (min-key :from (first rest) (second (first pending)))
-              {from1 :from to1 :to} m1
-              {from2 :from to2 :to} m2]
-          (cond
-            (nil? m2) (persistent! (conj! result m1))
-            (<= to1 from2) (recur rest (conj! result m1) pending)
-            :else (recur rest
-                         (conj! result {:from from1
-                                        :to from2
-                                        :foreground (get m1 :foreground)})
-                         (assoc pending
-                           from2 {:from from2
-                                  :to to1
-                                  :foreground (str (:foreground m1) " " (:foreground m2))}
-                           to1 {:from to1
-                                :to to2
-                                :foreground (:foreground m2)}))
-            ))
-        ))
-    )
+(defn render-text' [text]
+    (fn [xf]
+      (let [pendings (array)
+            *last-pos (atom 0)
+            next-pending (fn [pendings] (reduce (fn [c p] (if (or (nil? c) (< (.-to p) (.-to c))) p c)) nil pendings))
+            js-disj! (fn [arr v]
+                                  (let [idx (.indexOf arr v)]
+                                    (if (< -1 idx)
+                                      (do
+                                        (.splice arr idx 1)
+                                        arr)
+                                      arr)))]
+        (fn
+          ([] (xf))
+          ([res m]
+           (loop [res res]
+             (let [p (next-pending pendings)
+                   last-pos @*last-pos
+                   new-class (->> (map (fn [m] (.-foreground m)) pendings)
+                                  (interpose " ")
+                                  (apply str))]
+               (if (or (nil? p) (< (.-from m) (.-to p)))
+                 (do
+                   (push! pendings m)
+                   (reset! *last-pos (.-from m))
+                   (if (== last-pos (.-from m))
+                     res
+                     (xf res #js [:span {:class new-class}
+                                  (subs text last-pos (.-from m))])))
 
-  )
+                 (do
+                   (js-disj! pendings p)
+                   (reset! *last-pos (.-to p))
+                   (if (== last-pos (.-to p))
+                     (recur res)
+                     (recur (xf res #js [:span {:class new-class}
+                                         (subs text last-pos (.-to p))]))))))))
+          ([res]
+           (loop [res res]
+             (let [p (next-pending pendings)
+                   last-pos @*last-pos
+                   new-class (->> (map (fn [m] (.-foreground m)) pendings)
+                                  (interpose " ")
+                                  (apply str))]
+               (cond
+                 (some? p)
+                 (do
+                   (js-disj! pendings p)
+                   (reset! *last-pos (.-to p))
+                   (if (== last-pos (.-to p))
+                     (recur res)
+                     (recur (xf res #js [:span {:class new-class}
+                                         (subs text last-pos (.-to p))]))))
 
-(def render-text
-  (measure-time "render-text"
-                (fn [text tokens markup {:keys [height]}]
-                  (let [markup (filter :foreground markup)
-                        events (concat [{:pos 0 :add #{}} {:pos (count text) :remove #{}}]
-                                       (mapcat (fn [m]
-                                                 [{:pos (:from m) :add (:foreground m)}
-                                                  {:pos (:to m) :remove (:foreground m)}]) markup)
-                                       (second (reduce (fn [[i res] [len tt]]
-                                                         [(+ i len)
-                                                          (conj res {:pos i :add (token-class tt)}
-                                                                {:pos (+ i len) :remove (token-class tt)})])
-                                                       [0 []] tokens)))
-                        events' (->> events
-                                     (sort-by :pos)
-                                     (partition-by :pos)
-                                     (map (fn [es]
-                                            {:pos (:pos (first es))
-                                             :add (set (map :add es))
-                                             :remove (set (map :remove es))})))]
-                    (:res (reduce (fn [{:keys [prev res styles]} {:keys [pos add remove]}]
-                                    {:prev pos
-                                     :styles (clojure.set/union (clojure.set/difference styles remove) add)
-                                     :res (push! res #js [:span {:class (->> styles
-                                                                             (interpose " ")
-                                                                             (apply str))}
-                                                          (subs text prev pos)])})
-                                  {:prev 0
-                                   :styles (:add (first events'))
-                                   :res #js [:pre {:class :line-text}]}
-                                  (next events')))))))
+                 (not= last-pos (count text))
+                 (xf res #js [:span {} (subs text last-pos (count text))])
 
-(defn render-background-markup [markup {:keys [height width spacing]}]
-  (reduce (fn [res {:keys [from to background]}]
-            (if background
-              (push! res #js [:div {:class background
-                                    :style (style {:left (styles/px (* from width))
-                                                   :width (styles/px (* width (- to from)))
-                                                   :height (styles/px height)
-                                                   :position :absolute})}])
-              res))
-          #js [:div {}]
-          markup))
+                 :else res))))))))
+
+(defn render-background-markup [{:keys [height width spacing]}]
+  (comp (filter (fn [m] (some? (.-background m))))
+        (map (fn [m]
+               (let [from (.-from m)
+                     to (.-to m)
+                     background (.-background m)]
+                 #js [:div {:class background
+                            :style (style {:left (styles/px (* from width))
+                                           :width (styles/px (* width (- to from)))
+                                           :height (styles/px height)
+                                           :position :absolute})}])))))
 
 (def real-dom
   (js/createReactClass
@@ -396,9 +392,9 @@
               caret-index (.-caretIndex line-info)]
           (el real-dom #js {:dom (dom
                                   #js [:div {:class :render-line}
-                                       (render-background-markup line-markup metrics)
+                                       (transduce (render-background-markup metrics) push! #js [:div {}] line-markup)
                                        (render-selection selection metrics)
-                                       (render-text line-text line-tokens line-markup metrics)
+                                       (transduce (render-text' line-text) push! #js [:pre {:class :line-text}] line-markup)
                                        (when caret-index (render-caret caret-index metrics))])}))))))
 
 

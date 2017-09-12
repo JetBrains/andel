@@ -57,7 +57,7 @@
 (def tree-config {:reducing-fn r-f
                   :metrics-fn metrics
                   :leaf-overflown? (fn [x] (<= string-thresh (count x)))
-                  :split-thresh 64
+                  :split-thresh 32
                   :split-leaf split-string
                   :leaf-underflown? (fn [s] (< (count s) string-merge-thresh))
                   :merge-leafs (fn [s1 s2] (str s1 s2))})

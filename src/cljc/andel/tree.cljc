@@ -7,9 +7,16 @@
 
 (defrecord Leaf [metrics data])
 
+#?(:clj
+    (do
+      (defn array [& args] (object-array args))
+      (def some-array (array 1 2 3))
+      (defn array? [x]
+        (= (type some-array) (type x)))))
+
 (defn make-node [children {:keys [reducing-fn]}]
   (Node. (reduce (fn [acc x] (reducing-fn acc (:metrics x))) (reducing-fn) children)
-         (into-array children)))
+         (if (array? children) children (into-array children))))
 
 (defn make-leaf [data {:keys [metrics-fn]}]
   (Leaf. (metrics-fn data)
@@ -61,7 +68,10 @@
   (reduce (fn [_ c] (if (pred c) (reduced true) false)) false coll))
 
 (defn nodes? [c]
-  (node? (first c)))
+  (node?
+    (if (array? c)
+      (aget c 0)
+      (first c))))
 
 (defn split-needed? [children config]
   (let [leaf-overflown? (.-leaf-overflown? config)
@@ -99,12 +109,12 @@
 
 (defn merge-needed? [children config]
   (let [leaf-underflown? (.-leaf-underflown? config)
-        split-thresh (.-split-thresh config)]
-    (fast-some (if (nodes? children)
-                 (let [merge-thresh (quot split-thresh 2)]
-                   #(< (count (.-children %)) merge-thresh))
-                 #(leaf-underflown? (.-data %)))
-               children)))
+        split-thresh (.-split-thresh config)
+        merge-thresh (quot split-thresh 2)
+        merge? (if (nodes? children)
+                 #(< (count (.-children %)) merge-thresh)
+                 #(leaf-underflown? (.-data %)))]
+    (fast-some merge? children)))
 
 (defn merge-children [children config]
   (let [leaf-underflown? (.-leaf-underflown? config)
@@ -199,6 +209,7 @@
 
 (defn end? [loc]
   (keyword? (.-path loc)))
+
 
 (defn root
   "Modified version of clojure.zip/root to work with balancing version of up"

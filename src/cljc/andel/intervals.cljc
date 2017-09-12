@@ -37,7 +37,7 @@
 (def tree-config {:reducing-fn reducing-fn
                   :metrics-fn metrics-fn
                   :leaf-overflown? (constantly false)
-                  :split-thresh 16
+                  :split-thresh 32
                   :leaf-underflown? (constantly false)})
 
 (defn zipper [it]
