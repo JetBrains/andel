@@ -84,7 +84,7 @@
   [loc]
   (text/offset loc))
 
-(defn loc->line
+(defn line-number
   "transforms zipper pointer into line"
   [loc]
   (text/line loc))
@@ -108,20 +108,5 @@
   (-> (line->loc line text)
       (tree/end?)))
 
-(defn next-line-loc
-  [line text]
-  (if (last-line? line text)
-    (line->loc line text)
-    (let [line-loc (line->loc line text)
-          offset (loc->offset line-loc)
-          line-length (text/line-length line-loc)
-          next-line-loc (text/scan-to-offset line-loc (+ offset line-length 1))]
-      next-line-loc)))
-
-(defn prev-line-loc
-  [line text]
-  (if (= line 0)
-    0
-    (let [prev-line-end (- (line->offset line text) 1)
-          prev-line-loc (line->loc (offset->line prev-line-end text) text)]
-      prev-line-loc)))
+(defn scan-to-next-line [loc]
+  (text/scan-to-line loc (inc (line-number loc))))

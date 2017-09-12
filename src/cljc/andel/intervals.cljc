@@ -141,7 +141,7 @@
           :else
           (recur (tree/next loc) acc))))
 
-(defn intersect [a b]
+(defn insersects? [a b]
   (let [[fst snd] (if (< (.-from a) (.-from b)) [a b] [b a])
         fst-len (- (.-to fst) (.-from fst))
         snd-len (- (.-to snd) (.-from snd))]
@@ -149,21 +149,18 @@
       false
       (< (.-from snd) (.-to fst)))))
 
-(defn intersect-inclusive [a b]
+(defn intersects-inclusive? [a b]
   (let [[fst snd] (if (< (.-from a) (.-from b)) [a b] [b a])]
     (<= (.-from snd) (.-to fst))))
 
 (defn scan-intersect [loc interval]
   (tree/scan loc
              (fn [acc-metrics node-metrics]
-               (let [metrics (reducing-fn acc-metrics node-metrics)
-                     rightest (or (some-> acc-metrics (.-rightest)) 0)
+               (let [rightest (or (some-> acc-metrics (.-rightest)) 0)
                      offset (.-offset node-metrics)
                      length (.-length node-metrics)
                      from (+ offset rightest)]
-                 (intersect (Marker. from (+ from length) nil nil nil nil)
-                            interval)))))
-
+                 (insersects? (Marker. from (+ from length) nil nil nil nil) interval)))))
 
 (defn make-leaf [offset length greedy-left? greedy-right? background foreground]
   (tree/make-leaf (IntervalLeaf. offset length 0 greedy-left? greedy-right? background foreground)
@@ -289,7 +286,7 @@
                          length (.-length node-metrics)
                          from (+ node-offset rightest)
                          to (+ from length)]
-                     (or (intersect-inclusive (Marker. from to nil nil nil nil) (Marker. offset (+ offset size) nil nil nil nil))
+                     (or (intersects-inclusive? (Marker. from to nil nil nil nil) (Marker. offset (+ offset size) nil nil nil nil))
                          (< (+ offset size) (+ (.-offset metrics) (.-rightest metrics))))))]
     (loop [loc (zipper itree)
            acc (transient [])]
@@ -328,7 +325,29 @@
          (reduce insert-one (zipper itree'))
          root)))
 
-(defn query-intervals [itree interval]
+(defn query-intervals [loc interval]
+  (let [interval (interval->tree-basis (map->Marker interval))
+        from (.-from interval)
+        to (.-to interval)]
+
+    (loop [loc loc
+           markers (transient [])]
+      (cond
+        (tree/end? loc)
+        (persistent! markers)
+
+        (tree/leaf? (tree/node loc))
+        (recur (scan-intersect (tree/next loc) interval)
+               (conj! markers (tree-basis->interval (loc->Marker loc))))
+
+        (insersects? (loc->Marker loc) interval)
+        (recur loc (conj! markers (tree-basis->interval (loc->Marker loc))))
+
+        :else
+        (recur (scan-intersect loc interval)
+               markers)))))
+
+#_(defn query-intervals [itree interval]
   (let [interval (interval->tree-basis (map->Marker interval))
         from (.-from interval)
         to (.-to interval)]

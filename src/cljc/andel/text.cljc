@@ -91,12 +91,12 @@
 
 (defn offset [loc]
   (let [node (.-node loc)
-        path (.-path loc)
-        acc (some-> path .-acc)
-        o-acc (.-o-acc path)]
+        path (.-path loc)]
     (if (tree/end? loc)
       (metrics-offset (.-metrics node))
-      (or (metrics-offset o-acc) (metrics-offset acc) 0))))
+      (or (metrics-offset (some-> path (.-o-acc)))
+          (metrics-offset (some-> path (.-acc)))
+          0))))
 
 (defn line [loc]
   (let [node (.-node loc)

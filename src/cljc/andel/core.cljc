@@ -30,7 +30,7 @@
                                         (f)
                                         (text/root)))
         (update-in [:document :timestamp] inc)
-        (update-in [:document :first-invalid] min (utils/loc->line edit-point)))))
+        (update-in [:document :first-invalid] min (utils/line-number edit-point)))))
 
 (defn caret-offset [state]
   (get-in state [:editor :caret :offset]))

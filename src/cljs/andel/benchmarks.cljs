@@ -62,7 +62,7 @@
            :count 10000)))
 
 (defn play-query [model {:keys [from to]}]
-  (vec (filter #(intervals/intersect % {:from from :to to}) model)))
+  (vec (filter #(intervals/insersects? % {:from from :to to}) model)))
 
 (defn bench-query-base [markup]
   (bench "QUERY BASE"

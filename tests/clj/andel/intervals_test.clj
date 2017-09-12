@@ -107,7 +107,7 @@
                                                       (reduce delete-range (bulk->tree bulk) qs)))))))))
 
 (defn play-query [model {:keys [from to]}]
-  (vec (filter #(intersect % (map->Marker {:from from :to to})) model)))
+  (vec (filter #(insersects? % (map->Marker {:from from :to to})) model)))
 
 (defn query-gen [max-val]
   (g/fmap (fn [[x y]]

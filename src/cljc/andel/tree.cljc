@@ -198,8 +198,7 @@
     (when-let [r (fz/right loc)]
       (let [reducing-fn (.-reducing-fn (.-ops loc))
             acc' (reducing-fn (or acc (reducing-fn)) (.-metrics node))]
-        (fz/update-path r #(fz/assoc-acc % acc'))
-        #_(update r :path assoc :acc acc')))))
+        (fz/update-path r #(fz/assoc-acc % acc'))))))
 
 (defn down [loc]
   (let [path (.-path loc)
@@ -295,8 +294,7 @@
                             r rights
                             acc (or acc (reducing-fn))]
                        (when (some? n)
-                         (let [m (.-metrics n)
-                               acc' (reducing-fn acc m)]
+                         (let [m (.-metrics n)]
                            (if (pred acc m)
                              (fz/->ZipperLocation
                               (.-ops loc)
@@ -311,7 +309,7 @@
                              (recur (conj! l n)
                                     (first r)
                                     (rest r)
-                                    acc'))))))]
+                                    (reducing-fn acc m)))))))]
       (if (some? next-loc)
         (if (branch? next-loc)
           (recur (down next-loc) pred)
@@ -341,3 +339,12 @@
         (if (root? loc)
           (replace loc (make-node [] (.-ops loc)))
           (recur (fz/up loc)))))))
+
+(defn compare-zippers [z1 z2 stop?]
+  (loop [z1 z1
+         z2 z2]
+    (if (identical? (node z1) (node z2))
+      (if (stop? (loc-acc z1) (node z1))
+        true
+        (recur (next z1) (next z2)))
+      false)))

@@ -472,60 +472,63 @@
         {:keys [caret selection]} editor
         [_ from-y-offset] pos
         [w h] view-size
+        left-columnt 0
         top-line (int (/ from-y-offset line-height))
         bottom-line (+ top-line (/ h line-height))
         y-shift (- (* line-height (- (/ from-y-offset line-height) top-line)))
         line-zipper (text/scan-to-line (text/zipper text) top-line)
         from-offset (text/offset line-zipper)
         to-offset (dec (text/offset (text/scan-to-line line-zipper (inc bottom-line))))
+        markers-zipper (tree/scan (intervals/zipper (:markup document)) (intervals/by-offset from-offset))
         caret-offset (get caret :offset)
-        markup (intervals/query-intervals (:markup document) {:from from-offset :to to-offset})
+        markup (intervals/query-intervals  {:from from-offset :to to-offset})
         _ (styles/defstyle :render-line [:.render-line {:height (styles/px (utils/line-height metrics))
                                                         :position :relative
                                                         :overflow :hidden}])
-        [_ hiccup] (reduce
-                    (fn [[line-start res] index]
-                      (let [next-line (text/scan-to-line line-start (inc index))
-                            line-start-offset (text/offset line-start)
-                            next-line-offset (text/offset next-line)
-                            len (- next-line-offset
-                                   line-start-offset)
-                            len (if (tree/end? next-line)
-                                  len
-                                  (dec len))
-                            line-text (text/text line-start len)
-                            line-end-offset (+ line-start-offset len)
-                            line-sel (line-selection selection [line-start-offset line-end-offset])
-                            line-caret (when (and (<= line-start-offset caret-offset) (<= caret-offset line-end-offset))
-                                         (- caret-offset line-start-offset))
-                            line-tokens (or (get hashes (hash line-text)) (:tokens (get lines index)))
-                            line-markup (prepare-markup markup line-start-offset line-end-offset)
-                            line-info (LineInfo. line-text line-tokens line-markup line-sel line-caret index)]
-                        [next-line (conj! res
-                                          (el "div" (js-obj "key" index
-                                                            "style" (js-obj "transform" (str "translate3d(0px, " (styles/px y-shift) ", 0px)")))
-                                              [(el render-line #js {:key index
-                                                                    :props {:line-info line-info
-                                                                            :metrics metrics}})]))]))
-                    [line-zipper
-                     (transient [])]
-                    (range top-line bottom-line))]
+        ->line-info (fn [start-loc]
+                      (let [index (utils/line-number start-loc)
+                            start-offset (text/offset start-loc)
+                            next-line-loc (utils/scan-to-next-line start-loc)
+                            end-offset (text/offset next-line-loc)
+                            length (- end-offset start-offset)
+                            text (text/text start-loc length)
+                            selection (line-selection selection [start-offset end-offset])
+                            caret (when (and (<= start-offset caret-offset) (<= caret-offset end-offset))
+                                         (- caret-offset start-offset))
+                            line-tokens (or (get hashes (hash text)) (:tokens (get lines index)))
+
+                            line-markup (prepare-markup markup start-offset end-offset)]
+                        (LineInfo. text line-tokens line-markup selection caret index)))
+
+        children (transduce
+                   (comp (take (- bottom-line top-line))
+                         (map ->line-info)
+                         (map (fn [line-info]
+                                (let [index (.-index line-info)]
+                                  (el "div" (js-obj "key" index
+                                                    "style" (js-obj "transform" (str "translate3d(0px, " (styles/px y-shift) ", 0px)")))
+                                      #js [(el render-line #js {:key index
+                                                                :props {:line-info line-info
+                                                                        :metrics metrics}})])))))
+                  push!
+                  #js []
+                  (iterate utils/scan-to-next-line line-zipper))]
     (el "div" #js {:style #js {:background theme/background
                                :width "100%"
                                :overflow "hidden"}
                    :key "viewport"
                    :onMouseDown (fn [event]
                                   (when on-mouse-down
-                                    (let [x (- ($ event :clientX) (-> event .-currentTarget .-offsetLeft))
-                                          y (- ($ event :clientY) (-> event .-currentTarget .-offsetTop))]
+                                    (let [x (- ($ event :clientX) (-> event (.-currentTarget) (.-offsetLeft)))
+                                          y (- ($ event :clientY) (-> event (.-currentTarget) (.-offsetTop)))]
                                       (on-mouse-down x y))))
                    :onMouseMove  (fn [event]
                                    (when on-drag-selection
                                      (when (= ($ event :buttons) 1)
-                                       (let [x (- ($ event :clientX) (-> event .-currentTarget .-offsetLeft))
-                                             y (- ($ event :clientY) (-> event .-currentTarget .-offsetTop))]
+                                       (let [x (- ($ event :clientX) (-> event (.-currentTarget) (.-offsetLeft)))
+                                             y (- ($ event :clientY) (-> event (.-currentTarget) (.-offsetTop)))]
                                          (on-drag-selection x y)))))}
-        (persistent! hiccup))))
+        children)))
 
 (def next-tick
   (let [w js/window]
