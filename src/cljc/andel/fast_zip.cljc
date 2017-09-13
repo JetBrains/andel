@@ -122,7 +122,7 @@
         (if (:changed? path)
           (ZipperLocation.
            (.-ops loc)
-           (make-node loc pnode (concat (.-l path) (cons (.-node loc) (.-r path))))
+           (make-node loc pnode (into (.-l path) (cons (.-node loc) (.-r path))))
            (if-let [^ZipperPath ppath (.-ppath path)]
              (ZipperPath. (.-l ppath)
                           (.-r ppath)

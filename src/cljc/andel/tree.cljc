@@ -15,8 +15,9 @@
         (= (type some-array) (type x)))))
 
 (defn make-node [children {:keys [reducing-fn]}]
-  (Node. (reduce (fn [acc x] (reducing-fn acc (:metrics x))) (reducing-fn) children)
-         (if (array? children) children (into-array children))))
+  (let [children (if (array? children) children (into-array children))]
+    (Node. (reduce (fn [acc x] (reducing-fn acc (:metrics x))) (reducing-fn) children)
+           children)))
 
 (defn make-leaf [data {:keys [metrics-fn]}]
   (Leaf. (metrics-fn data)
@@ -267,8 +268,7 @@
       (recur loc))))
 
 (defn root? [loc]
-  (= :root (.-ppath (.-path loc)))
-  #_(nil? (.-path loc)))
+  (keyword? (.-ppath (.-path loc))))
 
 (defn reset [loc]
   (zipper (root loc)
@@ -277,6 +277,16 @@
 (defn push! [a x]
   (.push a x)
   a)
+
+(defn reducible [reduction]
+  #?(:clj (reify
+            clojure.lang.IReduce
+            (reduce [this f] (reduction (f) f))
+            clojure.lang.IReduceInit
+            (reduce [this init f] (reduction init f)))
+          :cljs (reify IReduce
+                  (-reduce [this f] (reduction (f) f))
+                  (-reduce [this init f] (reduction init f)))))
 
 (defn scan [loc pred]
   (if (end? loc)
@@ -344,7 +354,7 @@
   (loop [z1 z1
          z2 z2]
     (if (identical? (node z1) (node z2))
-      (if (stop? (loc-acc z1) (node z1))
+      (if (stop? (loc-acc z1) (.-metrics (node z1)))
         true
         (recur (next z1) (next z2)))
       false)))

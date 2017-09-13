@@ -58,7 +58,7 @@
            (fn []
              (let [from (rand-int 160000)
                    to (+ from 3200)]
-               (intervals/query-intervals itree {:from from :to to})))
+               (intervals/query-intervals itree from to)))
            :count 10000)))
 
 (defn play-query [model {:keys [from to]}]

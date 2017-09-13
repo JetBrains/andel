@@ -251,3 +251,5 @@
 (defn line-text [t i]
   (let [loc (scan-to-line (zipper t) i)]
     (text loc (line-length loc))))
+
+

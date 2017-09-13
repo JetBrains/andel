@@ -23,8 +23,10 @@
             default-copy-state)
         state))))
 
-(defn style->keyword [style]
-  (some-> style keyword))
+(def style->keyword
+  (memoize
+    (fn [style]
+      (some-> style keyword))))
 
 ;; [String LexerState] -> [[Token] LexerState]
 (defn lex [modespec text initial-state]

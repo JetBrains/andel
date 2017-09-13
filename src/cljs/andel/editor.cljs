@@ -253,18 +253,23 @@
         (js/performance.measure (str name) start end)
         result))))
 
-(defn render-text' [text]
+(defn span [class text]
+  (doto (js/document.createElement "span")
+        (.setAttribute "class" class)
+        (.appendChild (js/document.createTextNode text))))
+
+(defn render-text [text]
     (fn [xf]
       (let [pendings (array)
             *last-pos (atom 0)
-            next-pending (fn [pendings] (reduce (fn [c p] (if (or (nil? c) (< (.-to p) (.-to c))) p c)) nil pendings))
+            next-pending (fn [pendings] (reduce (fn [c p] (or (nil? c) (< (.-to p) (.-to c))) p c) nil pendings))
             js-disj! (fn [arr v]
-                                  (let [idx (.indexOf arr v)]
-                                    (if (< -1 idx)
-                                      (do
-                                        (.splice arr idx 1)
-                                        arr)
-                                      arr)))]
+                       (let [idx (.indexOf arr v)]
+                         (if (< -1 idx)
+                           (do
+                             (.splice arr idx 1)
+                             arr)
+                           arr)))]
         (fn
           ([] (xf))
           ([res m]
@@ -280,16 +285,14 @@
                    (reset! *last-pos (.-from m))
                    (if (== last-pos (.-from m))
                      res
-                     (xf res #js [:span {:class new-class}
-                                  (subs text last-pos (.-from m))])))
+                     (xf res (span new-class (subs text last-pos (.-from m))))))
 
                  (do
                    (js-disj! pendings p)
                    (reset! *last-pos (.-to p))
                    (if (== last-pos (.-to p))
                      (recur res)
-                     (recur (xf res #js [:span {:class new-class}
-                                         (subs text last-pos (.-to p))]))))))))
+                     (recur (xf res (span new-class (subs text last-pos (.-to p))) ))))))))
           ([res]
            (loop [res res]
              (let [p (next-pending pendings)
@@ -304,13 +307,17 @@
                    (reset! *last-pos (.-to p))
                    (if (== last-pos (.-to p))
                      (recur res)
-                     (recur (xf res #js [:span {:class new-class}
-                                         (subs text last-pos (.-to p))]))))
+                     (recur (xf res (span new-class (subs text last-pos (.-to p)))))))
 
                  (not= last-pos (count text))
-                 (xf res #js [:span {} (subs text last-pos (count text))])
+                 (xf res (span nil (subs text last-pos (count text))))
 
                  :else res))))))))
+
+(defn div [class style]
+  (doto (js/document.createElement "div")
+        (.setAttribute "class" class)
+        (.setAttribute "style" style)))
 
 (defn render-background-markup [{:keys [height width spacing]}]
   (comp (filter (fn [m] (some? (.-background m))))
@@ -318,11 +325,10 @@
                (let [from (.-from m)
                      to (.-to m)
                      background (.-background m)]
-                 #js [:div {:class background
-                            :style (style {:left (styles/px (* from width))
-                                           :width (styles/px (* width (- to from)))
-                                           :height (styles/px height)
-                                           :position :absolute})}])))))
+                 (div background (style {:left (styles/px (* from width))
+                                         :width (styles/px (* width (- to from)))
+                                         :height (styles/px height)
+                                         :position :absolute})))))))
 
 (def real-dom
   (js/createReactClass
@@ -370,32 +376,81 @@
 
 (defn def-fun [f]
   (js/createReactClass
-   #js {:shouldComponentUpdate
-        (fn [new-props new-state]
-          (this-as this
-            (let [old-props ($ this :props)]
-              (not= (aget old-props "props") (aget new-props "props")))))
-        :render (fn [_]
-                  (this-as this
-                    (f (aget (aget this "props") "props"))))}))
+    #js {:shouldComponentUpdate
+         (fn [new-props new-state]
+           (this-as this
+                    (let [old-props ($ this :props)]
+                      (not= (aget old-props "props") (aget new-props "props")))))
+         :render (fn [_]
+                   (this-as this
+                            (f (aget (aget this "props") "props"))))}))
+
+(defn multiplex [rf1 rf2]
+    (fn [rf]
+      (fn
+        ([] (transient [(rf1) (rf2)]))
+        ([result input]
+         (assoc! result
+                 0 (rf1 (get result 0) input)
+                 1 (rf2 (get result 1) input)))
+        ([result] (rf [(rf1 (get result 0)) (rf2 (get result 1))])))))
 
 (def render-line
-  (def-fun
-    (fn [props]
-      (this-as this
-        (let [line-info (props :line-info)
-              metrics (props :metrics)
-              line-text (.-lineText line-info)
-              line-tokens (.-lineTokens line-info)
-              line-markup (.-lineMarkup line-info)
-              selection (.-selection line-info)
-              caret-index (.-caretIndex line-info)]
-          (el real-dom #js {:dom (dom
-                                  #js [:div {:class :render-line}
-                                       (transduce (render-background-markup metrics) push! #js [:div {}] line-markup)
-                                       (render-selection selection metrics)
-                                       (transduce (render-text' line-text) push! #js [:pre {:class :line-text}] line-markup)
-                                       (when caret-index (render-caret caret-index metrics))])}))))))
+  (js/createReactClass
+    #js {:shouldComponentUpdate
+         (fn [new-props new-state]
+           (this-as this
+                    (let [old-props (aget ($ this :props) "props")
+                          new-props (aget new-props "props")
+                          old-start (:start-offset old-props)
+                          old-end (:end-offset old-props)
+                          new-start (:start-offset new-props)
+                          new-end (:end-offset new-props)]
+                      (not (and (= (- old-end old-start) (- new-end new-start))
+                                (tree/compare-zippers (:text-zipper old-props) (:text-zipper new-props) (text/by-offset (max old-end new-end)))
+                                (tree/compare-zippers (:markers-zipper old-props) (:markers-zipper new-props) (intervals/by-offset (max old-end new-end)))
+                                (= (:caret old-props) (:caret new-props))
+                                (= (:selection old-props) (:selection new-props)))))))
+         :render (fn [_]
+                   (this-as this
+                            (let [{:keys [caret selection start-offset end-offset text-zipper markers-zipper metrics]} (aget (aget this "props") "props")
+                                  text (text/text text-zipper (- end-offset start-offset))
+                                  markup (intervals/xquery-intervals markers-zipper start-offset end-offset)
+                                  ;;  line-tokens (or (get hashes (hash text)) (:tokens (get lines index)))
+
+                                  to-relative-offsets (map (fn [marker]
+                                                             (intervals/->Marker (max 0 (- (.-from marker) start-offset))
+                                                                                 (max 0 (- (.-to marker) start-offset))
+                                                                                 false
+                                                                                 false
+                                                                                 (.-background marker)
+                                                                                 (.-foreground marker))))
+                                  bg-xf (comp
+                                          (filter (fn [marker] (some? (.-background marker))))
+                                          (render-background-markup metrics))
+                                  bg-r-f (bg-xf (fn
+                                                  ([] (js/document.createElement "div"))
+                                                  ([div] div)
+                                                  ([div ch] (.appendChild div ch) div)))
+
+                                  fg-xf (render-text text)
+                                  fg-r-f (fg-xf (fn
+                                                  ([] (doto (js/document.createElement "pre")
+                                                        (.setAttribute "class" "line-text")))
+                                                  ([div] div)
+                                                  ([div ch] (.appendChild div ch) div)))]
+
+                              ;;    (render-selection selection metrics)
+                              ;; (when caret (render-caret caret metrics))
+                              (el real-dom #js {:dom (transduce (comp
+                                                              to-relative-offsets
+                                                              (multiplex bg-r-f fg-r-f))
+                                                            (fn [[bg fg]]
+                                                              (doto (div "render-line" nil)
+                                                                (.appendChild bg)
+                                                                (.appendChild fg)))
+                                                            "fuck-you-rich"
+                                                            markup)}))))}))
 
 
 (defn line-selection [[from to] [line-start-offset line-end-offset]]
@@ -446,21 +501,6 @@
                                                 (.preventDefault evt))}
                           [child]))))}))
 
-
-
-(defn prepare-markup [markup from to]
-  (->> markup
-       (filter (fn [marker]
-                 (and (<= (.-from marker) to)
-                      (<= from (.-to marker)))))
-       (map (fn [marker]
-              (intervals/->Marker (max 0 (- (.-from marker) from))
-                                  (max 0 (- (.-to marker) from))
-                                  false
-                                  false
-                                  (.-background marker)
-                                  (.-foreground marker))))))
-
 (defn editor-viewport [props]
   (let [state ($ props :editorState)
         on-mouse-down (aget props "onMouseDown")
@@ -474,45 +514,42 @@
         [w h] view-size
         left-columnt 0
         top-line (int (/ from-y-offset line-height))
-        bottom-line (+ top-line (/ h line-height))
+        bottom-line (+ top-line (int (/ h line-height)))
         y-shift (- (* line-height (- (/ from-y-offset line-height) top-line)))
-        line-zipper (text/scan-to-line (text/zipper text) top-line)
-        from-offset (text/offset line-zipper)
-        to-offset (dec (text/offset (text/scan-to-line line-zipper (inc bottom-line))))
-        markers-zipper (tree/scan (intervals/zipper (:markup document)) (intervals/by-offset from-offset))
         caret-offset (get caret :offset)
-        markup (intervals/query-intervals  {:from from-offset :to to-offset})
         _ (styles/defstyle :render-line [:.render-line {:height (styles/px (utils/line-height metrics))
                                                         :position :relative
                                                         :overflow :hidden}])
-        ->line-info (fn [start-loc]
-                      (let [index (utils/line-number start-loc)
-                            start-offset (text/offset start-loc)
-                            next-line-loc (utils/scan-to-next-line start-loc)
-                            end-offset (text/offset next-line-loc)
-                            length (- end-offset start-offset)
-                            text (text/text start-loc length)
-                            selection (line-selection selection [start-offset end-offset])
-                            caret (when (and (<= start-offset caret-offset) (<= caret-offset end-offset))
-                                         (- caret-offset start-offset))
-                            line-tokens (or (get hashes (hash text)) (:tokens (get lines index)))
-
-                            line-markup (prepare-markup markup start-offset end-offset)]
-                        (LineInfo. text line-tokens line-markup selection caret index)))
-
-        children (transduce
-                   (comp (take (- bottom-line top-line))
-                         (map ->line-info)
-                         (map (fn [line-info]
-                                (let [index (.-index line-info)]
-                                  (el "div" (js-obj "key" index
-                                                    "style" (js-obj "transform" (str "translate3d(0px, " (styles/px y-shift) ", 0px)")))
-                                      #js [(el render-line #js {:key index
-                                                                :props {:line-info line-info
-                                                                        :metrics metrics}})])))))
-                  push!
-                  #js []
-                  (iterate utils/scan-to-next-line line-zipper))]
+        children (loop [text-zipper (text/zipper text)
+                        markers-zipper (intervals/zipper (:markup document))
+                        line-number top-line
+                        result #js[]]
+                   (if (>= line-number bottom-line)
+                     result
+                     (let [text-zipper (text/scan-to-line text-zipper line-number)
+                           start-offset      (text/offset text-zipper)
+                           next-line-text-zipper (text/scan-to-line text-zipper (inc line-number))
+                           end-offset (cond-> (text/offset next-line-text-zipper)
+                                              (not (tree/end? next-line-text-zipper)) (dec))
+                           intersects? (intervals/by-intersect (intervals/Marker. start-offset end-offset nil nil nil nil))
+                           overscans? (intervals/by-offset end-offset)
+                           markers-zipper (tree/scan markers-zipper (fn [acc metrics]
+                                                                      (or (intersects? acc metrics)
+                                                                          (overscans? acc metrics))))]
+                       (recur next-line-text-zipper
+                              markers-zipper
+                              (inc line-number)
+                              (push! result (el "div" (js-obj "key" line-number
+                                                              "style" (js-obj "transform" (str "translate3d(0px, " (styles/px y-shift) ", 0px)")))
+                                                #js [(el render-line #js{:key            line-number
+                                                                         :props          {:text-zipper    text-zipper
+                                                                                          :markers-zipper markers-zipper
+                                                                                          :start-offset   start-offset
+                                                                                          :selection      (line-selection selection [start-offset end-offset])
+                                                                                          :caret          (when (and (<= start-offset caret-offset) (<= caret-offset end-offset))
+                                                                                                            (- caret-offset start-offset))
+                                                                                          :end-offset     end-offset
+                                                                                          :metrics        metrics}})]))))))]
     (el "div" #js {:style #js {:background theme/background
                                :width "100%"
                                :overflow "hidden"}
