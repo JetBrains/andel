@@ -170,6 +170,16 @@
    (.createElement js/React tag props children)))
 
 
+(defn div [class style]
+  (doto (js/document.createElement "div")
+    (.setAttribute "class" class)
+    (.setAttribute "style" style)))
+
+(defn span [class text]
+  (doto (js/document.createElement "span")
+        (.setAttribute "class" class)
+        (.appendChild (js/document.createTextNode text))))
+
 (defn style [m]
   (reduce-kv (fn [s k v]
                (str s (name k) ":" (if (keyword? v) (name v) v) ";")) nil m))
@@ -195,38 +205,36 @@
 (defn infinity? [x] (keyword? x))
 
 (defn render-selection [[from to] {:keys [width] :as metrics}]
-  #js [:div
-       {:style
-        (style {:background-color theme/selection
-                :height (styles/px (utils/line-height metrics))
-                :position :absolute
-                :top (styles/px 0)
-                :left (if (infinity? to)
-                        0
-                        (styles/px (* from width)))
-                :margin-left (when (infinity? to) (styles/px (* from width)))
-                :width (if (infinity? to)
-                         "100%"
-                         (styles/px (* (- to from) width)))})}])
+  (div nil
+    (style {:background-color theme/selection
+             :height (styles/px (utils/line-height metrics))
+             :position :absolute
+             :top (styles/px 0)
+             :left (if (infinity? to)
+                     0
+                     (styles/px (* from width)))
+             :margin-left (when (infinity? to) (styles/px (* from width)))
+             :width (if (infinity? to)
+                      "100%"
+                      (styles/px (* (- to from) width)))})))
 
 
 (defn render-caret [col {:keys [width] :as metrics}]
-  #js [:div {}
-       #js [:div {:style (style {:height (styles/px (inc (utils/line-height metrics)))
-                                 :width "100%"
-                                 :background-color (:bg-05 theme/zenburn)
-                                 :position :absolute
-                                 :left 0
-                                 :top 0
-                                 :z-index "-1"})}]
-
-       #js [:div {:style (style {:width (styles/px 1)
-                                 :animation "blinker 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite"
-                                 :top 0
-                                 :background-color "white"
-                                 :position :absolute
-                                 :left (styles/px (* col width))
-                                 :height (styles/px (inc (utils/line-height metrics)))})}]])
+  (doto (div nil nil)
+    (.appendChild (div nil (style {:height (styles/px (inc (utils/line-height metrics)))
+                                   :width "100%"
+                                   :background-color (:bg-05 theme/zenburn)
+                                   :position :absolute
+                                   :left 0
+                                   :top 0
+                                   :z-index "-1"})))
+    (.appendChild (div nil (style {:width (styles/px 1)
+                                   :animation "blinker 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite"
+                                   :top 0
+                                   :background-color "white"
+                                   :position :absolute
+                                   :left (styles/px (* col width))
+                                   :height (styles/px (inc (utils/line-height metrics)))})))))
 
 (def token-class
   (let [tokens-cache #js {}]
@@ -253,16 +261,12 @@
         (js/performance.measure (str name) start end)
         result))))
 
-(defn span [class text]
-  (doto (js/document.createElement "span")
-        (.setAttribute "class" class)
-        (.appendChild (js/document.createTextNode text))))
-
 (defn render-text [text]
-    (fn [xf]
+    (fn [rf]
       (let [pendings (array)
             *last-pos (atom 0)
             next-pending (fn [pendings] (reduce (fn [c p] (or (nil? c) (< (.-to p) (.-to c))) p c) nil pendings))
+            make-class (fn [markers] (reduce (fn [c m] (str c " " (.-foreground m))) nil pendings))
             js-disj! (fn [arr v]
                        (let [idx (.indexOf arr v)]
                          (if (< -1 idx)
@@ -271,53 +275,44 @@
                              arr)
                            arr)))]
         (fn
-          ([] (xf))
+          ([] (rf))
           ([res m]
            (loop [res res]
              (let [p (next-pending pendings)
                    last-pos @*last-pos
-                   new-class (->> (map (fn [m] (.-foreground m)) pendings)
-                                  (interpose " ")
-                                  (apply str))]
+                   new-class (make-class pendings)]
                (if (or (nil? p) (< (.-from m) (.-to p)))
                  (do
                    (push! pendings m)
                    (reset! *last-pos (.-from m))
-                   (if (== last-pos (.-from m))
+                   (if (identical? last-pos (.-from m))
                      res
-                     (xf res (span new-class (subs text last-pos (.-from m))))))
+                     (rf res (span new-class (subs text last-pos (.-from m))))))
 
                  (do
                    (js-disj! pendings p)
                    (reset! *last-pos (.-to p))
-                   (if (== last-pos (.-to p))
+                   (if (identical? last-pos (.-to p))
                      (recur res)
-                     (recur (xf res (span new-class (subs text last-pos (.-to p))) ))))))))
+                     (recur (rf res (span new-class (subs text last-pos (.-to p)))))))))))
           ([res]
            (loop [res res]
              (let [p (next-pending pendings)
                    last-pos @*last-pos
-                   new-class (->> (map (fn [m] (.-foreground m)) pendings)
-                                  (interpose " ")
-                                  (apply str))]
+                   new-class (make-class pendings)]
                (cond
                  (some? p)
                  (do
                    (js-disj! pendings p)
                    (reset! *last-pos (.-to p))
-                   (if (== last-pos (.-to p))
+                   (if (identical? last-pos (.-to p))
                      (recur res)
-                     (recur (xf res (span new-class (subs text last-pos (.-to p)))))))
+                     (recur (rf res (span new-class (subs text last-pos (.-to p)))))))
 
-                 (not= last-pos (count text))
-                 (xf res (span nil (subs text last-pos (count text))))
+                 (not (identical? last-pos (count text)))
+                 (rf res (span nil (subs text last-pos (count text))))
 
                  :else res))))))))
-
-(defn div [class style]
-  (doto (js/document.createElement "div")
-        (.setAttribute "class" class)
-        (.setAttribute "style" style)))
 
 (defn render-background-markup [{:keys [height width spacing]}]
   (comp (filter (fn [m] (some? (.-background m))))
@@ -338,7 +333,7 @@
             (let [elt ($ next-props :dom)
                   node (.findDOMNode js/ReactDOM this)
                   child (.-firstChild node)]
-              (when child
+              (when (some? child)
                 (.removeChild node child))
               (.appendChild node elt))))
         :componentDidMount
@@ -393,7 +388,34 @@
          (assoc! result
                  0 (rf1 (get result 0) input)
                  1 (rf2 (get result 1) input)))
-        ([result] (rf [(rf1 (get result 0)) (rf2 (get result 1))])))))
+        ([result] (rf (rf) [(rf1 (get result 0)) (rf2 (get result 1))])))))
+
+(defn transduce2
+  ([xform f coll]
+   (let [r-f (xform f)]
+     (r-f (reduce r-f (r-f) coll))))
+  ([xform f init coll]
+   (transduce2 xform (fn
+                      ([] init)
+                      ([acc input] (f acc input))) coll)))
+
+(comment
+
+  (defn fancy [start]
+    (fn [rf]
+      (fn
+        ([] [start (rf)])
+        ([[start result] input]
+         [(inc start) (rf result (str input start))])
+        ([result] (second result)))))
+
+
+  (transduce2 (comp
+                (map (fn [x] (str x x)))
+                (fancy 10)
+                (map clojure.string/upper-case)) conj [] ["a" "a" "b" "c"])
+
+  )
 
 (def render-line
   (js/createReactClass
@@ -440,17 +462,18 @@
                                                   ([div] div)
                                                   ([div ch] (.appendChild div ch) div)))]
 
-                              ;;    (render-selection selection metrics)
-                              ;; (when caret (render-caret caret metrics))
-                              (el real-dom #js {:dom (transduce (comp
-                                                              to-relative-offsets
-                                                              (multiplex bg-r-f fg-r-f))
-                                                            (fn [[bg fg]]
-                                                              (doto (div "render-line" nil)
-                                                                (.appendChild bg)
-                                                                (.appendChild fg)))
-                                                            "fuck-you-rich"
-                                                            markup)}))))}))
+                              (el real-dom #js {:dom (doto (transduce2
+                                                             (comp
+                                                               to-relative-offsets
+                                                               (multiplex bg-r-f fg-r-f))
+                                                             (fn [dom [bg fg]]
+                                                               (doto dom
+                                                                 (.appendChild bg)
+                                                                 (.appendChild fg)))
+                                                             (doto (div "render-line" nil)
+                                                               (cond-> (some? selection) (.appendChild (render-selection selection metrics))))
+                                                             markup)
+                                                       (cond-> (some? caret) (.appendChild (render-caret caret metrics))))}))))}))
 
 
 (defn line-selection [[from to] [line-start-offset line-end-offset]]
@@ -520,14 +543,13 @@
         _ (styles/defstyle :render-line [:.render-line {:height (styles/px (utils/line-height metrics))
                                                         :position :relative
                                                         :overflow :hidden}])
-        children (loop [text-zipper (text/zipper text)
+        children (loop [text-zipper (text/scan-to-line (text/zipper text) top-line)
                         markers-zipper (intervals/zipper (:markup document))
                         line-number top-line
                         result #js[]]
                    (if (>= line-number bottom-line)
                      result
-                     (let [text-zipper (text/scan-to-line text-zipper line-number)
-                           start-offset      (text/offset text-zipper)
+                     (let [start-offset      (text/offset text-zipper)
                            next-line-text-zipper (text/scan-to-line text-zipper (inc line-number))
                            end-offset (cond-> (text/offset next-line-text-zipper)
                                               (not (tree/end? next-line-text-zipper)) (dec))
@@ -616,31 +638,7 @@
 
 (def editor-cmp
   (js/createReactClass
-   #js {;;:componentDidMount
-        #_(fn []
-          (this-as cmp
-            (let [*state ($ ($ cmp :props) :editorState)
-                  *scheduled? (atom false) ]
-              (aset cmp "bindings" *bindings)
-              #_(add-watch *state :editor-view
-                         (fn [_ _ old-state new-state]
-                           (when (and (not= old-state new-state) (not @*scheduled?))
-                             (reset! *scheduled? true)
-                             (next-tick (fn [time]
-                                          (reset! *scheduled? false)
-                                          ($ cmp forceUpdate))))))
-             #_(when (not (ready-to-view? @*state))
-                (go
-                  (let [metrics (:font-metrics (a/<! *editors-common))]
-                    (js/console.log "METRICS: " metrics)
-                    (swap! *state assoc-in [:viewport :metrics] metrics)))))))
-
-        ;;:componentWillUnmount
-        #_(fn []
-          (this-as cmp
-            (let [*state ($ ($ cmp :props) :editorState)]
-              (remove-watch *state :editor-view))))
-
+   #js {
         :shouldComponentUpdate
         (fn [new-props new-state]
           (this-as this
@@ -680,3 +678,10 @@
   (el editor-cmp #js {:editorState editor-state
                       :callbacks callbacks
                       :key "editor"}))
+
+(comment
+
+  (into [] (comp (map inc) (interpose 42) (map dec)) [1 2 3])
+
+
+  )

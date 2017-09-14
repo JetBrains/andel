@@ -148,7 +148,8 @@
           (recur (tree/next loc) acc))))
 
 (defn insersects? [a b]
-  (let [[fst snd] (if (< (.-from a) (.-from b)) [a b] [b a])
+  (let [fst (if (< (.-from a) (.-from b)) a b)
+        snd (if (< (.-from a) (.-from b)) b a)
         fst-len (- (.-to fst) (.-from fst))
         snd-len (- (.-to snd) (.-from snd))]
     (if (or (identical? fst-len 0) (identical? snd-len 0))
@@ -156,7 +157,8 @@
       (< (.-from snd) (.-to fst)))))
 
 (defn intersects-inclusive? [a b]
-  (let [[fst snd] (if (< (.-from a) (.-from b)) [a b] [b a])]
+  (let [fst (if (< (.-from a) (.-from b)) a b)
+        snd (if (< (.-from a) (.-from b)) b a)]
     (<= (.-from snd) (.-to fst))))
 
 (defn by-intersect [interval]
@@ -343,9 +345,8 @@
     (tree/reducible
       (fn [f init]
         (loop [loc loc
-               s (f)]
+               s init]
           (cond
-
             (or (tree/end? loc) (< to (where-am-i loc)))
             s
 
