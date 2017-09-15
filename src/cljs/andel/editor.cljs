@@ -128,36 +128,6 @@
                  (when (not= old-ts new-ts)
                    (a/put! broker new-s))))))
 
-
-
-;; proto-marker-map -> marker-record
-(defn- create-marker [proto-marker]
-  (letfn [(classes-by-keys [ks styles]
-                           (let [classes (->> styles
-                                              (map (fn [style]
-                                                     (let [style (select-keys style ks)]
-                                                       (when (not-empty style)
-                                                         (styles/style->class style)))) )
-                                              (filter some?))]
-                             (when (not-empty classes)
-                               (->> classes
-                                    (interpose " ")
-                                    (apply str)))))]
-    (-> proto-marker
-        intervals/map->Marker
-        (assoc :foreground (classes-by-keys
-                             [:color
-                              :font-weight
-                              :font-style]
-                             (:style proto-marker)))
-        (assoc :background (classes-by-keys
-                             [:background-color
-                              :border-bottom-style
-                              :border-color
-                              :border-width
-                              :border-radius]
-                             (:style proto-marker))))))
-
 (defn ready-to-view? [editor-state]
   (some? (get-in editor-state [:viewport :metrics])))
 
@@ -183,10 +153,6 @@
 (defn style [m]
   (reduce-kv (fn [s k v]
                (str s (name k) ":" (if (keyword? v) (name v) v) ";")) nil m))
-
-(defn render-attrs [m]
-  (reduce-kv (fn [s k v]
-               (str s " " (name k) "=\"" (if (keyword? v) (name v) v) "\"")) nil m))
 
 (defn make-node [tag]
   (js/document.createElement (name tag)))
@@ -345,40 +311,6 @@
 
         :render
         (fn [_] (el "div" #js {:key "realDOM"}))}))
-
-(defrecord LineInfo [lineText lineTokens lineMarkup selection caretIndex index])
-
-(defn dom [el]
-  (let  [tag (aget el 0)
-         attrs-map (aget el 1)
-         children (.slice el 2)]
-    (assert (some? el))
-    (let [len (.-length children)
-          el-with-children (loop [i 0
-                                  n (make-node tag)]
-                             (if (< i len)
-                               (if-let [c (aget children i)]
-                                 (recur (inc i)
-                                        (conj-child! n (if (string? c)
-                                                         (make-text-node c)
-                                                         (dom c))))
-                                 (recur (inc i) n))
-                               n))]
-      (reduce-kv (fn [n a v]
-                   (assoc-attr! n a v))
-                 el-with-children
-                 attrs-map))))
-
-(defn def-fun [f]
-  (js/createReactClass
-    #js {:shouldComponentUpdate
-         (fn [new-props new-state]
-           (this-as this
-                    (let [old-props ($ this :props)]
-                      (not= (aget old-props "props") (aget new-props "props")))))
-         :render (fn [_]
-                   (this-as this
-                            (f (aget (aget this "props") "props"))))}))
 
 (defn multiplex [rf1 rf2]
     (fn [rf]
