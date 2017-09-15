@@ -74,6 +74,9 @@
       (aget c 0)
       (first c))))
 
+(defn root? [loc]
+  (keyword? (.-ppath (.-path loc))))
+
 (defn split-needed? [children config]
   (let [leaf-overflown? (.-leaf-overflown? config)
         split-thresh (.-split-thresh config)]
@@ -185,7 +188,11 @@
     (if changed?
       (let [config (.-ops loc)]
         (if-let [parent (fz/up loc)]
-          (fz/replace parent (make-node (balance-children (fz/children parent) config) config))
+          (let [balanced-children (balance-children (fz/children parent) config)]
+            (if (and (root? parent) (empty? balanced-children))
+              #_(fz/replace parent (make-node (make-leaf )))
+              (fz/replace parent (make-node balanced-children config)) ;;TODO
+              (fz/replace parent (make-node balanced-children config))))
           (fz/->ZipperLocation
            (.-ops loc)
            (shrink-tree (grow-tree [node] config))
@@ -266,9 +273,6 @@
             (end? loc))
       loc
       (recur loc))))
-
-(defn root? [loc]
-  (keyword? (.-ppath (.-path loc))))
 
 (defn reset [loc]
   (zipper (root loc)

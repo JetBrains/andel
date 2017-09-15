@@ -129,16 +129,27 @@
 (defn forget-acc [loc]
   (fz/update-path loc #(fz/assoc-o-acc % nil)))
 
+(defn- at-the-right-border? [loc]
+  (let [s (.-data (tree/node loc))
+        o (offset loc)
+        loc-offset (metrics-offset (tree/loc-acc loc))
+        rel-offset (- o loc-offset)]
+    (identical? rel-offset (count s))))
+
 (defn scan-to-offset [loc i]
-  (let [loc' (tree/scan loc (by-offset i))]
-    (if (tree/end? loc')
-      loc'
-      (let [loc' (forget-acc loc')
-            o (offset loc')
-            l (line loc')
-            count-of-newlines (count-of (.-data (tree/node loc')) \newline 0 (- i o))]
-        (fz/update-path loc'
-                        #(fz/assoc-o-acc % (array i (+ l count-of-newlines))))))))
+  (let [offset-loc (tree/scan loc (by-offset i))]
+    (if (tree/end? offset-loc)
+      offset-loc
+      (let [o (metrics-offset (tree/loc-acc offset-loc))
+            l (line offset-loc)
+            count-of-newlines (count-of (.-data (tree/node offset-loc)) \newline 0 (- i o))
+            offset-loc (fz/update-path offset-loc
+                                       #(fz/assoc-o-acc % (array i (+ l count-of-newlines))))
+            next-node (tree/next offset-loc)]
+        (if (and (at-the-right-border? offset-loc)
+                 (not (tree/end? next-node)))
+          next-node
+          offset-loc)))))
 
 (defn retain [loc l]
   (scan-to-offset loc (+ (offset loc) l)))

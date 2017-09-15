@@ -82,8 +82,8 @@
 
 (defonce editor-state-promise (let [promise (a/promise-chan)]
                                 (go
-                                  (let [text (:body (a/<! (http/get "EditorImpl.java")))
-                                        markup (->> (edn/read-string (:body (a/<! (http/get "markup.txt"))))
+                                  (let [text "abc xyz fyg" ;(:body (a/<! (http/get "EditorImpl.java")))
+                                        markup (->> markup ;(edn/read-string (:body (a/<! (http/get "markup.txt"))))
                                                     (mapv create-marker)
                                                     (sort-by (fn [m] (.-from m))))
                                         metrics (:font-metrics (a/<! andel.editor/*editors-common))
