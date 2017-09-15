@@ -265,7 +265,7 @@
     (fn [rf]
       (let [pendings (array)
             *last-pos (atom 0)
-            next-pending (fn [pendings] (reduce (fn [c p] (or (nil? c) (< (.-to p) (.-to c))) p c) nil pendings))
+            next-pending (fn [pendings] (reduce (fn [c p] (if (or (nil? c) (< (.-to p) (.-to c))) p c)) nil pendings))
             make-class (fn [markers] (reduce (fn [c m] (str c " " (.-foreground m))) nil pendings))
             js-disj! (fn [arr v]
                        (let [idx (.indexOf arr v)]
@@ -437,12 +437,13 @@
                    (this-as this
                             (let [{:keys [caret selection start-offset end-offset text-zipper markers-zipper metrics]} (aget (aget this "props") "props")
                                   text (text/text text-zipper (- end-offset start-offset))
+                                  text-length (count text)
                                   markup (intervals/xquery-intervals markers-zipper start-offset end-offset)
                                   ;;  line-tokens (or (get hashes (hash text)) (:tokens (get lines index)))
 
                                   to-relative-offsets (map (fn [marker]
-                                                             (intervals/->Marker (max 0 (- (.-from marker) start-offset))
-                                                                                 (max 0 (- (.-to marker) start-offset))
+                                                             (intervals/->Marker (min text-length (max 0 (- (.-from marker) start-offset)))
+                                                                                 (min text-length (max 0 (- (.-to marker) start-offset)))
                                                                                  false
                                                                                  false
                                                                                  (.-background marker)
@@ -461,7 +462,6 @@
                                                         (.setAttribute "class" "line-text")))
                                                   ([div] div)
                                                   ([div ch] (.appendChild div ch) div)))]
-
                               (el real-dom #js {:dom (doto (transduce2
                                                              (comp
                                                                to-relative-offsets
@@ -678,10 +678,3 @@
   (el editor-cmp #js {:editorState editor-state
                       :callbacks callbacks
                       :key "editor"}))
-
-(comment
-
-  (into [] (comp (map inc) (interpose 42) (map dec)) [1 2 3])
-
-
-  )

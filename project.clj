@@ -74,12 +74,12 @@
                                   [ring/ring-devel "1.5.1"]
                                   [prone "1.1.4"]
                                   [org.clojure/test.check "0.9.0"]
-                                  [figwheel-sidecar "0.5.10"]
+                                  [figwheel-sidecar "0.5.13"]
                                   [org.clojure/tools.nrepl "0.2.13"]
                                   [com.cemerick/piggieback "0.2.2-SNAPSHOT"]
                                   [pjstadig/humane-test-output "0.8.1"]]
                    :source-paths ["tests/clj"]
-                   :plugins [[lein-figwheel "0.5.10"]]
+                   :plugins [[lein-figwheel "0.5.13"]]
 
                    :injections [(require 'pjstadig.humane-test-output)
                                 (pjstadig.humane-test-output/activate!)]
