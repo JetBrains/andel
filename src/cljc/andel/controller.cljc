@@ -65,7 +65,7 @@
     (assoc caret :v-col col)))
 
 (defn restrict-to-text-length [offset text]
-  (let [text-length (dec (text/text-length text))]
+  (let [text-length (text/text-length text)]
     (-> offset (max 0) (min text-length))))
 
 (defn translate-caret [caret text delta-offset]
@@ -77,9 +77,9 @@
   (let [carret-offset (caret->offset caret)
         {:keys [line col]} (utils/offset->line-col carret-offset text)
         to-line (+ line delta-line)
-        prev-line-length (utils/line-length to-line text)
         new-v-col (max v-col col)
-        new-col (min prev-line-length new-v-col)]
+        new-col (min (utils/line-length to-line text) new-v-col)]
+    (prn "to-line: " to-line " new-col: " new-col)
     {:offset (utils/grid-pos->offset {:line to-line :col new-col} text)
      :v-col new-v-col}))
 
@@ -89,8 +89,8 @@
     line))
 
 (defn get-line-ident [text line]
-  (let [loc (text/scan-to-line (text/zipper text) line)
-        line-text (text/text loc (text/line-length loc))
+  (let [loc (text/scan-to-line-start (text/zipper text) line)
+        line-text (text/text loc (text/distance-to-EOL loc))
         trimmed (cstring/triml line-text)
         ident-size (- (count line-text) (count trimmed))]
     (subs line-text 0 ident-size)))
@@ -183,8 +183,8 @@
                                 (translate-caret text -1)
                                 (drop-virtual-position text))
                      :right (-> caret
-                              (translate-caret text 1)
-                              (drop-virtual-position text))
+                                (translate-caret text 1)
+                                (drop-virtual-position text))
                      :up    (translate-caret-verticaly caret text -1)
                      :down  (translate-caret-verticaly caret text 1))
         caret-offset' (caret->offset caret')

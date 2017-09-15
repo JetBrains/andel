@@ -354,7 +354,8 @@
   (loop [z1 z1
          z2 z2]
     (if (identical? (node z1) (node z2))
-      (if (stop? (loc-acc z1) (.-metrics (node z1)))
+      (if (or (stop? (loc-acc z1) (.-metrics (node z1)))
+              (and (end? z1) (end? z2)))
         true
         (recur (next z1) (next z2)))
       false)))

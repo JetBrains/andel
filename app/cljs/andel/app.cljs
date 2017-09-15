@@ -4,6 +4,7 @@
             [cljs-http.client :as http]
             
             [andel.core :as core]
+            [andel.styles :as styles]
             [andel.editor :as editor]
             [andel.controller :as controller]
             [andel.keybind :as keybind]
@@ -46,11 +47,44 @@
                                    :count 10000))
                     state)})
 
+;; proto-marker-map -> marker-record
+(defn- create-marker [proto-marker]
+  (letfn [(classes-by-keys [ks styles]
+                           (let [classes (->> styles
+                                              (map (fn [style]
+                                                     (let [style (select-keys style ks)]
+                                                       (when (not-empty style)
+                                                         (styles/style->class style)))) )
+                                              (filter some?))]
+                             (when (not-empty classes)
+                               (->> classes
+                                    (interpose " ")
+                                    (apply str)))))]
+    (-> proto-marker
+        intervals/map->Marker
+        (assoc :foreground (classes-by-keys
+                             [:color
+                              :font-weight
+                              :font-style]
+                             (:style proto-marker)))
+        (assoc :background (classes-by-keys
+                             [:background-color
+                              :border-bottom-style
+                              :border-color
+                              :border-width
+                              :border-radius]
+                             (:style proto-marker))))))
+
+
+(def markup [{:from 0 :to 3 :greedy-left? false :greedy-right? false :id "[0 0 5837]" :style [{:color "red !important"}]}
+             {:from 4 :to 7 :greedy-left? false :greedy-right? false :id "[0 0 5838]" :style [{:color "green !important"}]}
+             {:from 8 :to 11 :greedy-left? false :greedy-right? false :id "[0 0 5839]" :style [{:color "blue !important"}]}])
+
 (defonce editor-state-promise (let [promise (a/promise-chan)]
                                 (go
                                   (let [text (:body (a/<! (http/get "EditorImpl.java")))
                                         markup (->> (edn/read-string (:body (a/<! (http/get "markup.txt"))))
-                                                    (mapv editor/create-marker)
+                                                    (mapv create-marker)
                                                     (sort-by (fn [m] (.-from m))))
                                         metrics (:font-metrics (a/<! andel.editor/*editors-common))
                                         editor-state (-> (core/make-editor-state)
@@ -69,6 +103,7 @@
         ($ w :msRequestAnimationFrame))))
 
 (defn init! []
+
   (go
     (let [*editor-state (atom (a/<! editor-state-promise))
           *keybindings (atom (keybind/make-bindings keymap))
@@ -110,6 +145,7 @@
                                           (reset! *scheduled? false)
                                           (render))))))
       (andel.editor/attach-lexer! *editor-state)
+      (.unmountComponentAtNode js/ReactDOM root)
       (render))))
 
 (init!)

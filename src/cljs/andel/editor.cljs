@@ -475,14 +475,14 @@
         _ (styles/defstyle :render-line [:.render-line {:height (styles/px (utils/line-height metrics))
                                                         :position :relative
                                                         :overflow :hidden}])
-        children (loop [text-zipper (text/scan-to-line (text/zipper text) top-line)
+        children (loop [text-zipper (text/scan-to-line-start (text/zipper text) top-line)
                         markers-zipper (intervals/zipper (:markup document))
                         line-number top-line
                         result #js[]]
-                   (if (>= line-number bottom-line)
+                   (if (or (>= line-number bottom-line) (tree/end? text-zipper))
                      result
                      (let [start-offset      (text/offset text-zipper)
-                           next-line-text-zipper (text/scan-to-line text-zipper (inc line-number))
+                           next-line-text-zipper (text/scan-to-line-start text-zipper (inc line-number))
                            end-offset (cond-> (text/offset next-line-text-zipper)
                                               (not (tree/end? next-line-text-zipper)) (dec))
                            intersects? (intervals/by-intersect (intervals/Marker. start-offset end-offset nil nil nil nil))

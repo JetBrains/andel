@@ -83,7 +83,7 @@
   (some-> m (aget 1)))
 
 (defn by-offset [i]
-  (fn [acc m] (< i (metrics-offset (r-f acc m)))))
+  (fn [acc m] (<= i (metrics-offset (r-f acc m)))))
 
 (defn by-line [i]
   (fn [acc m] (<= i (metrics-line (r-f acc m)))))
@@ -135,27 +135,38 @@
       loc'
       (let [loc' (forget-acc loc')
             o (offset loc')
-            l (line loc')]
+            l (line loc')
+            count-of-newlines (count-of (.-data (tree/node loc')) \newline 0 (- i o))]
         (fz/update-path loc'
-                        #(fz/assoc-o-acc % (array i (+ l (count-of (.-data (tree/node loc')) \newline 0 (- i o))))))))))
+                        #(fz/assoc-o-acc % (array i (+ l count-of-newlines))))))))
 
 (defn retain [loc l]
   (scan-to-offset loc (+ (offset loc) l)))
 
-(defn scan-to-line [loc i]
-  (let [loc' (tree/scan loc (by-line i))]
-    (if (tree/end? loc')
-      loc'
-      (let [loc' (forget-acc loc')
-            o (offset loc')
-            l (line loc')
-            idx (nth-index (.-data (tree/node loc')) \newline (- i l))]
-        (-> loc'
-            (fz/update-path #(fz/assoc-o-acc % (array (+ o idx) i)))
-            (cond-> (< 0 i) (retain 1)))))))
+(defn- set-o-acc-to-nth-eol [loc line-number]
+  (let [loc (forget-acc loc)
+        o (offset loc)
+        l (line loc)
+        idx (nth-index (.-data (tree/node loc)) \newline (- line-number l))]
+    (fz/update-path loc #(fz/assoc-o-acc % (array (+ o idx) line-number)))))
 
-(defn line-length [loc]
-  (let [next-loc (scan-to-line loc (inc (line loc)))
+(defn scan-to-EOL [loc]
+  (let [i (line loc)
+        loc-with-eol (tree/scan loc (by-line (inc i)))]
+    (if (tree/end? loc-with-eol)
+      loc-with-eol
+      (set-o-acc-to-nth-eol loc-with-eol (inc i)))))
+
+(defn scan-to-line-start [loc i]
+  (let [line-loc (tree/scan loc (by-line i))]
+    (if (tree/end? line-loc)
+      line-loc
+      (cond-> line-loc
+              (< 0 i) (-> (set-o-acc-to-nth-eol i)
+                          (retain 1))))))
+
+(defn distance-to-EOL [loc]
+  (let [next-loc (scan-to-line-start loc (inc (line loc)))
         len (- (offset next-loc)
                (offset loc))]
     (if (tree/end? next-loc)
@@ -249,7 +260,7 @@
 
 
 (defn line-text [t i]
-  (let [loc (scan-to-line (zipper t) i)]
-    (text loc (line-length loc))))
+  (let [loc (scan-to-line-start (zipper t) i)]
+    (text loc (distance-to-EOL loc))))
 
 

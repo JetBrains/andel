@@ -25,11 +25,11 @@
 (defn grid-pos->offset
   "transforms [line col] value into absolute offset value"
   [{:keys [line col]} text]
-  (let [line-loc (text/scan-to-line (text/zipper text) line)
-        line-len (text/line-length line-loc)
+  (let [line-loc (text/scan-to-line-start (text/zipper text) line)
+        line-len (text/distance-to-EOL line-loc)
         line-offset (text/offset line-loc)
         text-length (text/text-length text)
-        offset (min (dec text-length) (max 0 (+ line-offset (min line-len col))))]
+        offset (min text-length (max 0 (+ line-offset (min line-len col))))]
     offset))
 
 (defn line->offset
@@ -46,7 +46,7 @@
       (text/line)))
 
 (defn line-length [line text]
-  (text/line-length (text/scan-to-line (text/zipper text) line)))
+  (text/distance-to-EOL (text/scan-to-line-start (text/zipper text) line)))
 
 (defn offset->line-col
   "transforms absolute offset into absolute [line col] value"
@@ -94,7 +94,7 @@
   [line text]
    (-> text
        (text/zipper)
-       (text/scan-to-line line)))
+       (text/scan-to-line-start line)))
 
 (defn line-col->loc
   "transforms absolute [line col] into zipper pointer"
@@ -109,4 +109,4 @@
       (tree/end?)))
 
 (defn scan-to-next-line [loc]
-  (text/scan-to-line loc (inc (line-number loc))))
+  (text/scan-to-line-start loc (inc (line-number loc))))

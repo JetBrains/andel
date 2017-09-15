@@ -167,7 +167,7 @@
           offset   (.-offset node-metrics)
           length   (.-length node-metrics)
           from     (+ offset rightest)]
-      (insersects? (Marker. from (+ from length) nil nil nil nil) interval))))
+      (intersects-inclusive? (Marker. from (+ from length) nil nil nil nil) interval))))
 
 (defn scan-intersect [loc interval]
   (tree/scan loc (by-intersect interval)))
