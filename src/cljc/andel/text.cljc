@@ -79,6 +79,11 @@
 (defn metrics-offset [m]
   (some-> m (aget 0)))
 
+(defn node-offset
+  "Returns offset of the current node ignoring overriding accumulator"
+  [loc]
+  (metrics-offset (tree/loc-acc loc)))
+
 (defn metrics-line [m]
   (some-> m (aget 1)))
 
@@ -140,7 +145,7 @@
   (let [offset-loc (tree/scan loc (by-offset i))]
     (if (tree/end? offset-loc)
       offset-loc
-      (let [o (metrics-offset (tree/loc-acc offset-loc))
+      (let [o (node-offset offset-loc)
             l (line offset-loc)
             count-of-newlines (count-of (.-data (tree/node offset-loc)) \newline 0 (- i o))
             offset-loc (fz/update-path offset-loc
@@ -229,7 +234,7 @@
           rel-offset (- i chunk-offset)]
       (-> loc
           (tree/edit (fn [node]
-                       (let [data (.-data node)]
+                       (let [data (or (some-> node (.-data)) "")]
                          (tree/make-leaf (str (subs data 0 rel-offset) s (subs data rel-offset)) tree-config))))
           (retain (count s))))))
 
