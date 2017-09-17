@@ -62,13 +62,10 @@
                   :leaf-underflown? (fn [s] (< (count s) string-merge-thresh))
                   :merge-leafs (fn [s1 s2] (str s1 s2))})
 
-(defn mark-changed [loc]
-  (update loc :path assoc :changed? true))
-
 (defn make-text [s]
   (-> (tree/zipper (tree/make-node [(tree/make-leaf s tree-config)] tree-config) tree-config)
       (tree/down)
-      (mark-changed)
+      (fz/mark-changed)
       (tree/root)))
 
 (defn zipper [tree]
@@ -93,24 +90,17 @@
 (defn by-line [i]
   (fn [acc m] (<= i (metrics-line (r-f acc m)))))
 
-
 (defn offset [loc]
-  (let [node (.-node loc)
-        path (.-path loc)]
-    (if (tree/end? loc)
-      (metrics-offset (.-metrics node))
-      (or (metrics-offset (some-> path (.-o-acc)))
-          (metrics-offset (some-> path (.-acc)))
-          0))))
+  (if (tree/end? loc)
+    (metrics-offset (.-metrics (.-node loc)))
+    (or (metrics-offset (.-o-acc loc))
+        (metrics-offset (.-acc loc))
+        0)))
 
 (defn line [loc]
-  (let [node (.-node loc)
-        path (.-path loc)
-        acc (some-> path .-acc)
-        o-acc (.-o-acc path)]
-    (if (tree/end? loc)
-      (metrics-line (.-metrics node))
-      (or (metrics-line o-acc) (metrics-line acc) 0))))
+  (if (tree/end? loc)
+    (metrics-line (.-metrics (.-node loc)))
+    (or (metrics-line (.-o-acc loc)) (metrics-line (.-acc loc)) 0)))
 
 (defn count-of [s c from to]
   (loop [res 0
@@ -132,7 +122,7 @@
             (recur (inc i) (dec n))))))))
 
 (defn forget-acc [loc]
-  (fz/update-path loc #(fz/assoc-o-acc % nil)))
+  (fz/assoc-o-acc loc nil))
 
 (defn- at-the-right-border? [loc]
   (let [s (.-data (tree/node loc))
@@ -148,8 +138,7 @@
       (let [o (node-offset offset-loc)
             l (line offset-loc)
             count-of-newlines (count-of (.-data (tree/node offset-loc)) \newline 0 (- i o))
-            offset-loc (fz/update-path offset-loc
-                                       #(fz/assoc-o-acc % (array i (+ l count-of-newlines))))
+            offset-loc (fz/assoc-o-acc offset-loc (array i (+ l count-of-newlines)))
             next-node (tree/next offset-loc)]
         (if (and (at-the-right-border? offset-loc)
                  (not (tree/end? next-node)))
@@ -164,7 +153,7 @@
         o (offset loc)
         l (line loc)
         idx (nth-index (.-data (tree/node loc)) \newline (- line-number l))]
-    (fz/update-path loc #(fz/assoc-o-acc % (array (+ o idx) line-number)))))
+    (fz/assoc-o-acc loc (array (+ o idx) line-number))))
 
 (defn scan-to-EOL [loc]
   (let [i (line loc)

@@ -72,18 +72,6 @@
        (offset->line-col text)
        (line-col->pixels start-line shift metrics)))
 
-(defn offset->loc
-  "transforms absolute offset into zipper pointer"
-  [offset text]
-  (-> text
-      (text/zipper)
-      (text/scan-to-offset offset)))
-
-(defn loc->offset
-  "transforms zipper pointer into offset"
-  [loc]
-  (text/offset loc))
-
 (defn line-number
   "transforms zipper pointer into line"
   [loc]
@@ -100,13 +88,8 @@
   "transforms absolute [line col] into zipper pointer"
   [{:keys [line col]} text]
   (let [line-loc (line->loc line text)
-        line-offset (loc->offset line-loc)]
+        line-offset (text/offset line-loc)]
     (text/scan-to-offset line-loc (+ line-offset col))))
-
-(defn last-line?
-  [line text]
-  (-> (line->loc line text)
-      (tree/end?)))
 
 (defn scan-to-next-line [loc]
   (text/scan-to-line-start loc (inc (line-number loc))))

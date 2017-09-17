@@ -1,6 +1,6 @@
 (ns andel.intervals
-  (:require [andel.tree :as tree]))
-
+  (:require [andel.tree :as tree]
+            [andel.fast-zip :as fz]))
 
 (def plus-infinity #?(:cljs 1000000000.0 #_js/Number.POSITIVE_INFINITY
                       :clj Integer/MAX_VALUE #_100000 #_Double/POSITIVE_INFINITY))
@@ -31,7 +31,7 @@
 (defn where-am-i [loc]
   (let [acc (tree/loc-acc loc)
         node (tree/node loc)
-         acc' (reducing-fn acc (.-metrics node))]
+        acc' (reducing-fn acc (.-metrics node))]
     (+ (.-rightest acc') (.-offset acc'))))
 
 (defn metrics-fn [leaf]
@@ -50,9 +50,6 @@
   (tree/zipper it tree-config))
 
 (defn root [loc] (tree/root loc))
-
-(defn mark-changed [loc]
-  (update loc :path assoc :changed? true))
 
 (defn by-offset [offset]
   (fn [acc m]
@@ -180,7 +177,7 @@
   (-> (map #(tree/make-leaf % tree-config) intervals)
       (tree/make-node tree-config)
       (zipper)
-      (mark-changed)
+      (fz/mark-changed)
       (root)))
 
 (defn make-interval-tree []
@@ -361,25 +358,4 @@
             (recur (tree/scan loc stop?) s)))))))
 
 (defn query-intervals [loc from to]
-  (let [interval (->Marker (offset->tree-basis from) (offset->tree-basis to) nil nil nil nil)
-        intersects? (by-intersect interval)
-        to (.-to interval)
-        overscans? (by-offset to)
-        stop? (fn [acc metrics] (or (intersects? acc metrics)
-                                    (overscans? acc metrics)))]
-    (loop [loc loc
-           markers (transient [])]
-      (cond
-
-        (or (tree/end? loc) (< to (where-am-i loc)))
-        (persistent! markers)
-
-        (tree/leaf? (tree/node loc))
-        (recur (tree/scan (tree/next loc) stop?)
-               (conj! markers (tree-basis->interval (loc->Marker loc))))
-
-        (insersects? (loc->Marker loc) interval)
-        (recur loc (conj! markers (tree-basis->interval (loc->Marker loc))))
-
-        :else
-        (recur (tree/scan loc stop?) markers)))))
+  (into [] (xquery-intervals loc from to)))

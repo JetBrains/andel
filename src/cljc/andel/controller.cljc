@@ -79,7 +79,6 @@
         to-line (+ line delta-line)
         new-v-col (max v-col col)
         new-col (min (utils/line-length to-line text) new-v-col)]
-    (prn "to-line: " to-line " new-col: " new-col)
     {:offset (utils/grid-pos->offset {:line to-line :col new-col} text)
      :v-col new-v-col}))
 

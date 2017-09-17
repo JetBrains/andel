@@ -34,28 +34,25 @@
 
            (defn ^boolean leaf? [x] (not (node? x)))))
 
-(def root-path (fz/->ZipperPath nil nil :root nil nil nil nil))
-
 (defn zipper [tree {:keys [reducing-fn
                             metrics-fn
                             leaf-overflown?
                             split-thresh
                             split-leaf
                             leaf-underflown?
-                            merge-leafs] :as config}]
-  (fz/->ZipperLocation
-   (fz/->ZipperOps node?
-                   #(.-children %)
-                   (fn [node children] (make-node children config))
-                   reducing-fn
-                   metrics-fn
-                   leaf-overflown?
-                   split-thresh
-                   split-leaf
-                   leaf-underflown?
-                   merge-leafs)
-   tree
-   root-path))
+                           merge-leafs] :as config}]
+  (fz/zipper {:ops (fz/->ZipperOps node?
+                                   #(.-children %)
+                                   (fn [node children] (make-node children config))
+                                   reducing-fn
+                                   metrics-fn
+                                   leaf-overflown?
+                                   split-thresh
+                                   split-leaf
+                                   leaf-underflown?
+                                   merge-leafs)
+              :node tree
+              :root? true}))
 
 (defn partition-binary [s thresh]
   (let [cs (count s)]
@@ -75,7 +72,7 @@
       (first c))))
 
 (defn root? [loc]
-  (keyword? (.-ppath (.-path loc))))
+  (.-root? loc))
 
 (defn split-needed? [children config]
   (let [leaf-overflown? (.-leaf-overflown? config)
@@ -106,10 +103,8 @@
       children)))
 
 (defn loc-acc [loc]
-  (let [path (.-path loc)
-        acc (.-acc path)]
-    (or acc
-        ((.-reducing-fn (.-ops loc))))))
+  (or (.-acc loc)
+      ((.-reducing-fn (.-ops loc)))))
 
 (defn merge-needed? [children config]
   (let [leaf-underflown? (.-leaf-underflown? config)
@@ -183,40 +178,30 @@
 
 (defn up [loc]
   (let [node (.-node loc)
-        path (.-path loc)
-        changed? (some-> path .-changed?)]
+        changed? (.-changed? loc)]
     (if changed?
       (let [config (.-ops loc)]
         (if-let [parent (fz/up loc)]
-          (let [balanced-children (balance-children (fz/children parent) config)]
-            (if (and (root? parent) (empty? balanced-children))
-              #_(fz/replace parent (make-node (make-leaf )))
-              (fz/replace parent (make-node balanced-children config)) ;;TODO
-              (fz/replace parent (make-node balanced-children config))))
-          (fz/->ZipperLocation
-           (.-ops loc)
-           (shrink-tree (grow-tree [node] config))
-           root-path)))
+          (fz/replace parent (make-node (balance-children (fz/children parent) config) config))
+          (fz/zipper {:ops (.-ops loc)
+                      :node (shrink-tree (grow-tree [node] config))
+                      :root? true})))
       (fz/up loc))))
 
 (defn right [loc]
-  (let [node (.-node loc)
-        path (.-path loc)
-        acc (.-acc path)]
-    (when-let [r (fz/right loc)]
-      (let [reducing-fn (.-reducing-fn (.-ops loc))
-            acc' (reducing-fn (or acc (reducing-fn)) (.-metrics node))]
-        (fz/update-path r #(fz/assoc-acc % acc'))))))
+  (when-let [r (fz/right loc)]
+    (let [node (.-node loc)
+          reducing-fn (.-reducing-fn (.-ops loc))
+          right-acc (reducing-fn (or (.-acc loc) (reducing-fn))
+                            (.-metrics node))]
+      (fz/assoc-acc r right-acc))))
 
 (defn down [loc]
-  (let [path (.-path loc)
-        acc (some-> path .-acc)]
+  (let [acc (.-acc loc)]
     (some-> (fz/down loc)
-            (fz/update-path #(fz/assoc-acc % acc)))))
+            (fz/assoc-acc acc))))
 
-(defn end? [loc]
-  (keyword? (.-path loc)))
-
+(def end? fz/end?)
 
 (defn root
   "Modified version of clojure.zip/root to work with balancing version of up"
@@ -224,7 +209,7 @@
   (if (end? loc)
     (fz/node loc)
     (let [p (up loc)]
-      (if p
+      (if (some? p)
         (recur p)
         (fz/node loc)))))
 
@@ -236,30 +221,31 @@
 (defn next
   "Modified version of clojure.zip/next to work with balancing version of up"
   [loc]
-  (let [path (.-path loc)]
-    (if (end? loc)
-      loc
-      (or
-       (and (branch? loc) (down loc))
-       (right loc)
-       (loop [p loc]
-         (if-let [u (up p)]
-           (or (right u) (recur u))
-           (fz/->ZipperLocation (.-ops loc) (.-node p) :end)))))))
+  (if (end? loc)
+    loc
+    (or
+     (and (branch? loc) (down loc))
+     (right loc)
+     (loop [p loc]
+       (if-let [u (up p)]
+         (or (right u) (recur u))
+         (fz/zipper {:ops (.-ops loc)
+                     :node (.-node p)
+                     :end? true}))))))
 
 (defn skip
   "Just like next but not going down"
   [loc]
-  (let [path (.-path loc)]
-    (if (end? loc)
-      loc
-      (or
-       (right loc)
-       (loop [p loc]
-         (if-let [u (up p)]
-           (or (right u) (recur u))
-           (fz/->ZipperLocation (.-ops loc) (.-node p) :end)))))))
-
+  (if (end? loc)
+    loc
+    (or
+     (right loc)
+     (loop [p loc]
+       (if-let [u (up p)]
+         (or (right u) (recur u))
+         (fz/zipper {:ops (.-ops loc)
+                     :node (.-node p)
+                     :end? true}))))))
 
 (def insert-right fz/insert-right)
 (def children fz/children)
@@ -296,10 +282,9 @@
   (if (end? loc)
     loc
     (let [node (.-node loc)
-          path (.-path loc)
-          rights (some-> path .-r)
-          lefts (some-> path .-l)
-          acc (some-> path .-acc)
+          rights (.-r loc)
+          lefts (.-l loc)
+          acc (.-acc loc)
           reducing-fn (.-reducing-fn (.-ops loc))
           next-loc (if (root? loc)
                      loc
@@ -310,16 +295,13 @@
                        (when (some? n)
                          (let [m (.-metrics n)]
                            (if (pred acc m)
-                             (fz/->ZipperLocation
-                              (.-ops loc)
-                              n
-                              (fz/->ZipperPath (persistent! l)
-                                               (seq r)
-                                               (.-ppath path)
-                                               (.-pnodes path)
-                                               (.-changed? path)
-                                               acc
-                                               nil))
+                             (fz/zipper {:ops (.-ops loc)
+                                         :node n
+                                         :l (persistent! l)
+                                         :r (seq r)
+                                         :pzip (.-pzip loc)
+                                         :changed? (.-changed? loc)
+                                         :acc acc})
                              (recur (conj! l n)
                                     (first r)
                                     (rest r)
@@ -330,24 +312,24 @@
           next-loc)
         (recur (skip loc) pred)))))
 
-
 (defn insert-left [loc x]
-  (let [reducing-fn (.-reducing-fn (.-ops loc))]
-    (-> loc
-        (fz/insert-left x)
-        (fz/update-path (fn [p] (fz/assoc-acc p (reducing-fn (.-acc p) (.-metrics x))))))))
+  (let [reducing-fn (.-reducing-fn (.-ops loc))
+        loc' (fz/insert-left loc x)]
+    (fz/assoc-acc loc' (reducing-fn (.-acc loc') (.-metrics x)))))
 
 (defn remove [loc]
   (let [node (.-node loc)
-        path (.-path loc)
-        [left] (some-> path .-l)
-        [right] (some-> path .-r)]
+        [left] (.-l loc)
+        [right] (.-r loc)]
     (if (some? right)
-      (fz/->ZipperLocation (.-ops loc)
-                           right
-                           (-> path
-                               (update :r (fn [r] (seq (drop 1 r))))
-                               (assoc :changed? true)))
+      (fz/zipper {:ops (.-ops loc)
+                  :node right
+                  :l (.-l loc)
+                  :r (seq (drop 1 (.-r loc)))
+                  :pzip (.-pzip loc)
+                  :changed? true
+                  :acc (.-acc loc)
+                  :o-acc (.-o-acc loc)})
       (if (some? left)
         (next (fz/remove loc))
         (if (root? loc)

@@ -13,9 +13,7 @@
               :lines []
               :first-invalid 0}
    :editor {:caret {:offset 0 :v-col 0}
-            :selection [0 0]
-            ;; :carets [{:caret 0 :virtual-col 0 :selection {:from 0 :to 0}}]
-            }
+            :selection [0 0]}
    :viewport {:pos [0 0]
               :view-size [0 0]
               :metrics nil
@@ -23,12 +21,13 @@
 
 (defn- edit-at-offset
   [{:keys [document] :as state} offset f]
-  (let [{:keys [text]} document
-        edit-point (utils/offset->loc offset text)]
+  (let [edit-point (-> (:text document)
+                       (text/zipper)
+                       (text/scan-to-offset offset))]
     (-> state
         (assoc-in [:document :text] (-> edit-point
-                                        (f)
-                                        (text/root)))
+                                         (f)
+                                         (text/root)))
         (update-in [:document :timestamp] inc)
         (update-in [:document :first-invalid] min (utils/line-number edit-point)))))
 
@@ -50,7 +49,7 @@
   (let [[sel-from sel-to] (selection state)
         added-length (count insertion)
         caret-offset (caret-offset state)
-        text-length (text/text-length (-> state :document :text))]
+        text-length (-> state :document :text text/text-length)]
     (-> state
         (edit-at-offset offset #(text/insert % insertion))
         (update-in [:document :markup] intervals/type-in [offset (count insertion)])

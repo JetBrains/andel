@@ -217,6 +217,10 @@
   (.push a x)
   a)
 
+(defn append-child! [e c]
+  (.appendChild e c)
+  e)
+
 (defn measure-time [name f]
   (fn [& args]
     (let [start (str name "-start")
@@ -386,26 +390,28 @@
                                   bg-r-f (bg-xf (fn
                                                   ([] (js/document.createElement "div"))
                                                   ([div] div)
-                                                  ([div ch] (.appendChild div ch) div)))
+                                                  ([div ch] (append-child! div ch))))
 
                                   fg-xf (render-text text)
                                   fg-r-f (fg-xf (fn
                                                   ([] (doto (js/document.createElement "pre")
                                                         (.setAttribute "class" "line-text")))
                                                   ([div] div)
-                                                  ([div ch] (.appendChild div ch) div)))]
-                              (el real-dom #js {:dom (doto (transduce2
+                                                  ([div ch] (append-child! div ch))))]
+                              (el real-dom #js {:dom (-> (transduce2
                                                              (comp
                                                                to-relative-offsets
                                                                (multiplex bg-r-f fg-r-f))
                                                              (fn [dom [bg fg]]
-                                                               (doto dom
-                                                                 (.appendChild bg)
-                                                                 (.appendChild fg)))
-                                                             (doto (div "render-line" nil)
-                                                               (cond-> (some? selection) (.appendChild (render-selection selection metrics))))
+                                                               (-> dom
+                                                                   (append-child! bg)
+                                                                   (append-child! fg)))
+                                                             (-> (div "render-line" nil)
+                                                                 (cond-> (some? selection)
+                                                                   (append-child! (render-selection selection metrics))))
                                                              markup)
-                                                       (cond-> (some? caret) (.appendChild (render-caret caret metrics))))}))))}))
+                                                       (cond-> (some? caret)
+                                                         (append-child! (render-caret caret metrics))))}))))}))
 
 
 (defn line-selection [[from to] [line-start-offset line-end-offset]]
