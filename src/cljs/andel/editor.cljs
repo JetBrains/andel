@@ -14,7 +14,8 @@
             [andel.text :as text]
             [andel.intervals :as intervals]
             [andel.utils :as utils]
-            [andel.tree :as tree])
+            [andel.tree :as tree]
+            [cljsjs.element-resize-detector])
   (:require-macros [reagent.interop :refer [$ $!]]
                    [cljs.core.async.macros :refer [go]]))
 
@@ -425,6 +426,14 @@
                                       :infinity)]
         :else nil))
 
+(defonce erd (js/elementResizeDetectorMaker #js{:strategy "scroll"}))
+
+(defn setup-erd [dom-node listener]
+  (.listenTo erd dom-node listener))
+
+(defn remove-erd [dom-node listener]
+  (.removeListener erd dom-node listener))
+
 (def scroll
   (js/createReactClass
    #js {:shouldComponentUpdate
@@ -437,16 +446,19 @@
           (this-as cmp
             (let [props (aget (aget cmp "props") "props")
                   node (.findDOMNode js/ReactDOM cmp)
-                  on-resize (fn []
-                              (let [height ($ node :clientHeight)
-                                    width ($ node :clientWidth)]
+                  on-resize (fn [node]
+                              (let [height ($ node :offsetHeight)
+                                    width ($ node :offsetWidth)]
                                  ;; paint flashing on linux when viewport bigger than screen size
                                 ((props :onResize) (- width 0) (- height 3))))]
-              (on-resize)
-              (.addEventListener
-               js/window ;; replace with erd
-               "resize"
-               on-resize))))
+              (aset cmp "onResize" on-resize)
+              (on-resize node)
+              (setup-erd node on-resize))))
+        :componentWillUnmount
+        (fn []
+          (this-as cmp
+                   (let [node (.findDOMNode js/ReactDOM cmp)]
+                     (remove-erd node (aget cmp "onResize")))))
         :render (fn [_]
                   (this-as this
                     (let [props (aget (aget this "props") "props")
@@ -485,7 +497,8 @@
                         markers-zipper (intervals/zipper (:markup document))
                         line-number top-line
                         result #js[]]
-                   (if (or (>= line-number bottom-line) (tree/end? text-zipper))
+                   (if (and (or (>= line-number bottom-line) (tree/end? text-zipper))
+                            (not (empty? result)))
                      result
                      (let [start-offset      (text/offset text-zipper)
                            next-line-text-zipper (text/scan-to-line-start text-zipper (inc line-number))

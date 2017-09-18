@@ -199,12 +199,13 @@
   (let [screen-height (get-in viewport [:view-size 1])
         line-height (utils/line-height (:metrics viewport))
         lines-count (text/lines-count (:text document))
-        document-height (- (* lines-count line-height) (/ screen-height 2))
+        document-height (* lines-count line-height)
+        allowed-y-offset (max 0 (- document-height (/ screen-height 2)))
         abs (fn [x] (max x (- x)))]
     (update-in state [:viewport :pos]
                (fn [[x y]]
                  (if (< (abs dx) (abs dy))
-                   [x (min document-height (max 0 (+ y dy)))]
+                   [x (min allowed-y-offset (max 0 (+ y dy)))]
                    [(max 0 (+ x dx)) y])))))
 
 (defn resize [state width height]
