@@ -2,13 +2,13 @@
   (:require [clojure.core.async :as a]
             [clojure.tools.reader.edn :as edn]
             [cljs-http.client :as http]
-            
+
             [andel.core :as core]
             [andel.styles :as styles]
             [andel.editor :as editor]
             [andel.controller :as controller]
             [andel.keybind :as keybind]
-            [andel.benchmarks :as bench]
+;;            [andel.benchmarks :as bench]
             [andel.intervals :as intervals])
   (:require-macros [reagent.interop :refer [$ $!]]
                    [cljs.core.async.macros :refer [go]]))
@@ -37,7 +37,7 @@
    "shift-up"     #(controller/move-caret % :up true)
    "shift-down"   #(controller/move-caret % :down true)
    "esc"          controller/drop-selection-on-esc
-   "ctrl-b"       (fn [state]
+   #_"ctrl-b"       #_(fn [state]
                     (let [itree (get-in state [:document :markup])]
                       (bench/bench "TYPE-IN BENCH"
                                    (fn []
@@ -48,7 +48,7 @@
                     state)})
 
 ;; proto-marker-map -> marker-record
-(defn- create-marker [proto-marker]
+(defn- create-marker [{:keys [from to greedy-left? greedy-right? style]}]
   (letfn [(classes-by-keys [ks styles]
                            (let [classes (->> styles
                                               (map (fn [style]
@@ -60,20 +60,19 @@
                                (->> classes
                                     (interpose " ")
                                     (apply str)))))]
-    (-> proto-marker
-        intervals/map->Marker
-        (assoc :foreground (classes-by-keys
-                             [:color
-                              :font-weight
-                              :font-style]
-                             (:style proto-marker)))
-        (assoc :background (classes-by-keys
-                             [:background-color
-                              :border-bottom-style
-                              :border-color
-                              :border-width
-                              :border-radius]
-                             (:style proto-marker))))))
+    (intervals/->Marker from to greedy-left? greedy-right? (intervals/->Attrs (classes-by-keys
+                                                                                              [:background-color
+                                                                                               :border-bottom-style
+                                                                                               :border-color
+                                                                                               :border-width
+                                                                                               :border-radius]
+                                                                                              style)
+                                                                              (classes-by-keys
+                                                                                              [:color
+                                                                                               :font-weight
+                                                                                               :font-style]
+                                                                                              style)
+                                                                              nil))))
 
 
 (def markup [{:from 0 :to 3 :greedy-left? false :greedy-right? false :id "[0 0 5837]" :style [{:color "red !important"}]}

@@ -30,14 +30,14 @@
 (deftest bulk-insertion
   (is (:result (tc/quick-check 100
                                (prop/for-all [bulk intervals-bulk-gen]
-                                             (let [itree (add-intervals (make-interval-tree) bulk)]
+                                             (let [itree (add-markers (make-interval-tree) bulk)]
                                                (= (tree->intervals itree)
                                                   bulk)))))))
 
 (deftest multiple-bulk-insertion
   (is (:result (tc/quick-check 30
                                (prop/for-all [bulk-bulk (g/vector intervals-bulk-gen)]
-                                             (let [itree (reduce add-intervals
+                                             (let [itree (reduce add-markers
                                                                  (make-interval-tree)
                                                                  bulk-bulk)]
                                                (= (set (mapcat vec bulk-bulk))
@@ -79,7 +79,7 @@
 
 (defn bulk->tree [bulk]
   (-> (make-interval-tree)
-      (add-intervals bulk)))
+      (add-markers bulk)))
 
 (deftest type-in-positive-test
   (is (:result (tc/quick-check 100
@@ -107,7 +107,7 @@
                                                       (reduce delete-range (bulk->tree bulk) qs)))))))))
 
 (defn play-query [model {:keys [from to]}]
-  (vec (filter #(insersects? % (map->Marker {:from from :to to})) model)))
+  (vec (filter #(intersects? % (map->Marker {:from from :to to})) model)))
 
 (defn query-gen [max-val]
   (g/fmap (fn [[x y]]

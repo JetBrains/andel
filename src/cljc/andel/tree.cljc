@@ -35,11 +35,11 @@
            (defn ^boolean leaf? [x] (not (node? x)))))
 
 (defn zipper [tree {:keys [reducing-fn
-                            metrics-fn
-                            leaf-overflown?
-                            split-thresh
-                            split-leaf
-                            leaf-underflown?
+                           metrics-fn
+                           leaf-overflown?
+                           split-thresh
+                           split-leaf
+                           leaf-underflown?
                            merge-leafs] :as config}]
   (fz/zipper {:ops (fz/->ZipperOps node?
                                    #(.-children %)
@@ -250,6 +250,7 @@
 (def insert-right fz/insert-right)
 (def children fz/children)
 (def edit fz/edit)
+
 (def replace fz/replace)
 (def insert-child fz/insert-child)
 

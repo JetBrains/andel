@@ -70,6 +70,7 @@
                                                   :font-size (styles/px height)
                                                   :color theme/foreground
                                                   :left 0
+                                                  :line-height "normal"
                                                   :user-select :none
                                                   :top 0}])
         (a/>! loaded {:font-metrics font-metrics})))
@@ -237,7 +238,7 @@
       (let [pendings (array)
             *last-pos (atom 0)
             next-pending (fn [pendings] (reduce (fn [c p] (if (or (nil? c) (< (.-to p) (.-to c))) p c)) nil pendings))
-            make-class (fn [markers] (reduce (fn [c m] (str c " " (.-foreground m))) nil pendings))
+            make-class (fn [markers] (reduce (fn [c m] (str c " " (some-> m (.-attrs) (.-foreground)))) nil pendings))
             js-disj! (fn [arr v]
                        (let [idx (.indexOf arr v)]
                          (if (< -1 idx)
@@ -285,16 +286,15 @@
 
                  :else res))))))))
 
-(defn render-background-markup [{:keys [height width spacing]}]
-  (comp (filter (fn [m] (some? (.-background m))))
-        (map (fn [m]
-               (let [from (.-from m)
-                     to (.-to m)
-                     background (.-background m)]
-                 (div background (style {:left (styles/px (* from width))
-                                         :width (styles/px (* width (- to from)))
-                                         :height (styles/px height)
-                                         :position :absolute})))))))
+(defn render-background-markup [{:keys [height width]}]
+  (map (fn [m]
+         (let [from (.-from m)
+               to (.-to m)
+               background (some-> m (.-attrs) (.-background))]
+           (div background (style {:left (styles/px (* from width))
+                                   :width (styles/px (* width (- to from)))
+                                   :height "100%"
+                                   :position :absolute}))))))
 
 (def real-dom
   (js/createReactClass
@@ -383,16 +383,12 @@
                                                                                  (min text-length (max 0 (- (.-to marker) start-offset)))
                                                                                  false
                                                                                  false
-                                                                                 (.-background marker)
-                                                                                 (.-foreground marker))))
-                                  bg-xf (comp
-                                          (filter (fn [marker] (some? (.-background marker))))
-                                          (render-background-markup metrics))
+                                                                                 (.-attrs marker))))
+                                  bg-xf (filter (fn [marker] (some-> marker (.-attrs) (.-background))))
                                   bg-r-f (bg-xf (fn
-                                                  ([] (js/document.createElement "div"))
-                                                  ([div] div)
-                                                  ([div ch] (append-child! div ch))))
-
+                                                  ([] (transient []))
+                                                  ([r m] (conj! r m))
+                                                  ([r] (persistent! r))))
                                   fg-xf (render-text text)
                                   fg-r-f (fg-xf (fn
                                                   ([] (doto (js/document.createElement "pre")
@@ -403,9 +399,12 @@
                                                              (comp
                                                                to-relative-offsets
                                                                (multiplex bg-r-f fg-r-f))
-                                                             (fn [dom [bg fg]]
+                                                             (fn [dom [bg-markup fg]]
                                                                (-> dom
-                                                                   (append-child! bg)
+                                                                   (append-child! (transduce (render-background-markup metrics)
+                                                                                             (completing append-child!)
+                                                                                             (js/document.createElement "div")
+                                                                                             (sort-by (fn [m] (prn (.-layer (.-attrs m))) (.-layer (.-attrs m))) bg-markup)))
                                                                    (append-child! fg)))
                                                              (-> (div "render-line" nil)
                                                                  (cond-> (some? selection)
@@ -487,7 +486,7 @@
         [w h] view-size
         left-columnt 0
         top-line (int (/ from-y-offset line-height))
-        bottom-line (+ top-line (int (/ h line-height)))
+        bottom-line (+ top-line (int (/ h line-height)) 2)
         y-shift (- (* line-height (- (/ from-y-offset line-height) top-line)))
         caret-offset (get caret :offset)
         _ (styles/defstyle :render-line [:.render-line {:height (styles/px (utils/line-height metrics))
@@ -504,7 +503,7 @@
                            next-line-text-zipper (text/scan-to-line-start text-zipper (inc line-number))
                            end-offset (cond-> (text/offset next-line-text-zipper)
                                               (not (tree/end? next-line-text-zipper)) (dec))
-                           intersects? (intervals/by-intersect (intervals/Marker. start-offset end-offset nil nil nil nil))
+                           intersects? (intervals/by-intersect start-offset end-offset)
                            overscans? (intervals/by-offset end-offset)
                            markers-zipper (tree/scan markers-zipper (fn [acc metrics]
                                                                       (or (intersects? acc metrics)
@@ -529,14 +528,19 @@
                    :key "viewport"
                    :onMouseDown (fn [event]
                                   (when on-mouse-down
-                                    (let [x (- ($ event :clientX) (-> event (.-currentTarget) (.-offsetLeft)))
-                                          y (- ($ event :clientY) (-> event (.-currentTarget) (.-offsetTop)))]
+
+                                    (let [offsetHost (or (.-offsetParent (.-currentTarget event))
+                                                         (.-currentTarget event))
+                                          x (- ($ event :clientX) (.-offsetLeft offsetHost))
+                                          y (- ($ event :clientY) (.-offsetTop offsetHost))]
                                       (on-mouse-down x y))))
                    :onMouseMove  (fn [event]
                                    (when on-drag-selection
                                      (when (= ($ event :buttons) 1)
-                                       (let [x (- ($ event :clientX) (-> event (.-currentTarget) (.-offsetLeft)))
-                                             y (- ($ event :clientY) (-> event (.-currentTarget) (.-offsetTop)))]
+                                       (let [offsetHost (or (.-offsetParent (.-currentTarget event))
+                                                         (.-currentTarget event))
+                                             x (- ($ event :clientX) (.-offsetLeft offsetHost))
+                                             y (- ($ event :clientY) (.-offsetTop offsetHost))]
                                          (on-drag-selection x y)))))}
         children)))
 
@@ -607,6 +611,7 @@
                 (el "div" #js {:key "editor"
                                :style #js {:display "flex"
                                            :flex "1"
+                                           :cursor "text"
                                            :outline "transparent"}
                                :tabIndex -1
                                :onFocus on-focus}

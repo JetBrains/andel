@@ -38,7 +38,7 @@
   (get-in state [:editor :selection]))
 
 (defn insert-markers [state intervals]
-  (update-in state [:document :markup] intervals/add-intervals intervals))
+  (update-in state [:document :markup] intervals/add-markers intervals))
 
 (defn set-selection [state selection caret-offset]
   (-> state

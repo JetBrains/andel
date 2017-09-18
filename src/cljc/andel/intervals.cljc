@@ -2,49 +2,63 @@
   (:require [andel.tree :as tree]
             [andel.fast-zip :as fz]))
 
-(def plus-infinity #?(:cljs 1000000000.0 #_js/Number.POSITIVE_INFINITY
-                      :clj Integer/MAX_VALUE #_100000 #_Double/POSITIVE_INFINITY))
+(def plus-infinity
+  #?(:cljs 1000000000.0 #_js/Number.POSITIVE_INFINITY
+     :clj Integer/MAX_VALUE #_100000 #_Double/POSITIVE_INFINITY))
 
-(defrecord IntervalNode [offset length rightest])
-;; todo: g-l g-r bg fg -> marker-attrs
-(defrecord IntervalLeaf [offset length rightest greedy-left? greedy-right? background foreground])
-(defrecord Marker [from to greedy-left? greedy-right? background foreground])
+(defrecord Attrs [background foreground layer])
+
+(defrecord Data
+  [offset
+   length
+   rightest
+   greedy-left?
+   greedy-right?
+   attrs])
+
+(defrecord Marker
+  [from
+   to
+   greedy-left?
+   greedy-right?
+   attrs])
 
 (defn reducing-fn
   ([] nil)
   ([left right]
    (cond (nil? left)
-         right
-         (nil? right)
-         left
-         :else
-         (let [l-offset (.-offset left)
-               l-length (.-length left)
-               l-rightest (.-rightest left)
-               r-offset (.-offset right)
-               r-rightest (.-rightest right)
-               r-length (.-length right)]
-           (IntervalNode. l-offset
-                          (max l-length (+ l-rightest r-offset r-length))
-                          (+ l-rightest r-offset r-rightest))))))
+     right
+     (nil? right)
+     left
+     :else
+     (let [l-offset   (.-offset left)
+           l-length   (.-length left)
+           l-rightest (.-rightest left)
+           r-offset   (.-offset right)
+           r-rightest (.-rightest right)
+           r-length   (.-length right)]
+       (Data. l-offset
+              (max l-length (+ l-rightest r-offset r-length))
+              (+ l-rightest r-offset r-rightest)
+              nil nil nil)))))
 
-(defn where-am-i [loc]
-  (let [acc (tree/loc-acc loc)
+(defn marker-from [loc]
+  (assert (tree/leaf? loc))
+  (let [acc  (tree/loc-acc loc)
         node (tree/node loc)
         acc' (reducing-fn acc (.-metrics node))]
-    (+ (.-rightest acc') (.-offset acc'))))
+    (+ (.-offset acc') (.-rightest acc'))))
 
-(defn metrics-fn [leaf]
-  (let [offset (.-offset leaf)
-        length (.-length leaf)
-        rightest (.-rightest leaf)]
-    (IntervalNode. offset length rightest)))
+(defn marker-to [loc]
+  (+ (marker-from loc)
+     (-> (tree/node loc) (.-data) (.-length))))
 
-(def tree-config {:reducing-fn reducing-fn
-                  :metrics-fn metrics-fn
-                  :leaf-overflown? (constantly false)
-                  :split-thresh 32
-                  :leaf-underflown? (constantly false)})
+(def tree-config
+  {:reducing-fn      reducing-fn
+   :metrics-fn       identity
+   :leaf-overflown?  (constantly false)
+   :split-thresh     32
+   :leaf-underflown? (constantly false)})
 
 (defn zipper [it]
   (tree/zipper it tree-config))
@@ -56,164 +70,155 @@
     (let [m (reducing-fn acc m)]
       (< offset (+ (.-offset m) (.-rightest m))))))
 
-(defn loc->metrics [loc]
-  (.-metrics (tree/node loc)))
-
-(defn loc->data [loc]
-  (assert (tree/leaf? loc))
-  (.-data (tree/node loc)))
-
-(defn loc->Marker [loc]
-  (let [metrics (loc->metrics loc)
-        leaf-data (loc->data loc)
-        rightest (or (some-> (tree/loc-acc loc) (.-rightest)) 0)
-        from (+ (.-offset metrics) rightest)
-        length (.-length metrics)]
-    (Marker. from
-             (+ from length)
-             (.-greedy-left? leaf-data)
-             (.-greedy-right? leaf-data)
-             (.-background leaf-data)
-             (.-foreground leaf-data))))
-
 (defn offset->tree-basis [offset]
   (inc offset))
-
-(defn interval->tree-basis [interval]
-  (let [from (.-from interval)
-        to (.-to interval)
-        g-l? (.-greedy-left? interval)
-        g-r? (.-greedy-right? interval)
-        bg (.-background interval)
-        fg (.-foreground interval)]
-    (Marker. (offset->tree-basis from) (offset->tree-basis to) g-l? g-r? bg fg)))
 
 (defn tree-basis->offset [offset]
   (dec offset))
 
-(defn tree-basis->interval [interval]
-  (let [from (.-from interval)
-        to (.-to interval)
-        g-l? (.-greedy-left? interval)
-        g-r? (.-greedy-right? interval)
-        bg (.-background interval)
-        fg (.-foreground interval)]
-    (Marker. (tree-basis->offset from) (tree-basis->offset to) g-l? g-r? bg fg)))
+(defn loc->Marker [loc]
+  (let [node     (tree/node loc)
+        metrics  (.-metrics node)
+        data     (.-data node)
+        length   (.-length metrics)
+        from     (marker-from loc)]
+    (Marker. (tree-basis->offset from)
+             (tree-basis->offset (+ from length))
+             (.-greedy-left? data)
+             (.-greedy-right? data)
+             (.-attrs data))))
+
+(defn loc->tree-marker
+  "Same as loc->Marker but offsets are in tree basis"
+  [loc]
+  (let [node     (tree/node loc)
+        metrics  (.-metrics node)
+        data     (.-data node)
+        length   (.-length metrics)
+        from     (marker-from loc)]
+    (Marker. from
+             (+ from length)
+             (.-greedy-left? data)
+             (.-greedy-right? data)
+             (.-attrs data))))
+
 
 (defn update-leaf [loc f]
   (assert (tree/leaf? (tree/node loc)) "update-leaf should recieve leaf")
-  (tree/edit loc
-             (fn [leaf]
-               (let [data (.-data leaf)
-                     fixed-interval (f data)]
-                 (tree/->Leaf fixed-interval fixed-interval)))))
+  (let [metrics-fn (.-metrics-fn (.-ops loc))]
+    (tree/edit loc
+               (fn [leaf]
+                 (let [data' (f (.-data leaf))]
+                   (tree/->Leaf (metrics-fn data') data'))))))
 
 (defn update-leaf-offset [loc f]
-  (update-leaf loc (fn [data] (let [offset (.-offset data)
-                                    length (.-length data)
-                                    rightest (.-rightest data)
-                                    g-l? (.-greedy-left? data)
-                                    g-r? (.-greedy-right? data)
-                                    bg (.-background data)
-                                    fg (.-foreground data)]
-                                (IntervalLeaf. (f offset) length rightest g-l? g-r? bg fg)))))
+  (update-leaf loc
+               (fn [data]
+                 (let [offset   (.-offset data)
+                       length   (.-length data)
+                       rightest (.-rightest data)
+                       g-l?     (.-greedy-left? data)
+                       g-r?     (.-greedy-right? data)
+                       attrs    (.-attrs data)]
+                   (Data. (f offset) length rightest g-l? g-r? attrs)))))
 
 (defn update-leaf-length [loc f]
-  (update-leaf loc (fn [data] (let [offset (.-offset data)
-                                    length (.-length data)
-                                    rightest (.-rightest data)
-                                    g-l? (.-greedy-left? data)
-                                    g-r? (.-greedy-right? data)
-                                    bg (.-background data)
-                                    fg (.-foreground data)]
-                                (IntervalLeaf. offset (f length) rightest g-l? g-r? bg fg)))))
+  (update-leaf loc
+               (fn [data]
+                 (Data. (.-offset data)
+                          (f (.-length data))
+                          (.-rightest data)
+                          (.-greedy-left? data)
+                          (.-greedy-right? data)
+                          (.-attrs data)))))
 
 (defn tree->intervals [tr]
   (loop [loc (zipper tr)
          acc []]
     (cond (tree/end? loc)
-          (->> acc
-               (drop 1)       ;; drop left sentinel
-               (drop-last 1)  ;; drop right sentinel
-               (map tree-basis->interval)
-               (vec))
+      (->> acc
+           (drop 1) ;; drop left sentinel
+           (drop-last 1) ;; drop right sentinel
+           (vec))
 
-          (tree/leaf? (tree/node loc))
-          (recur (tree/next loc) (conj acc (loc->Marker loc)))
+      (tree/leaf? (tree/node loc))
+      (recur (tree/next loc) (conj acc (loc->Marker loc)))
 
-          :else
-          (recur (tree/next loc) acc))))
+      :else
+      (recur (tree/next loc) acc))))
 
-(defn insersects? [a b]
-  (let [fst (if (< (.-from a) (.-from b)) a b)
-        snd (if (< (.-from a) (.-from b)) b a)
-        fst-len (- (.-to fst) (.-from fst))
-        snd-len (- (.-to snd) (.-from snd))]
-    (if (or (identical? fst-len 0) (identical? snd-len 0))
+(defn intersects? [from1 to1 from2 to2]
+  (let [to-fst (if (< from1 from2) to1 to2)
+        from-snd   (max from1 from2)
+        len1       (- to1 from1)
+        len2       (- to2 from2)]
+    (if (or (identical? len1 0) (identical? len2 0))
       false
-      (< (.-from snd) (.-to fst)))))
+      (< from-snd to-fst))))
 
-(defn intersects-inclusive? [a b]
-  (let [fst (if (< (.-from a) (.-from b)) a b)
-        snd (if (< (.-from a) (.-from b)) b a)]
-    (<= (.-from snd) (.-to fst))))
+(defn intersects-inclusive? [from1 to1 from2 to2]
+  (let [to-fst (if (< from1 from2) to1 to2)
+        from-snd   (max from1 from2)
+        len1       (- to1 from1)
+        len2       (- to2 from2)]
+    (<= from-snd to-fst)))
 
-(defn by-intersect [interval]
+(defn by-intersect [from to]
   (fn [acc-metrics node-metrics]
     (let [rightest (or (some-> acc-metrics (.-rightest)) 0)
           offset   (.-offset node-metrics)
           length   (.-length node-metrics)
-          from     (+ offset rightest)]
-      (intersects-inclusive? (Marker. from (+ from length) nil nil nil nil) interval))))
+          loc-from     (+ offset rightest)]
+      (intersects-inclusive? loc-from (+ loc-from length)
+                             from to))))
 
-(defn scan-intersect [loc interval]
-  (tree/scan loc (by-intersect interval)))
-
-(defn make-leaf [offset length greedy-left? greedy-right? background foreground]
-  (tree/make-leaf (IntervalLeaf. offset length 0 greedy-left? greedy-right? background foreground)
-                  tree-config))
-
-(defn intervals->tree [intervals]
-  (-> (map #(tree/make-leaf % tree-config) intervals)
-      (tree/make-node tree-config)
-      (zipper)
-      (fz/mark-changed)
-      (root)))
+(defn make-leaf [offset length greedy-left? greedy-right? attrs]
+  (tree/make-leaf (Data. offset length 0 greedy-left? greedy-right? attrs) tree-config))
 
 (defn make-interval-tree []
-  (intervals->tree [(IntervalLeaf. 0 0 0 false false nil nil) ;; left sentinel
-                    (IntervalLeaf. plus-infinity 0 0 false false nil nil)] ;; right sentinel
-                   ))
+  (let [sentinels [(tree/make-leaf (Data. 0 0 0 false false nil) tree-config)
+                   (tree/make-leaf (Data. plus-infinity 0 0 false false nil) tree-config)]]
+    (tree/make-node sentinels tree-config)))
 
-(defn insert-one [loc interval]
-  (let [from (.-from interval)
-        to (.-to interval)
-        greedy-left? (.-greedy-left? interval)
-        greedy-right? (.-greedy-right? interval)
-        bg (.-background interval)
-        fg (.-foreground interval)
-        r-sibling-loc (tree/scan loc (by-offset from))
-        r-offset (-> r-sibling-loc tree/node .-metrics .-offset)
-        r-sibling-marker (loc->Marker r-sibling-loc)
-        r-from (.-from r-sibling-marker)
-        r-to (.-to r-sibling-marker)
-        len (- to from)
-        new-r-offset (- r-from from)
-        offset (- r-offset new-r-offset)]
-    (-> r-sibling-loc
-        (tree/insert-left (make-leaf offset len greedy-left? greedy-right? bg fg))
-        (update-leaf-offset (constantly new-r-offset)))))
+(defn insert-one
+  ([loc from to greedy-left? greedy-right? attrs]
+   (let [r-sibling-loc    (tree/scan loc (by-offset from))
+         r-offset         (-> r-sibling-loc tree/node (.-metrics) (.-offset))
+         r-from           (marker-from r-sibling-loc)
+         r-to             (marker-to r-sibling-loc)
+         len              (- to from)
+         new-r-offset     (- r-from from)
+         offset           (- r-offset new-r-offset)]
+     (-> r-sibling-loc
+         (tree/insert-left (make-leaf offset len greedy-left? greedy-right? attrs))
+         (update-leaf-offset (constantly new-r-offset)))))
+  ([loc marker]
+   (let [from             (.-from marker)
+         to               (.-to marker)
+         greedy-left?     (.-greedy-left? marker)
+         greedy-right?    (.-greedy-right? marker)
+         attrs            (.-attrs marker)]
+     (insert-one loc from to greedy-left? greedy-right? attrs))))
 
-(defn add-intervals [itree intervals]
-  (root (reduce (fn [t i] (insert-one t (interval->tree-basis i))) (zipper itree) intervals)))
+(defn add-markers [itree markers]
+  (root
+   (reduce
+    (fn [loc m]
+      (insert-one loc
+                  (offset->tree-basis (.-from m))
+                  (offset->tree-basis (.-to m))
+                  (.-greedy-left? m)
+                  (.-greedy-right? m)
+                  (.-attrs m)))
+    (zipper itree)
+    markers)))
 
 (defn remove-leaf [loc]
-  (let [data (loc->data loc)
+  (let [data   (.-data (tree/node loc))
         offset (.-offset data)
         length (.-length data)
-        marker (loc->Marker loc)
-        from (.-from marker)
-        to (.-to marker)]
+        from   (marker-from loc)
+        to     (marker-to loc)]
     (-> loc
         tree/remove
         ((fn [loc]
@@ -225,16 +230,17 @@
 (defn next-changed [loc offset]
   (tree/scan loc
              (fn [acc-metrics node-metrics]
-               (let [metrics (reducing-fn acc-metrics node-metrics)
-                     rightest (or (some->  acc-metrics .-rightest) 0)
+               (let [metrics     (reducing-fn acc-metrics node-metrics)
+                     rightest    (or (some-> acc-metrics (.-rightest)) 0)
                      node-offset (.-offset node-metrics)
-                     length (.-length node-metrics)
-                     from (+ node-offset rightest)
-                     to (+ from length)]
-                 (or (and (<= from offset)
-                          (<= offset to))
+                     length      (.-length node-metrics)
+                     from        (+ node-offset rightest)
+                     to          (+ from length)]
+                 (or
+                  (and (<= from offset)
+                       (<= offset to))
 
-                     (< offset (+ (.-offset metrics) (.-rightest metrics))))))))
+                  (< offset (+ (.-offset metrics) (.-rightest metrics))))))))
 
 ;; tree -> offset -> size -> [tree acc]
 (defn collect-with-remove [itree offset size]
@@ -243,119 +249,121 @@
     (let [new-loc (next-changed loc offset)]
       (if (tree/end? new-loc)
         [(tree/root new-loc) acc]
-        (let [from-to (loc->Marker new-loc)
-              from (.-from from-to)
-              to (.-to from-to)]
+        (let [from    (marker-from new-loc)
+              to      (marker-to new-loc)]
           (if (< offset from)
             [(tree/root (update-leaf-offset new-loc #(+ % size))) (persistent! acc)]
-            (recur (remove-leaf new-loc) (conj! acc from-to))))))))
+            (recur (remove-leaf new-loc) (conj! acc (loc->tree-marker new-loc)))))))))
 
-(defn process-interval [interval offset size]
-  (let [from (.-from interval)
-        to (.-to interval)
-        greedy-left? (.-greedy-left? interval)
-        greedy-right? (.-greedy-right? interval)]
-    (cond
-      (and greedy-left?
-           (= offset from))
-      (assoc interval :to (+ to size))
+(defn process-interval [marker offset size]
+  (let [from          (.-from marker)
+        to            (.-to marker)
+        greedy-left?  (.-greedy-left? marker)
+        greedy-right? (.-greedy-right? marker)
+        [from to] (cond
+                    (and greedy-left?
+                         (= offset from))
+                    [from (+ to size)]
 
-      (and greedy-right?
-           (= offset to))
-      (assoc interval :to (+ to size))
+                    (and greedy-right?
+                         (= offset to))
+                    [from (+ to size)]
 
-      (and (< from offset)
-           (< offset to))
-      (assoc interval :to (+ to size))
+                    (and (< from offset)
+                         (< offset to))
+                    [from (+ to size)]
 
-      (<= offset from)
-      (assoc interval
-             :to (+ to size)
-             :from (+ from size))
+                    (<= offset from)
+                    [(+ from size) (+ to size)]
 
-      :else
-      interval)))
+                    :else
+                    [from to])]
+    (Marker. from
+             to
+             greedy-left?
+             greedy-right?
+             (.-attrs marker))))
 
 (defn type-in [itree [offset size]]
-  (let [offset (offset->tree-basis offset)
+  (let [offset             (offset->tree-basis offset)
         [itree' intervals] (collect-with-remove itree offset size)
-        intervals' (sort-by :from (map #(process-interval % offset size) intervals))]
+        intervals'         (sort-by :from (map #(process-interval % offset size) intervals))]
     (->> intervals'
          (reduce insert-one (zipper itree'))
          root)))
 
-
 (defn collect-with-remove-changed [itree offset size]
   (let [changed? (fn [acc-metrics node-metrics]
-                   (let [metrics (reducing-fn acc-metrics node-metrics)
-                         rightest (or (some-> acc-metrics .-rightest) 0)
+                   (let [metrics     (reducing-fn acc-metrics node-metrics)
+                         rightest    (or (some-> acc-metrics .-rightest) 0)
                          node-offset (.-offset node-metrics)
-                         length (.-length node-metrics)
-                         from (+ node-offset rightest)
-                         to (+ from length)]
-                     (or (intersects-inclusive? (Marker. from to nil nil nil nil) (Marker. offset (+ offset size) nil nil nil nil))
-                         (< (+ offset size) (+ (.-offset metrics) (.-rightest metrics))))))]
+                         length      (.-length node-metrics)
+                         from        (+ node-offset rightest)
+                         to          (+ from length)]
+                     (or
+                      (intersects-inclusive? from to
+                                             offset (+ offset size))
+                      (< (+ offset size) (+ (.-offset metrics) (.-rightest metrics))))))]
     (loop [loc (zipper itree)
            acc (transient [])]
       (let [new-loc (tree/scan loc changed?)]
         (if (tree/end? new-loc)
           [(tree/root new-loc) acc]
-          (let [from-to (loc->Marker new-loc)
-                from (.-from from-to)
-                to (.-to from-to)]
+          (let [from    (marker-from new-loc)
+                to      (marker-to new-loc)]
             (if (< (+ offset size) from)
               [(tree/root (update-leaf-offset new-loc #(- % size))) (persistent! acc)]
-              (recur (remove-leaf new-loc) (conj! acc from-to)))))))))
+              (recur (remove-leaf new-loc) (conj! acc (loc->tree-marker new-loc))))))))))
 
-(defn process-single-interval-deletion [interval offset length]
-  (let [from (.-from interval)
-        to (.-to interval)
-        g-l? (.-greedy-left? interval)
-        g-r? (.-greedy-right? interval)
-        bg (.-background interval)
-        fg (.-foreground interval)
-        update-point (fn [point offset length] (if (< offset point)
-                                                 (max offset (- point length))
-                                                 point))]
+(defn process-single-interval-deletion [marker offset length]
+  (let [from         (.-from marker)
+        to           (.-to marker)
+        g-l?         (.-greedy-left? marker)
+        g-r?         (.-greedy-right? marker)
+        update-point (fn [point offset length]
+                       (if (< offset point)
+                         (max offset (- point length))
+                         point))]
     (Marker. (update-point from offset length)
              (update-point to offset length)
              g-l?
              g-r?
-             bg
-             fg)))
+             (.-attrs marker))))
 
 (defn delete-range [itree [offset size]]
-  (let [offset (offset->tree-basis offset)
+  (let [offset             (offset->tree-basis offset)
         [itree' intervals] (collect-with-remove-changed itree offset size)
-        intervals' (sort-by :from (map #(process-single-interval-deletion % offset size) intervals))]
+        intervals'         (sort-by :from (map #(process-single-interval-deletion % offset size) intervals))]
     (->> intervals'
          (reduce insert-one (zipper itree'))
          root)))
 
 (defn xquery-intervals [loc from to]
-  (let [interval (->Marker (offset->tree-basis from) (offset->tree-basis to) nil nil nil nil)
-        intersects? (by-intersect interval)
-        to (.-to interval)
-        overscans? (by-offset to)
-        stop? (fn [acc metrics] (or (intersects? acc metrics)
-                                    (overscans? acc metrics)))]
+  (let [from           (offset->tree-basis from)
+        to             (offset->tree-basis to)
+        my-intersects? (by-intersect from to)
+        overscans?     (by-offset to)
+        stop?          (fn [acc metrics]
+                         (or (my-intersects? acc metrics)
+                             (overscans? acc metrics)))]
     (tree/reducible
-      (fn [f init]
-        (loop [loc loc
-               s init]
-          (cond
-            (or (tree/end? loc) (< to (where-am-i loc)))
-            s
+     (fn [f init]
+       (loop [loc loc
+              s   init]
+         (cond
+           (or (tree/end? loc) (< to (marker-from loc)))
+           s
 
-            (tree/leaf? (tree/node loc))
-            (recur (tree/scan (tree/next loc) stop?)
-                   (f s (tree-basis->interval (loc->Marker loc))))
+           (tree/leaf? (tree/node loc))
+           (recur (tree/scan (tree/next loc) stop?)
+             (f s (loc->Marker loc)))
 
-            (insersects? (loc->Marker loc) interval)
-            (recur loc (f s (tree-basis->interval (loc->Marker loc))))
+           (intersects? (marker-from loc) (marker-to loc)
+                        from to)
+           (recur loc (f s (loc->Marker loc)))
 
-            :else
-            (recur (tree/scan loc stop?) s)))))))
+           :else
+           (recur (tree/scan loc stop?) s)))))))
 
 (defn query-intervals [loc from to]
   (into [] (xquery-intervals loc from to)))
