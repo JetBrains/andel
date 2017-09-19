@@ -13,23 +13,23 @@
   (:refer-clojure :exclude (replace remove next skip))
   #?(:cljs (:require-macros [andel.tree :refer [->zipper z-merge]])))
 
-(defrecord Node [metrics children])
+(defonce records
+  (do
+    (defrecord Node [metrics children])
+    (defrecord Leaf [metrics data])
+    (defrecord ZipperOps [branch?
+                           children
+                           make-node
 
-(defrecord Leaf [metrics data])
-
-(defrecord ZipperOps [branch?
-                      children
-                      make-node
-
-                      reducing-fn
-                      metrics-fn
-                      leaf-overflown?
-                      split-thresh
-                      split-leaf
-                      leaf-underflown?
-                      merge-leafs])
-
-(defrecord ZipperLocation [^ZipperOps ops node l r changed? acc o-acc pzip end? root?])
+                           reducing-fn
+                           metrics-fn
+                           leaf-overflown?
+                           split-thresh
+                           split-leaf
+                           leaf-underflown?
+                           merge-leafs])
+    (defrecord ZipperLocation [ops node l r changed? acc o-acc pzip end? root?])
+    :defined))
 
 #?(:clj
    (defmacro ->zipper [{:keys [ops node l r changed? acc o-acc pzip end? root?]}]
