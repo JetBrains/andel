@@ -257,37 +257,21 @@
   (z-merge loc {:node node
                 :changed? true}))
 
-(defn up* [^ZipperLocation loc]
-  (when-let [pzip (.-pzip loc)]
-    (if (.-changed? loc)
-      (z-merge pzip
-               {:node (make-node* loc
-                                  (.-node pzip)
-                                  (into (.-l loc) (cons (.-node loc) (.-r loc))))
-                :changed? true})
-      pzip)))
-
 (defn up [loc]
   (let [node (.-node loc)
-        changed? (.-changed? loc)]
+        changed? (.-changed? loc)
+        pzip (.-pzip loc)
+        config (.-ops loc)]
     (if changed?
-      (let [config (.-ops loc)]
-        (if-let [parent (up* loc)]
-          (replace parent (make-node (balance-children (children parent) config) config))
-          (->zipper {:ops (.-ops loc)
-                     :node (shrink-tree (grow-tree [node] config))
-                     :root? true})))
-      (up* loc))))
-
-(defn right*
-  "Returns the loc of the right sibling of the node at this loc, or nil"
-  [^ZipperLocation loc]
-  (when-let [r (.-r loc)]
-    (z-merge loc {:node (first r)
-                  :l (conj (.-l loc) (.-node loc))
-                  :r (clojure.core/next r)
-                  :acc nil
-                  :o-acc nil})))
+      (if (some? pzip)
+        (let [children (into (.-l loc) (cons (.-node loc) (.-r loc)))]
+          (z-merge pzip
+                   {:node (make-node (balance-children children config) config)
+                    :changed? true}))
+        (->zipper {:ops (.-ops loc)
+                   :node (shrink-tree (grow-tree [node] config))
+                   :root? true}))
+      pzip)))
 
 (defn right [loc]
   (when-let [[r & rs] (.-r loc)]
@@ -437,66 +421,27 @@
                   :changed? true
                   :acc (reducing-fn (.-acc loc)
                                     (.-metrics item))})))
-
-(defn rightmost*
-  "Returns the loc of the rightmost sibling of the node at this loc, or self"
+(defn remove
+  "Removes the node at loc, returning next deep first loc, so that acc stays the same"
   [^ZipperLocation loc]
-  (if-let [r (.-r loc)]
-    (->zipper {:ops (.-ops loc)
-               :node (last r)
-               :l (apply conj (.-l loc) (.-node loc) (butlast r))
-               :r nil
-               :pzip (.-pzip loc)
-               :changed? (.-changed? loc)
-               :acc nil
-               :o-acc nil})
-    loc))
-
-(defn remove*
-  "Removes the node at loc, returning the loc that would have preceded it in a depth-first walk."
-  [^ZipperLocation loc]
-  (if-let [pzip (.-pzip loc)]
-    (if (pos? (count (.-l loc)))
-      (loop [loc (->zipper {:ops (.-ops loc)
-                            :node (peek (.-l loc))
-                            :l (pop (.-l loc))
-                            :r (.-r loc)
-                            :pzip (.-pzip loc)
-                            :changed? true
-                            :acc (.-acc loc)
-                            :o-acc (.-o-acc loc)})]
-        (if-let [child (and (branch? loc) (down loc))]
-          (recur (rightmost* child))
-          loc))
-      (->zipper {:ops (.-ops loc)
-                 :node (make-node* loc
-                                   (.-node (.-pzip loc))
-                                   (.-r loc))
-                 :l (.-l pzip)
-                 :r (.-r pzip)
-                 :pzip (.-pzip pzip)
-                 :changed? true
-                 :acc (.-acc pzip)
-                 :o-acc (.-o-acc pzip)}))
-    (throw (new #?(:clj Exception :cljs js/Error) "Remove at top"))))
-
-(defn remove [loc]
-  (let [node (.-node loc)
-        [left] (.-l loc)
-        [right] (.-r loc)]
-    (if (some? right)
-      (->zipper {:ops (.-ops loc)
-                 :node right
-                 :l (.-l loc)
-                 :r (seq (drop 1 (.-r loc)))
-                 :pzip (.-pzip loc)
-                 :changed? true
-                 :acc (.-acc loc)
-                 :o-acc (.-o-acc loc)})
-      (if (some? left)
-        (next (remove* loc))
-        (if (root? loc)
-          (replace loc (make-node [] (.-ops loc)))
+  (let [node (.-node loc)]
+    (if (root? loc)
+      (replace loc (make-node [] (.-ops loc)))
+      (if-let [[r & rs] (.-r loc)]
+        (->zipper {:ops (.-ops loc)
+                   :node r
+                   :l (.-l loc)
+                   :r rs
+                   :pzip (.-pzip loc)
+                   :changed? true
+                   :acc (.-acc loc)})
+        (if (pos? (count (.-l loc)))
+          (next (->zipper {:ops (.-ops loc)
+                           :node (peek (.-l loc))
+                           :l (pop (.-l loc))
+                           :r (.-r loc)
+                           :pzip (.-pzip loc)
+                           :changed? true}))
           (recur (up loc)))))))
 
 (defn compare-zippers [z1 z2 stop?]

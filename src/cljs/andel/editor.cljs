@@ -404,7 +404,7 @@
                                                                    (append-child! (transduce (render-background-markup metrics)
                                                                                              (completing append-child!)
                                                                                              (js/document.createElement "div")
-                                                                                             (sort-by (fn [m] (prn (.-layer (.-attrs m))) (.-layer (.-attrs m))) bg-markup)))
+                                                                                             (sort-by (fn [m] (.-layer (.-attrs m))) bg-markup)))
                                                                    (append-child! fg)))
                                                              (-> (div "render-line" nil)
                                                                  (cond-> (some? selection)
