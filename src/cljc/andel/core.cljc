@@ -11,7 +11,8 @@
               :modespec "text/x-java"
               :timestamp 0
               :lines []
-              :first-invalid 0}
+              :first-invalid 0
+              :deleted-markers #{}}
    :editor {:caret {:offset 0 :v-col 0}
             :selection [0 0]}
    :viewport {:pos [0 0]
@@ -37,8 +38,11 @@
 (defn selection [state]
   (get-in state [:editor :selection]))
 
-(defn insert-markers [state intervals]
-  (update-in state [:document :markup] intervals/add-markers intervals))
+(defn insert-markers [state markers]
+  (update-in state [:document :markup] intervals/add-markers markers))
+
+(defn delete-markers [state marker-ids]
+  (update-in state [:document :deleted-markers] into marker-ids))
 
 (defn set-selection [state selection caret-offset]
   (-> state
@@ -52,7 +56,7 @@
         text-length (-> state :document :text text/text-length)]
     (-> state
         (edit-at-offset offset #(text/insert % insertion))
-        (update-in [:document :markup] intervals/type-in [offset (count insertion)])
+        (update-in [:document :markup] intervals/type-in offset (count insertion))
         (cond->
           (<= offset sel-from) (update-in [:editor :selection 0] #(+ % added-length))
           (<= offset caret-offset) (update-in [:editor :caret :offset] #(+ % added-length))
@@ -70,7 +74,7 @@
         text-length (text/text-length text)]
     (-> state
         (edit-at-offset offset #(text/delete % length))
-        (update-in [:document :markup] intervals/delete-range [offset length])
+        (update-in [:document :markup] intervals/delete-range offset length)
         (cond->
           (<= offset sel-from) (update-in [:editor :selection 0] #(max offset (- % length)))
           (<= offset caret-offset) (update-in [:editor :caret :offset] #(max offset (- % length)))

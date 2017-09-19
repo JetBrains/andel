@@ -89,7 +89,7 @@
            (fn []
              (let [offset (rand-int 160000)
                    size 1]
-               (intervals/delete-range itree [offset size])))
+               (intervals/delete-range itree offset size)))
            :count 1)))
 
 (defn bench-editing [markup]

@@ -86,7 +86,7 @@
                                (prop/for-all [[bulk qs] bulk-offset-size-gen]
                                              (= (set (reduce play-type-in bulk qs))
                                                 (set (tree->intervals
-                                                      (reduce type-in (bulk->tree bulk) qs)))))))))
+                                                       (reduce (fn [t [o s]] (type-in t o s)) (bulk->tree bulk) qs)))))))))
 
 ;; model -> [offset size] -> model
 (defn play-delete-range [model [offset length]]
@@ -105,7 +105,7 @@
                        (prop/for-all [[bulk qs] bulk-offset-size-gen]
                                      (= (set (reduce play-delete-range bulk qs))
                                         (set (tree->intervals
-                                              (reduce delete-range (bulk->tree bulk) qs))))))
+                                               (reduce (fn [t [o s]] (delete-range t o s)) (bulk->tree bulk) qs))))))
        )))
 
 (defn play-query [model {:keys [from to]}]
@@ -144,7 +144,7 @@
                                 [bulk intervals-bulk-gen
                                  ops (g/vector operation-gen)]
                                 (let [[tree model] (reduce (fn [[tree model] [[play real] args]]
-                                                             [(real tree args)
+                                                             [(apply real tree args)
                                                               (play model args)])
                                                            [(bulk->tree bulk) bulk]
                                                            ops)]

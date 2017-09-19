@@ -43,9 +43,11 @@
                                    (fn []
                                      (let [offset (rand-int 160000)
                                            size 1]
-                                       (andel.intervals/type-in itree [offset size])))
+                                       (andel.intervals/type-in itree offset size)))
                                    :count 10000))
                     state)})
+
+(defonce next-marker-id (atom 0))
 
 ;; proto-marker-map -> marker-record
 (defn- create-marker [{:keys [from to greedy-left? greedy-right? style]}]
@@ -60,18 +62,19 @@
                                (->> classes
                                     (interpose " ")
                                     (apply str)))))]
-    (intervals/->Marker from to greedy-left? greedy-right? (intervals/->Attrs (classes-by-keys
-                                                                                              [:background-color
-                                                                                               :border-bottom-style
-                                                                                               :border-color
-                                                                                               :border-width
-                                                                                               :border-radius]
-                                                                                              style)
+    (intervals/->Marker from to greedy-left? greedy-right? (intervals/->Attrs (swap! next-marker-id inc)
                                                                               (classes-by-keys
-                                                                                              [:color
-                                                                                               :font-weight
-                                                                                               :font-style]
-                                                                                              style)
+                                                                                [:background-color
+                                                                                 :border-bottom-style
+                                                                                 :border-color
+                                                                                 :border-width
+                                                                                 :border-radius]
+                                                                                style)
+                                                                              (classes-by-keys
+                                                                                [:color
+                                                                                 :font-weight
+                                                                                 :font-style]
+                                                                                style)
                                                                               nil))))
 
 

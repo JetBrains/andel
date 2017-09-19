@@ -369,10 +369,11 @@
                                 (tree/compare-zippers (:text-zipper old-props) (:text-zipper new-props) (text/by-offset (max old-end new-end)))
                                 (tree/compare-zippers (:markers-zipper old-props) (:markers-zipper new-props) (intervals/by-offset (max old-end new-end)))
                                 (= (:caret old-props) (:caret new-props))
-                                (= (:selection old-props) (:selection new-props)))))))
+                                (= (:selection old-props) (:selection new-props))
+                                (identical? (:deleted-markers old-props) (:deleted-markers new-props)))))))
          :render (fn [_]
                    (this-as this
-                            (let [{:keys [caret selection start-offset end-offset text-zipper markers-zipper metrics]} (aget (aget this "props") "props")
+                            (let [{:keys [caret selection start-offset end-offset text-zipper markers-zipper metrics deleted-markers]} (aget (aget this "props") "props")
                                   text (text/text text-zipper (- end-offset start-offset))
                                   text-length (count text)
                                   markup (intervals/xquery-intervals markers-zipper start-offset end-offset)
@@ -397,6 +398,9 @@
                                                   ([div ch] (append-child! div ch))))]
                               (el real-dom #js {:dom (-> (transduce2
                                                              (comp
+                                                               (filter (fn [m]
+                                                                         (and (some? (.-attrs m))
+                                                                              (not (contains? deleted-markers (.-id (.-attrs m)))))))
                                                                to-relative-offsets
                                                                (multiplex bg-r-f fg-r-f))
                                                              (fn [dom [bg-markup fg]]
@@ -492,6 +496,7 @@
         _ (styles/defstyle :render-line [:.render-line {:height (styles/px (utils/line-height metrics))
                                                         :position :relative
                                                         :overflow :hidden}])
+        deleted-markers (-> state :document :deleted-markers)
         children (loop [text-zipper (text/scan-to-line-start (text/zipper text) top-line)
                         markers-zipper (intervals/zipper (:markup document))
                         line-number top-line
@@ -521,7 +526,8 @@
                                                                                           :caret          (when (and (<= start-offset caret-offset) (<= caret-offset end-offset))
                                                                                                             (- caret-offset start-offset))
                                                                                           :end-offset     end-offset
-                                                                                          :metrics        metrics}})]))))))]
+                                                                                          :metrics        metrics
+                                                                                          :deleted-markers deleted-markers}})]))))))]
     (el "div" #js {:style #js {:background theme/background
                                :width "100%"
                                :overflow "hidden"}

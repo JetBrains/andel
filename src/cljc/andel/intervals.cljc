@@ -5,7 +5,7 @@
   #?(:cljs 1000000000.0 #_js/Number.POSITIVE_INFINITY
      :clj Integer/MAX_VALUE #_100000 #_Double/POSITIVE_INFINITY))
 
-(defrecord Attrs [background foreground layer])
+(defrecord Attrs [id background foreground layer])
 
 (defrecord Data
   [offset
@@ -201,16 +201,16 @@
 
 (defn add-markers [itree markers]
   (root
-   (reduce
-    (fn [loc m]
-      (insert-one loc
-                  (offset->tree-basis (.-from m))
-                  (offset->tree-basis (.-to m))
-                  (.-greedy-left? m)
-                  (.-greedy-right? m)
-                  (.-attrs m)))
-    (zipper itree)
-    markers)))
+    (reduce
+      (fn [loc m]
+        (insert-one loc
+                    (offset->tree-basis (.-from m))
+                    (offset->tree-basis (.-to m))
+                    (.-greedy-left? m)
+                    (.-greedy-right? m)
+                    (.-attrs m)))
+      (zipper itree)
+      markers)))
 
 (defn remove-leaf [loc]
   (let [data   (.-data (tree/node loc))
@@ -283,7 +283,7 @@
              greedy-right?
              (.-attrs marker))))
 
-(defn type-in [itree [offset size]]
+(defn type-in [itree offset size]
   (let [offset             (offset->tree-basis offset)
         [itree' intervals] (collect-with-remove itree offset size)
         intervals'         (sort-by :from (map #(process-interval % offset size) intervals))]
@@ -294,7 +294,7 @@
 (defn collect-with-remove-changed [itree offset size]
   (let [changed? (fn [acc-metrics node-metrics]
                    (let [metrics     (reducing-fn acc-metrics node-metrics)
-                         rightest    (or (some-> acc-metrics .-rightest) 0)
+                         rightest    (or (some-> acc-metrics (.-rightest)) 0)
                          node-offset (.-offset node-metrics)
                          length      (.-length node-metrics)
                          from        (+ node-offset rightest)
@@ -329,7 +329,7 @@
              g-r?
              (.-attrs marker))))
 
-(defn delete-range [itree [offset size]]
+(defn delete-range [itree offset size]
   (let [offset             (offset->tree-basis offset)
         [itree' intervals] (collect-with-remove-changed itree offset size)
         intervals'         (sort-by :from (map #(process-single-interval-deletion % offset size) intervals))]
