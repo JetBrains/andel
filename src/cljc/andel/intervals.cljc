@@ -1,6 +1,5 @@
 (ns andel.intervals
-  (:require [andel.tree :as tree]
-            [andel.fast-zip :as fz]))
+  (:require [andel.tree :as tree]))
 
 (def plus-infinity
   #?(:cljs 1000000000.0 #_js/Number.POSITIVE_INFINITY

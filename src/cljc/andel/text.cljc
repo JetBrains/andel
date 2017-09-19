@@ -1,6 +1,5 @@
 (ns andel.text
-  (:require [andel.tree :as tree]
-            [andel.fast-zip :as fz]))
+  (:require [andel.tree :as tree]))
 
 #?(:clj
    (do
@@ -65,7 +64,7 @@
 (defn make-text [s]
   (-> (tree/zipper (tree/make-node [(tree/make-leaf s tree-config)] tree-config) tree-config)
       (tree/down)
-      (fz/mark-changed)
+      (tree/mark-changed)
       (tree/root)))
 
 (defn zipper [tree]
@@ -122,7 +121,7 @@
             (recur (inc i) (dec n))))))))
 
 (defn forget-acc [loc]
-  (fz/assoc-o-acc loc nil))
+  (tree/assoc-o-acc loc nil))
 
 (defn- at-the-right-border? [loc]
   (let [s (.-data (tree/node loc))
@@ -138,7 +137,7 @@
       (let [o (node-offset offset-loc)
             l (line offset-loc)
             count-of-newlines (count-of (.-data (tree/node offset-loc)) \newline 0 (- i o))
-            offset-loc (fz/assoc-o-acc offset-loc (array i (+ l count-of-newlines)))
+            offset-loc (tree/assoc-o-acc offset-loc (array i (+ l count-of-newlines)))
             next-node (tree/next offset-loc)]
         (if (and (at-the-right-border? offset-loc)
                  (not (tree/end? next-node)))
@@ -153,7 +152,7 @@
         o (offset loc)
         l (line loc)
         idx (nth-index (.-data (tree/node loc)) \newline (- line-number l))]
-    (fz/assoc-o-acc loc (array (+ o idx) line-number))))
+    (tree/assoc-o-acc loc (array (+ o idx) line-number))))
 
 (defn scan-to-EOL [loc]
   (let [i (line loc)
