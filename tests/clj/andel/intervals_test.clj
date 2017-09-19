@@ -17,8 +17,7 @@
                                           :to (max a b)
                                           :greedy-left? g-l?
                                           :greedy-right? g-r?
-                                          :background "bg"
-                                          :foreground "fg"}))
+                                          :attrs nil}))
                           (g/tuple (g/large-integer* {:min 0 :max 10000})
                                    (g/large-integer* {:min 0 :max 10000})
                                    g/boolean
@@ -81,6 +80,7 @@
   (-> (make-interval-tree)
       (add-markers bulk)))
 
+
 (deftest type-in-positive-test
   (is (:result (tc/quick-check 100
                                (prop/for-all [[bulk qs] bulk-offset-size-gen]
@@ -92,22 +92,24 @@
 (defn play-delete-range [model [offset length]]
   (map (fn [interval]
          (let [update-point (fn [point offset length] (if (< offset point)
-                                                 (max offset (- point length))
-                                                 point))]
+                                                        (max offset (- point length))
+                                                        point))]
            (-> interval
                (update :from update-point offset length)
                (update :to update-point offset length))))
        model))
 
 (deftest test-delete-range
-  (is (:result (tc/quick-check 100
-                               (prop/for-all [[bulk qs] bulk-offset-size-gen]
-                                             (= (set (reduce play-delete-range bulk qs))
-                                                (set (tree->intervals
-                                                      (reduce delete-range (bulk->tree bulk) qs)))))))))
+  (is (:result
+       (tc/quick-check 1000
+                       (prop/for-all [[bulk qs] bulk-offset-size-gen]
+                                     (= (set (reduce play-delete-range bulk qs))
+                                        (set (tree->intervals
+                                              (reduce delete-range (bulk->tree bulk) qs))))))
+       )))
 
 (defn play-query [model {:keys [from to]}]
-  (vec (filter #(intersects? % (map->Marker {:from from :to to})) model)))
+  (vec (filter (fn [m] (intersects? (.-from m) (.-to m) from to)) model)))
 
 (defn query-gen [max-val]
   (g/fmap (fn [[x y]]
@@ -136,7 +138,8 @@
                     (g/large-integer* {:min 0 :max 10000000}))))
 
 (deftest type-and-delete-test
-  (is (:result (tc/quick-check 100
+  (is (:result
+       (tc/quick-check 100
                                (prop/for-all
                                 [bulk intervals-bulk-gen
                                  ops (g/vector operation-gen)]
@@ -146,4 +149,7 @@
                                                            [(bulk->tree bulk) bulk]
                                                            ops)]
                                   (= (set (tree->intervals tree))
-                                     (set model))))))))
+                                     (set model)))))
+       )
+
+      ))
