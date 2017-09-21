@@ -18,18 +18,18 @@
     (defrecord Node [metrics children])
     (defrecord Leaf [metrics data])
     (defrecord ZipperOps [branch?
-                           children
-                           make-node
+                          children
+                          make-node
 
-                           reducing-fn
-                           metrics-fn
-                           leaf-overflown?
-                           split-thresh
-                           split-leaf
-                           leaf-underflown?
-                           merge-leafs])
+                          reducing-fn
+                          metrics-fn
+                          leaf-overflown?
+                          split-thresh
+                          split-leaf
+                          leaf-underflown?
+                          merge-leafs])
     (defrecord ZipperLocation [ops node l r changed? acc o-acc pzip end? root?])
-    :defined))
+     :defined))
 
 #?(:clj
    (defmacro ->zipper [{:keys [ops node l r changed? acc o-acc pzip end? root?]}]
@@ -60,10 +60,8 @@
       (defn array? [x]
         (= (type some-array) (type x)))))
 
-(defn make-node [children {:keys [reducing-fn]}]
-  (let [children (if (array? children) children (into-array children))]
-    (Node. (reduce (fn [acc x] (reducing-fn acc (:metrics x))) (reducing-fn) children)
-           children)))
+(defn make-node [children config-map]
+  ((:make-node config-map) (if (array? children) children (into-array children))))
 
 (defn make-leaf [data {:keys [metrics-fn]}]
   (Leaf. (metrics-fn data)
@@ -87,24 +85,20 @@
                            split-leaf
                            leaf-underflown?
                            merge-leafs] :as config}]
-  (->zipper {:ops (ZipperOps. node?
-                              #(.-children %)
-                              (fn [node children] (make-node children config))
-                              reducing-fn
-                              metrics-fn
-                              leaf-overflown?
-                              split-thresh
-                              split-leaf
-                              leaf-underflown?
-                              merge-leafs)
-             :node tree
-             :root? true}))
-
-(defn make-node*
-  "Returns a new branch node, given an existing node and new children.
-  The loc is only used to supply the constructor."
-  [^ZipperLocation loc node children]
-  ((.-make-node ^ZipperOps (.-ops loc)) node children))
+  (let [make-node-fn (:make-node config)]
+    (assert (some? tree))
+    (->zipper {:ops (ZipperOps. node?
+                                #(.-children %)
+                                (fn [children] (make-node-fn (if (array? children) children (into-array children))))
+                                reducing-fn
+                                metrics-fn
+                                leaf-overflown?
+                                split-thresh
+                                split-leaf
+                                leaf-underflown?
+                                merge-leafs)
+               :node tree
+               :root? true})))
 
 (defn mark-changed [loc]
   (z-merge loc {:changed? true}))
@@ -164,14 +158,14 @@
 (defn split-children [children config]
   (let [leaf-overflown? (.-leaf-overflown? config)
         split-leaf (.-split-leaf config)
-        split-thresh (.-split-thresh config)]
+        split-thresh (.-split-thresh config)
+        make-node-fn (.-make-node config)]
     (if (split-needed? children config)
       (persistent!
        (reduce
         (fn [result node]
           (cond (and (node? node) (<= split-thresh (count (.-children node))))
-                (reduce conj! result (map #(make-node % config)
-                                          (partition-binary (.-children node) split-thresh)))
+                (reduce conj! result (map make-node-fn (partition-binary (.-children node) split-thresh)))
 
                 (and (leaf? node) (leaf-overflown? (.-data node)))
                 (reduce conj! result (map #(make-leaf % config) (split-leaf (.-data node))))
@@ -195,7 +189,8 @@
         merge-leafs (.-merge-leafs config)
         leaf-overflown? (.-leaf-overflown? config)
         split-leaf (.-split-leaf config)
-        split-thresh (.-split-thresh config)]
+        split-thresh (.-split-thresh config)
+        make-node (.-make-node config)]
     (if (merge-needed? children config)
       (if (nodes? children)
         (let [merge-thresh (quot split-thresh 2)
@@ -209,7 +204,7 @@
                                    (if (<= split-thresh (+ left-c right-c))
                                      (let [[children-left children-right]
                                            (partition-binary (concat left-children right-children) split-thresh)]
-                                       [(conj! result (make-node (merge-children children-left config) config))
+                                       [(conj! result (make-node (merge-children children-left config)))
                                         (make-node children-right config)])
                                      [result (make-node (merge-children (concat left-children right-children) config) config)])
                                    [(conj! result left) right])))
@@ -238,10 +233,11 @@
 
 (defn grow-tree [children config]
   (let [split-thresh (.-split-thresh config)
+        make-node-fn (.-make-node config)
         balanced-children (balance-children children config)]
     (if (< (count balanced-children) split-thresh)
-      (make-node balanced-children config)
-      (recur [(make-node balanced-children config)] config))))
+      (make-node-fn balanced-children)
+      (recur [(make-node-fn balanced-children)] config))))
 
 
 (defn shrink-tree [node]
@@ -261,12 +257,13 @@
   (let [node (.-node loc)
         changed? (.-changed? loc)
         pzip (.-pzip loc)
-        config (.-ops loc)]
+        config (.-ops loc)
+        make-node-fn (.-make-node config)]
     (if changed?
       (if (some? pzip)
         (let [children (into (.-l loc) (cons (.-node loc) (.-r loc)))]
           (z-merge pzip
-                   {:node (make-node (balance-children children config) config)
+                   {:node (make-node-fn (balance-children children config))
                     :changed? true}))
         (->zipper {:ops (.-ops loc)
                    :node (shrink-tree (grow-tree [node] config))
@@ -353,9 +350,8 @@
 (defn insert-child
   "Inserts the item as the leftmost child of the node at this loc, without moving"
   [^ZipperLocation loc item]
-  (replace loc (make-node* loc
-                           (.-node loc)
-                           (cons item (children loc)))))
+  (let [make-node-fn (.-make-node (.-ops loc))]
+    (replace loc (make-node-fn (cons item (children loc))))))
 
 (defn next-leaf [loc]
   (let [loc (next loc)]
@@ -410,7 +406,7 @@
         (if (branch? next-loc)
           (recur (down next-loc) pred)
           next-loc)
-        (recur (skip loc) pred)))))
+        (recur (skip (up loc)) pred)))))
 
 (defn insert-left
   "Inserts the item as the left sibling of the node at this loc, without moving"
@@ -423,7 +419,8 @@
                                     (.-metrics item))})))
 
 (defn remove [loc]
-  (let [node (.-node loc)]
+  (let [node (.-node loc)
+        make-node-fn (.-make-node (.-ops loc))]
     (if (some? (.-pzip loc))
       (if-let [[r & rs] (.-r loc)]
         (->zipper {:ops (.-ops loc)
@@ -442,7 +439,7 @@
                            :pzip (.-pzip loc)
                            :changed? true}))
           (if (root? loc)
-            (replace loc (make-node [] (.-ops loc)))
+            (replace loc (make-node-fn []))
             (recur (up loc)))))
       (throw (new #?(:clj Exception :cljs js/Error) "Remove at top")))))
 

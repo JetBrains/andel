@@ -1,5 +1,6 @@
 (ns andel.intervals
-  (:require [andel.tree :as tree]))
+  (:require [andel.tree :as tree]
+            [andel.bloomfilter :as bloom]))
 
 (def plus-infinity
   #?(:cljs 1000000000.0 #_js/Number.POSITIVE_INFINITY
@@ -11,6 +12,7 @@
   [offset
    length
    rightest
+   bloom
    greedy-left?
    greedy-right?
    attrs])
@@ -25,10 +27,9 @@
 (defn reducing-fn
   ([] nil)
   ([left right]
-   (cond (nil? left)
-     right
-     (nil? right)
-     left
+   (cond
+     (nil? left) right
+     (nil? right) left
      :else
      (let [l-offset   (.-offset left)
            l-length   (.-length left)
@@ -39,6 +40,7 @@
        (Data. l-offset
               (max l-length (+ l-rightest r-offset r-length))
               (+ l-rightest r-offset r-rightest)
+              nil
               nil nil nil)))))
 
 (defn marker-from [loc]
@@ -55,6 +57,17 @@
 (def tree-config
   {:reducing-fn      reducing-fn
    :metrics-fn       identity
+   :make-node (fn [children]
+                (let [bloom (if (tree/node? (first children))
+                              (bloom/merge-many (into [] (map (fn [c] (-> c (.-metrics) (.-bloom)))) children))
+                              (reduce (fn [f c] (bloom/add! f (-> c (.-data) (.-attrs) (.-id)))) (bloom/create) children))
+                      data (reduce (fn [acc x] (reducing-fn acc (.-metrics x))) (reducing-fn) children)]
+                  (tree/->Node (Data. (.-offset data)
+                                      (.-length data)
+                                      (.-rightest data)
+                                      bloom nil nil nil)
+                               children))
+)
    :leaf-overflown?  (constantly false)
    :split-thresh     32
    :leaf-underflown? (constantly false)})
@@ -113,23 +126,24 @@
 (defn update-leaf-offset [loc f]
   (update-leaf loc
                (fn [data]
-                 (let [offset   (.-offset data)
-                       length   (.-length data)
-                       rightest (.-rightest data)
-                       g-l?     (.-greedy-left? data)
-                       g-r?     (.-greedy-right? data)
-                       attrs    (.-attrs data)]
-                   (Data. (f offset) length rightest g-l? g-r? attrs)))))
+                 (Data. (f (.-offset data))
+                        (.-length data)
+                        (.-rightest data)
+                        (.-bloom data)
+                        (.-greedy-left? data)
+                        (.-greedy-right? data)
+                        (.-attrs data)))))
 
 (defn update-leaf-length [loc f]
   (update-leaf loc
                (fn [data]
                  (Data. (.-offset data)
-                          (f (.-length data))
-                          (.-rightest data)
-                          (.-greedy-left? data)
-                          (.-greedy-right? data)
-                          (.-attrs data)))))
+                        (f (.-length data))
+                        (.-rightest data)
+                        (.-bloom data)
+                        (.-greedy-left? data)
+                        (.-greedy-right? data)
+                        (.-attrs data)))))
 
 (defn tree->intervals [tr]
   (loop [loc (zipper tr)
@@ -172,11 +186,11 @@
                              from to))))
 
 (defn make-leaf [offset length greedy-left? greedy-right? attrs]
-  (tree/make-leaf (Data. offset length 0 greedy-left? greedy-right? attrs) tree-config))
+  (tree/make-leaf (Data. offset length 0 nil greedy-left? greedy-right? attrs) tree-config))
 
 (defn make-interval-tree []
-  (let [sentinels [(tree/make-leaf (Data. 0 0 0 false false nil) tree-config)
-                   (tree/make-leaf (Data. plus-infinity 0 0 false false nil) tree-config)]]
+  (let [sentinels [(tree/make-leaf (Data. 0 0 0 nil false false (Attrs. -1 nil nil nil)) tree-config)
+                   (tree/make-leaf (Data. plus-infinity 0 0 nil false false (Attrs. -2 nil nil nil)) tree-config)]]
     (tree/make-node sentinels tree-config)))
 
 (defn insert-one
@@ -366,3 +380,80 @@
 
 (defn query-intervals [loc from to]
   (into [] (xquery-intervals loc from to)))
+
+(defn- gc-leafs [loc bias deleted?]
+  (let [ops (.-ops loc)
+        reducing-fn (.-reducing-fn ops)]
+    (loop [l (transient (.-l loc))
+           n (.-node loc)
+           [r & rs] (.-r loc)
+           acc (or (.-acc loc) (reducing-fn))
+           bias bias
+           changed? false]
+      (cond
+        (nil? r)
+        (if changed?
+          [(tree/->zipper {:ops ops
+                           :node n
+                           :l (persistent! l)
+                           :r nil
+                           :acc acc
+                           :changed? changed?
+                           :pzip (.-pzip loc)}) bias]
+          [(tree/->zipper {:ops ops
+                           :changed? false
+                           :pzip (.-pzip loc)})
+           bias])
+
+        (deleted? (-> n (.-data) (.-attrs) (.-id)))
+        (recur l r rs acc (+ bias (-> n (.-data) (.-offset))) true)
+
+        (< 0 bias)
+        (let [data (.-data n)
+              n' (tree/make-leaf
+                   (Data. (+ (.-offset data) bias)
+                          (.-length data)
+                          (.-rightest data)
+                          (.-bloom data)
+                          (.-greedy-left? data)
+                          (.-greedy-right? data)
+                          (.-attrs data))
+                   ops)]
+          (recur (conj! l n')
+                 r
+                 rs
+                 (reducing-fn acc (.-metrics n'))
+                 0
+                 true))
+
+        :else (recur (conj! l n) r rs (reducing-fn acc (.-metrics n)) bias changed?)))))
+
+(defonce skip-count (atom 0))
+
+(defn ^:export log! []
+  (prn @skip-count)
+  (reset! skip-count 0))
+
+(defn gc [itree deleted-markers]
+  (let [loc->id (fn [loc] (-> loc (tree/node) (.-data) (.-attrs) (.-id)))
+        deleted? #?(:clj #(contains? deleted-markers %)
+                    :cljs (let [native (js/Set. deleted-markers)]
+                            #(.has native %)))
+        deleted-bloom (reduce bloom/add! (bloom/create) deleted-markers)]
+    (loop [loc (zipper itree)
+           bias 0]
+      (cond
+        (tree/end? loc)
+        (tree/root loc)
+
+        (tree/branch? loc)
+        (let [bloom (-> loc (tree/node) (.-metrics) (.-bloom))]
+          (if (or (bloom/intersects? bloom deleted-bloom)
+                  (< 0 bias))
+            (recur (tree/next-leaf loc) bias)
+            (do
+              (swap! skip-count inc)
+              (recur (tree/skip loc) bias))))
+
+        :else (let [[next-loc bias] (gc-leafs loc bias deleted?)]
+                (recur (tree/next next-loc) bias))))))

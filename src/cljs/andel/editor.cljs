@@ -55,7 +55,8 @@
                                                "codemirror/addon/runmode/runmode-standalone.js"
                                                "codemirror/mode/javascript/javascript.js"
                                                "codemirror/mode/clike/clike.js"
-                                               "codemirror/mode/clojure/clojure.js"])]
+                                               "codemirror/mode/clojure/clojure.js"
+                                               "bloomfilter.js/bloomfilter.js"])]
         (a/<! pr))
       (let [{:keys [height font-name] :as font-metrics} (a/<! (measure-async "Fira Code" 16 3))]
         (styles/defstyle (garden.stylesheet/at-keyframes "blinker"
@@ -79,15 +80,30 @@
 
 (defonce *editors-common (load-editors-common!))
 
+(def token-class
+  (let [tokens-cache #js {}]
+    (fn [tt]
+      (when tt
+        (if-let [c (aget tokens-cache (name tt))]
+          c
+          (let [class (name tt)]
+            (styles/defstyle tt [(str "." class) (theme/token-styles tt)])
+            (aset tokens-cache (name tt) class)
+            class))))))
+
+#_(defn tokens->markers [tokens]
+  (reduce (fn []) tokens)
+  (map (fn [t] (intervals/loc->Marker ))))
 
 (defn deliver-lexems! [{:keys [req-ts tokens index text]} state-ref]
-  (let [res (swap! state-ref
+  (let [;; markers (tokens->markers tokens)
+        res (swap! state-ref
                    (fn [{:keys [document] :as state}]
                      (let [{:keys [timestamp]} document]
                        (if (= timestamp req-ts)
                          (-> state
-                             (assoc-in [:document :lines index :tokens] tokens)
-                             (assoc-in [:document :hashes (hash text)] tokens)
+                             (assoc-in [:document :lines index :tokens] tokens  #_markers)
+                             (assoc-in [:document :hashes (hash text)] tokens #_markers)
                              (assoc-in [:document :first-invalid] (inc index)))
                          state))))]
        (= (get-in res [:document :timestamp]) req-ts)))
@@ -204,17 +220,6 @@
                                    :left (styles/px (* col width))
                                    :height (styles/px (inc (utils/line-height metrics)))})))))
 
-(def token-class
-  (let [tokens-cache #js {}]
-    (fn [tt]
-      (when tt
-        (if-let [c (aget tokens-cache (name tt))]
-          c
-          (let [class (name tt)]
-            (styles/defstyle tt [(str "." class) (theme/token-styles tt)])
-            (aset tokens-cache (name tt) class)
-            class))))))
-
 (defn push! [a x]
   (.push a x)
   a)
@@ -268,23 +273,23 @@
                      (recur res)
                      (recur (rf res (span new-class (subs text last-pos (.-to p)))))))))))
           ([res]
-           (loop [res res]
-             (let [p (next-pending pendings)
-                   last-pos @*last-pos
-                   new-class (make-class pendings)]
-               (cond
-                 (some? p)
-                 (do
-                   (js-disj! pendings p)
-                   (reset! *last-pos (.-to p))
-                   (if (identical? last-pos (.-to p))
-                     (recur res)
-                     (recur (rf res (span new-class (subs text last-pos (.-to p)))))))
+           (rf (loop [res res]
+                 (let [p         (next-pending pendings)
+                       last-pos  @*last-pos
+                       new-class (make-class pendings)]
+                   (cond
+                     (some? p)
+                     (do
+                       (js-disj! pendings p)
+                       (reset! *last-pos (.-to p))
+                       (if (identical? last-pos (.-to p))
+                         (recur res)
+                         (recur (rf res (span new-class (subs text last-pos (.-to p)))))))
 
-                 (not (identical? last-pos (count text)))
-                 (rf res (span nil (subs text last-pos (count text))))
+                     (not (identical? last-pos (count text)))
+                     (rf res (span nil (subs text last-pos (count text))))
 
-                 :else res))))))))
+                     :else res)))))))))
 
 (defn render-background-markup [{:keys [height width]}]
   (map (fn [m]
@@ -354,6 +359,16 @@
 
   )
 
+#_(defn merge-with [tokens]
+  (fn [rf]
+    (let [*tokens (atom tokens)]
+      (fn ([]
+           (rf))
+          ([acc m]
+           (rf acc m))
+          ([acc]
+           (rf acc))))))
+
 (def render-line
   (js/createReactClass
     #js {:shouldComponentUpdate
@@ -398,10 +413,10 @@
                                                   ([div ch] (append-child! div ch))))]
                               (el real-dom #js {:dom (-> (transduce2
                                                              (comp
-                                                               (filter (fn [m]
-                                                                         (and (some? (.-attrs m))
-                                                                              (not (contains? deleted-markers (.-id (.-attrs m)))))))
+                                                              #_(filter (fn [m]
+                                                                          (not (contains? deleted-markers (.-id (.-attrs m))))))
                                                                to-relative-offsets
+
                                                                (multiplex bg-r-f fg-r-f))
                                                              (fn [dom [bg-markup fg]]
                                                                (-> dom

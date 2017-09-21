@@ -53,7 +53,10 @@
   (assert (<= string-thresh (count x)))
   (map (fn [[i j]] (subs x i j)) (split-count 0 (count x) string-thresh)))
 
-(def tree-config {:reducing-fn r-f
+(def tree-config {:make-node (fn [children]
+                               (tree/->Node (reduce (fn [acc x] (r-f acc (.-metrics x))) (r-f) children)
+                                            children))
+                  :reducing-fn r-f
                   :metrics-fn metrics
                   :leaf-overflown? (fn [x] (<= string-thresh (count x)))
                   :split-thresh 32
