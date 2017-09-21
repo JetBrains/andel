@@ -58,15 +58,17 @@
   {:reducing-fn      reducing-fn
    :metrics-fn       identity
    :make-node (fn [children]
-                (let [bloom (if (tree/node? (first children))
-                              (bloom/merge-many (into [] (map (fn [c] (-> c (.-metrics) (.-bloom)))) children))
-                              (reduce (fn [f c] (bloom/add! f (-> c (.-data) (.-attrs) (.-id)))) (bloom/create) children))
-                      data (reduce (fn [acc x] (reducing-fn acc (.-metrics x))) (reducing-fn) children)]
-                  (tree/->Node (Data. (.-offset data)
-                                      (.-length data)
-                                      (.-rightest data)
-                                      bloom nil nil nil)
-                               children))
+                (if (empty? children)
+                  (tree/->Node (Data. 0 0 0 (bloom/create) nil nil nil) [])
+                  (let [bloom (if (tree/node? (first children))
+                                (bloom/merge-many (into [] (map (fn [c] (-> c (.-metrics) (.-bloom)))) children))
+                                (reduce (fn [f c] (bloom/add! f (-> c (.-data) (.-attrs) (.-id)))) (bloom/create) children))
+                        data (reduce (fn [acc x] (reducing-fn acc (.-metrics x))) (reducing-fn) children)]
+                    (tree/->Node (Data. (.-offset data)
+                                        (.-length data)
+                                        (.-rightest data)
+                                        bloom nil nil nil)
+                                 children)))
 )
    :leaf-overflown?  (constantly false)
    :split-thresh     32
@@ -382,51 +384,45 @@
   (into [] (xquery-intervals loc from to)))
 
 (defn- gc-leafs [loc bias deleted?]
-  (let [ops (.-ops loc)
-        reducing-fn (.-reducing-fn ops)]
-    (loop [l (transient (.-l loc))
-           n (.-node loc)
-           [r & rs] (.-r loc)
-           acc (or (.-acc loc) (reducing-fn))
-           bias bias
-           changed? false]
-      (cond
-        (nil? r)
-        (if changed?
-          [(tree/->zipper {:ops ops
-                           :node n
-                           :l (persistent! l)
-                           :r nil
-                           :acc acc
-                           :changed? changed?
-                           :pzip (.-pzip loc)}) bias]
-          [(tree/->zipper {:ops ops
-                           :changed? false
-                           :pzip (.-pzip loc)})
-           bias])
+  (let [children (tree/children loc)
+        len (count children)
+        ops (.-ops loc)
+        make-node-fn (.-make-node ops)]
+    (loop [bias bias
+           i 0
+           changed? false
+           res (transient [])]
+      (if (< i len)
+        (let [n (aget children i)
+              data (.-data n)]
+          (cond
+            (deleted? (-> n (.-data) (.-attrs) (.-id)))
+            (recur (+ bias (-> n (.-data) (.-offset)))
+                   (inc i)
+                   true
+                   res)
 
-        (deleted? (-> n (.-data) (.-attrs) (.-id)))
-        (recur l r rs acc (+ bias (-> n (.-data) (.-offset))) true)
+            (< 0 bias)
+            (recur 0
+                   (inc i)
+                   true
+                   (conj! res (tree/make-leaf
+                                (Data. (+ (.-offset data) bias)
+                                       (.-length data)
+                                       (.-rightest data)
+                                       (.-bloom data)
+                                       (.-greedy-left? data)
+                                       (.-greedy-right? data)
+                                       (.-attrs data))
+                                ops)))
 
-        (< 0 bias)
-        (let [data (.-data n)
-              n' (tree/make-leaf
-                   (Data. (+ (.-offset data) bias)
-                          (.-length data)
-                          (.-rightest data)
-                          (.-bloom data)
-                          (.-greedy-left? data)
-                          (.-greedy-right? data)
-                          (.-attrs data))
-                   ops)]
-          (recur (conj! l n')
-                 r
-                 rs
-                 (reducing-fn acc (.-metrics n'))
-                 0
-                 true))
-
-        :else (recur (conj! l n) r rs (reducing-fn acc (.-metrics n)) bias changed?)))))
+            :else
+            (recur bias
+                   (inc i)
+                   changed?
+                   (conj! res n))))
+        [(tree/replace loc (make-node-fn (persistent! res)))
+         bias]))))
 
 (defonce skip-count (atom 0))
 
@@ -455,5 +451,5 @@
               (swap! skip-count inc)
               (recur (tree/skip loc) bias))))
 
-        :else (let [[next-loc bias] (gc-leafs loc bias deleted?)]
-                (recur (tree/next next-loc) bias))))))
+        :else (let [[loc' bias] (gc-leafs (tree/up loc) bias deleted?)]
+                (recur (tree/skip loc') bias))))))

@@ -413,7 +413,7 @@
                                                   ([div ch] (append-child! div ch))))]
                               (el real-dom #js {:dom (-> (transduce2
                                                              (comp
-                                                              #_(filter (fn [m]
+                                                              (filter (fn [m]
                                                                           (not (contains? deleted-markers (.-id (.-attrs m))))))
                                                                to-relative-offsets
 

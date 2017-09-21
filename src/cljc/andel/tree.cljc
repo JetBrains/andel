@@ -262,9 +262,7 @@
     (if changed?
       (if (some? pzip)
         (let [children (into (.-l loc) (cons (.-node loc) (.-r loc)))]
-          (z-merge pzip
-                   {:node (make-node-fn (balance-children children config))
-                    :changed? true}))
+          (replace pzip (make-node-fn (balance-children children config))))
         (->zipper {:ops (.-ops loc)
                    :node (shrink-tree (grow-tree [node] config))
                    :root? true}))
