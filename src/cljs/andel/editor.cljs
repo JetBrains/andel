@@ -98,7 +98,7 @@
            result (make-array tokens-count)]
       (if (< i tokens-count)
         (let [[len tt] (aget tokens i)
-              m        (intervals/->Marker offset (+ offset len) false false (intervals/->Attrs nil "" (token-class tt) 0))]
+              m        (intervals/->Marker offset (+ offset len) false false (intervals/->Attrs nil nil (token-class tt) 0))]
           (aset result i m)
           (recur (inc i)
                  (+ offset len)
@@ -305,10 +305,9 @@
          (let [from (.-from m)
                to (.-to m)
                background (some-> m (.-attrs) (.-background))]
-           (div background (style {:left (styles/px (* from width))
-                                   :width (styles/px (* width (- to from)))
-                                   :height "100%"
-                                   :position :absolute}))))))
+           (div background (str "left: " (* from width) "px;"
+                                "width:" (* width (- to from)) "px;"
+                                "height:100%; position : absolute;"))))))
 
 (def real-dom
   (js/createReactClass
@@ -381,8 +380,7 @@
                (recur (inc i) (rf acc (aget lexer-markers i)))
                (do
                  (reset! *i i)
-                 (rf acc m))))
-           (rf acc m))
+                 (rf acc m)))))
           ([acc]
            (loop [i @*i
                   acc acc]
@@ -445,7 +443,7 @@
                                                                    (append-child! (transduce (render-background-markup metrics)
                                                                                              (completing append-child!)
                                                                                              (js/document.createElement "div")
-                                                                                             (sort-by (fn [m] (.-layer (.-attrs m))) bg-markup)))
+                                                                                             bg-markup #_(sort-by (fn [m] (.-layer (.-attrs m))) bg-markup)))
                                                                    (append-child! fg)))
                                                              (-> (div "render-line" nil)
                                                                  (cond-> (some? selection)
@@ -554,7 +552,7 @@
                               markers-zipper
                               (inc line-number)
                               (push! result (el "div" (js-obj "key" line-number
-                                                              "style" (js-obj "transform" (str "translate3d(0px, " (styles/px y-shift) ", 0px)")))
+                                                              "style" (js-obj "transform" (str "translate3d(0px, " y-shift "px, 0px)")))
                                                 #js [(el render-line #js{:key            line-number
                                                                          :props          {:text-zipper    text-zipper
                                                                                           :markers-zipper markers-zipper
