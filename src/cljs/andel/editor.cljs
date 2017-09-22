@@ -91,19 +91,28 @@
             (aset tokens-cache (name tt) class)
             class))))))
 
-#_(defn tokens->markers [tokens]
-  (reduce (fn []) tokens)
-  (map (fn [t] (intervals/loc->Marker ))))
+(defn tokens->markers [tokens]
+  (let [tokens-count (count tokens)]
+    (loop [i 0
+           offset 0
+           result (make-array tokens-count)]
+      (if (< i tokens-count)
+        (let [[len tt] (aget tokens i)
+              m        (intervals/->Marker offset (+ offset len) false false (intervals/->Attrs nil "" (token-class tt) 0))]
+          (aset result i m)
+          (recur (inc i)
+                 (+ offset len)
+                 result))
+        result))))
 
 (defn deliver-lexems! [{:keys [req-ts tokens index text]} state-ref]
-  (let [;; markers (tokens->markers tokens)
-        res (swap! state-ref
-                   (fn [{:keys [document] :as state}]
-                     (let [{:keys [timestamp]} document]
+  (let [res (swap! state-ref
+                   (fn [state]
+                     (let [timestamp (-> state :document :timestamp)]
                        (if (= timestamp req-ts)
                          (-> state
-                             (assoc-in [:document :lines index :tokens] tokens  #_markers)
-                             (assoc-in [:document :hashes (hash text)] tokens #_markers)
+                             (assoc-in [:document :lines index :tokens] tokens)
+                             ;; (assoc-in [:document :hashes (hash text)] markers)
                              (assoc-in [:document :first-invalid] (inc index)))
                          state))))]
        (= (get-in res [:document :timestamp]) req-ts)))
@@ -125,13 +134,13 @@
                                                                     :text next-text
                                                                     :req-ts (get-in state [:document :timestamp])}]))
                                   :priority true)]
-          (let [start-time' (if (< 10 elapsed)
+          (let [start-time' (if (< 3 elapsed)
                               (do (a/<! (a/timeout 1))
                                   (.getTime (js/Date.)))
                               start-time)]
             (cond
               (= port lexer-broker) (recur val (get-in val [:document :first-invalid]) start-time')
-              (= port output) (let [delivered?  (deliver-lexems! val state-ref)]
+              (= port output) (let [delivered? (deliver-lexems! val state-ref)]
                                 (recur state (if delivered? (inc line) line) start-time'))
               (= port input) (recur state line start-time'))))))))
 
@@ -359,15 +368,28 @@
 
   )
 
-#_(defn merge-with [tokens]
+(defn merge-tokens [lexer-markers]
   (fn [rf]
-    (let [*tokens (atom tokens)]
+    (let [lexer-markers-count (count lexer-markers)
+          *i                  (atom 0)]
       (fn ([]
            (rf))
           ([acc m]
+           (loop [i   @*i
+                  acc acc]
+             (if (and (< i lexer-markers-count) (< (.-from (aget lexer-markers i)) (.-from m)))
+               (recur (inc i) (rf acc (aget lexer-markers i)))
+               (do
+                 (reset! *i i)
+                 (rf acc m))))
            (rf acc m))
           ([acc]
-           (rf acc))))))
+           (loop [i @*i
+                  acc acc]
+             (if (< i lexer-markers-count)
+               (recur (inc i)
+                      (rf acc (aget lexer-markers i)))
+               (rf acc))))))))
 
 (def render-line
   (js/createReactClass
@@ -385,14 +407,14 @@
                                 (tree/compare-zippers (:markers-zipper old-props) (:markers-zipper new-props) (intervals/by-offset (max old-end new-end)))
                                 (= (:caret old-props) (:caret new-props))
                                 (= (:selection old-props) (:selection new-props))
-                                (identical? (:deleted-markers old-props) (:deleted-markers new-props)))))))
+                                (identical? (:deleted-markers old-props) (:deleted-markers new-props))
+                                (identical? (:tokens old-props) (:tokens new-props)))))))
          :render (fn [_]
                    (this-as this
-                            (let [{:keys [caret selection start-offset end-offset text-zipper markers-zipper metrics deleted-markers]} (aget (aget this "props") "props")
+                            (let [{:keys [caret selection start-offset end-offset text-zipper markers-zipper tokens metrics deleted-markers]} (aget (aget this "props") "props")
                                   text (text/text text-zipper (- end-offset start-offset))
                                   text-length (count text)
                                   markup (intervals/xquery-intervals markers-zipper start-offset end-offset)
-                                  ;;  line-tokens (or (get hashes (hash text)) (:tokens (get lines index)))
 
                                   to-relative-offsets (map (fn [marker]
                                                              (intervals/->Marker (min text-length (max 0 (- (.-from marker) start-offset)))
@@ -416,7 +438,7 @@
                                                               (filter (fn [m]
                                                                           (not (contains? deleted-markers (.-id (.-attrs m))))))
                                                                to-relative-offsets
-
+                                                               (merge-tokens (tokens->markers tokens))
                                                                (multiplex bg-r-f fg-r-f))
                                                              (fn [dom [bg-markup fg]]
                                                                (-> dom
@@ -536,6 +558,7 @@
                                                 #js [(el render-line #js{:key            line-number
                                                                          :props          {:text-zipper    text-zipper
                                                                                           :markers-zipper markers-zipper
+                                                                                          :tokens         (:tokens (get lines line-number))
                                                                                           :start-offset   start-offset
                                                                                           :selection      (line-selection selection [start-offset end-offset])
                                                                                           :caret          (when (and (<= start-offset caret-offset) (<= caret-offset end-offset))

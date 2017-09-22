@@ -39,7 +39,7 @@
          (reset! *state state))
        #js {:state (copy-state mode initial-state)})
 
-    {:tokens (vec tokens)
+    {:tokens tokens
      :state @*state}))
 
 (defn submit-request! [{:keys [input] :as worker} {:keys [index text] :as req}]

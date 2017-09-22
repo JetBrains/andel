@@ -82,12 +82,14 @@
              {:from 4 :to 7 :greedy-left? false :greedy-right? false :id "[0 0 5838]" :style [{:color "green !important"}]}
              {:from 8 :to 11 :greedy-left? false :greedy-right? false :id "[0 0 5839]" :style [{:color "blue !important"}]}])
 
-(def text "abc xyz fyg")
+(def text "public class Foo {
+    public static void main() {}
+}")
 
 (defonce editor-state-promise (let [promise (a/promise-chan)]
                                 (go
-                                  (let [text (:body (a/<! (http/get "EditorImpl.java")))
-                                        markup (->> (edn/read-string (:body (a/<! (http/get "markup.txt"))))
+                                  (let [text text #_(:body (a/<! (http/get "EditorImpl.java")))
+                                        markup (->> [] #_(edn/read-string (:body (a/<! (http/get "markup.txt"))))
                                                     (mapv create-marker)
                                                     (sort-by (fn [m] (.-from m))))
                                         metrics (:font-metrics (a/<! andel.editor/*editors-common))
