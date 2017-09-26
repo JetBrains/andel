@@ -263,12 +263,15 @@
         (js/performance.measure (str name) start end)
         result))))
 
-(defn shred-text [text]
+(defn shred-markup [type]
   (fn [rf]
-    (let [pendings     (array)
+        (let
+          [pendings     (array)
           *last-pos    (atom 0)
           next-pending (fn [pendings] (reduce (fn [c p] (if (or (nil? c) (< (.-to p) (.-to c))) p c)) nil pendings))
-          make-class   (fn [markers] (reduce (fn [c m] (str c " " (some-> m (.-attrs) (.-foreground)))) nil pendings))
+          make-class   (fn [markers] (reduce (fn [c m] (str c " " (case type
+                                                                    :background (some-> m (.-attrs) (.-background))
+                                                                    :foreground (some-> m (.-attrs) (.-foreground))))) nil pendings))
           js-disj!     (fn [arr v]
                          (let [idx (.indexOf arr v)]
                            (if (< -1 idx)
@@ -289,33 +292,28 @@
                  (reset! *last-pos (.-from m))
                  (if (identical? last-pos (.-from m))
                    res
-                   (rf res (subs text last-pos (.-from m)) new-class)))
+                   (rf res (- (.-from m) last-pos) new-class)))
 
                (do
                  (js-disj! pendings p)
                  (reset! *last-pos (.-to p))
                  (if (identical? last-pos (.-to p))
                    (recur res)
-                   (recur (rf res (subs text last-pos (.-to p)) new-class))))))))
+                   (recur (rf res (- (.-to p) last-pos) new-class))))))))
         ([res]
          (rf
            (loop [res res]
              (let [p         (next-pending pendings)
                    last-pos  @*last-pos
                    new-class (make-class pendings)]
-               (cond
-                 (some? p)
+               (if (some? p)
                  (do
                    (js-disj! pendings p)
                    (reset! *last-pos (.-to p))
                    (if (identical? last-pos (.-to p))
                      (recur res)
-                     (recur (rf res (subs text last-pos (.-to p)) new-class))))
-
-                 (not (identical? last-pos (count text)))
-                 (rf res (subs text last-pos (count text)) nil)
-
-                 :else res)))))))))
+                     (recur (rf res (- (.-to p) last-pos) new-class))))
+                 res)))))))))
 
 (def real-dom
   (js/createReactClass
@@ -382,8 +380,7 @@
     (let [lexer-markers-count (count lexer-markers)
           *i                  (atom 0)]
       (fn
-        ([]
-         (rf))
+        ([] (rf))
         ([acc m]
          (loop [i   @*i
                 acc acc]
@@ -401,25 +398,11 @@
              (rf acc))))))))
 
 (defrecord LineInfo
-  [caret
+  [text
+   caret
    selection
    foreground
    background])
-
-(defn collect-background []
-  (fn [r-f]
-    (let [last-to (atom 0)]
-      (fn
-        ([] (r-f))
-        ([res input]
-         (let [from (.-from input)
-               to   (.-to input)
-               gap  (- from @last-to)]
-           (reset! last-to to)
-           (-> res
-               (cond-> (< 0 gap) (r-f gap nil))
-               (cond-> (< from to) (r-f (- to from) (.-background (.-attrs input)))))))
-        ([res] (r-f res))))))
 
 (defn build-line-info [{:keys [caret selection markers-zipper start-offset end-offset deleted-markers tokens text-zipper]}]
   (let [markup              (intervals/xquery-intervals markers-zipper start-offset end-offset)
@@ -441,8 +424,10 @@
                               ([r] r))
         bg-xf               (comp
                               (filter (fn [marker] (some-> marker (.-attrs) (.-background))))
-                              (collect-background))
-        fg-xf               (shred-text text)]
+                              (shred-markup :background))
+        fg-xf               (comp
+                              (filter (fn [marker] (some-> marker (.-attrs) (.-foreground))))
+                              (shred-markup :foreground))]
 
     (transduce2
      (comp
@@ -452,7 +437,7 @@
       (multiplex (bg-xf collect-to-array)
                  (fg-xf collect-to-array)))
      (fn [acc [bg fg]]
-       (LineInfo. caret selection fg bg))
+       (LineInfo. text caret selection fg bg))
      nil
      markup)))
 
@@ -467,8 +452,10 @@
                              true))))]
     (and (= (.-caret x) (.-caret y))
          (= (.-selection x) (.-selection y))
+         (= (.-text x) (.-text y))
          (array-eq? (.-foreground x) (.-foreground y))
          (array-eq? (.-background x) (.-background y)))))
+
 
 (def render-raw-line
   (js/createReactClass
@@ -484,6 +471,7 @@
                             (let [props (aget this "props")
                                   metrics (aget props "metrics")
                                   line-info (aget props "lineInfo")
+                                  text      (.-text line-info)
                                   selection (.-selection line-info)
                                   bg-markup (.-background line-info)
                                   fg-markup (.-foreground line-info)
@@ -511,12 +499,14 @@
                                                 dom (doto (js/document.createElement "pre")
                                                       (.setAttribute "class" "line-text"))]
                                            (if (< i (count fg-markup))
-                                             (let [text (aget fg-markup i)
+                                             (let [len (aget fg-markup i)
                                                    class (aget fg-markup (inc i))]
                                                (recur (+ i 2)
-                                                      (+ col (count text))
-                                                      (append-child! dom (span class text))))
-                                             dom))]
+                                                      (+ col len)
+                                                      (append-child! dom (span class (subs text col (+ col len))))))
+                                             (if (< col (count text))
+                                               (append-child! dom (span nil (subs text col (count text))))
+                                               dom)))]
                               (el real-dom #js {:dom (-> (div "render-line" nil)
                                                          (cond-> (some? selection)
                                                                  (append-child! (render-selection selection metrics)))
