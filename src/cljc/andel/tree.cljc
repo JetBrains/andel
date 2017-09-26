@@ -123,7 +123,7 @@
   ((.-branch? ^ZipperOps (.-ops loc)) (.-node loc)))
 
 (defn children
-  "Returns a seq of the children of node at loc, which must be a branch"
+  "Returns a seq of the children of node at loc, which must be a ?"
   [^ZipperLocation loc]
   ((.-children ^ZipperOps (.-ops loc)) (.-node loc)))
 
@@ -419,7 +419,8 @@
 (defn remove [loc]
   (let [node (.-node loc)
         make-node-fn (.-make-node (.-ops loc))]
-    (if (some? (.-pzip loc))
+    (if (root? loc)
+      (replace loc (make-node-fn []))
       (if-let [[r & rs] (.-r loc)]
         (->zipper {:ops (.-ops loc)
                    :node r
@@ -436,10 +437,7 @@
                            :r (.-r loc)
                            :pzip (.-pzip loc)
                            :changed? true}))
-          (if (root? loc)
-            (replace loc (make-node-fn []))
-            (recur (up loc)))))
-      (throw (new #?(:clj Exception :cljs js/Error) "Remove at top")))))
+          (recur (up loc)))))))
 
 (defn compare-zippers [z1 z2 stop?]
   (loop [z1 z1
