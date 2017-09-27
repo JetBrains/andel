@@ -391,7 +391,7 @@
     (loop [bias bias
            i 0
            changed? false
-           res (transient [])]
+           res (tree/into-array-list [])]
       (if (< i len)
         (let [n (aget children i)
               data (.-data n)]
@@ -406,22 +406,22 @@
             (recur 0
                    (inc i)
                    true
-                   (conj! res (tree/make-leaf
-                                (Data. (+ (.-offset data) bias)
-                                       (.-length data)
-                                       (.-rightest data)
-                                       (.-bloom data)
-                                       (.-greedy-left? data)
-                                       (.-greedy-right? data)
-                                       (.-attrs data))
-                                ops)))
+                   (tree/push! res (tree/make-leaf
+                                     (Data. (+ (.-offset data) bias)
+                                            (.-length data)
+                                            (.-rightest data)
+                                            (.-bloom data)
+                                            (.-greedy-left? data)
+                                            (.-greedy-right? data)
+                                            (.-attrs data))
+                                     ops)))
 
             :else
             (recur bias
                    (inc i)
                    changed?
-                   (conj! res n))))
-        [(tree/replace loc (make-node-fn (persistent! res)))
+                   (tree/push! res n))))
+        [(tree/replace loc (make-node-fn res))
          bias]))))
 
 (defonce skip-count (atom 0))
@@ -432,9 +432,7 @@
 
 (defn gc [itree deleted-markers]
   (let [loc->id (fn [loc] (-> loc (tree/node) (.-data) (.-attrs) (.-id)))
-        deleted? #?(:clj #(contains? deleted-markers %)
-                    :cljs (let [native (js/Set. deleted-markers)]
-                            #(.has native %)))
+        deleted? #(contains? deleted-markers %)
         deleted-bloom (reduce bloom/add! (bloom/create) deleted-markers)]
     (loop [loc (zipper itree)
            bias 0]

@@ -651,19 +651,18 @@
                                                           (el "div"
                                                               (js-obj "key" line-number
                                                                       "style" (js-obj "transform" (str "translate3d(0px, " y-shift "px, 0px)")))
-                                                              #js [(el render-raw-line
+                                                              #js [(el render-line
                                                                        #js{:key   line-number
-                                                                           :metrics metrics
-                                                                           :lineInfo (build-line-info { :text-zipper     text-zipper
-                                                                                                        :markers-zipper  markers-zipper
-                                                                                                        :tokens          (:tokens (get lines line-number))
-                                                                                                        :start-offset    start-offset
-                                                                                                        :selection       (line-selection selection [start-offset end-offset])
-                                                                                                        :caret           (when (and (<= start-offset caret-offset) (<= caret-offset end-offset))
-                                                                                                                           (- caret-offset start-offset))
-                                                                                                        :end-offset      end-offset
-                                                                                                        :metrics         metrics
-                                                                                                        :deleted-markers deleted-markers})})]))))))]
+                                                                           :props {:text-zipper     text-zipper
+                                                                                   :markers-zipper  markers-zipper
+                                                                                   :tokens          (:tokens (get lines line-number))
+                                                                                   :start-offset    start-offset
+                                                                                   :selection       (line-selection selection [start-offset end-offset])
+                                                                                   :caret           (when (and (<= start-offset caret-offset) (<= caret-offset end-offset))
+                                                                                                      (- caret-offset start-offset))
+                                                                                   :end-offset      end-offset
+                                                                                   :metrics         metrics
+                                                                                   :deleted-markers deleted-markers}})]))))))]
     (el "div"
         #js {:style       #js {:background theme/background
                                :width      "100%"

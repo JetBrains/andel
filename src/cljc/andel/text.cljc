@@ -65,7 +65,7 @@
                   :merge-leafs (fn [s1 s2] (str s1 s2))})
 
 (defn make-text [s]
-  (-> (tree/zipper (tree/make-node [(tree/make-leaf s tree-config)] tree-config) tree-config)
+  (-> (tree/zipper (tree/make-node (tree/into-array-list [(tree/make-leaf s tree-config)]) tree-config) tree-config)
       (tree/down)
       (tree/mark-changed)
       (tree/root)))
@@ -250,11 +250,6 @@
         next-loc))))
 
 (def reset tree/reset)
-
-(defn debug-tree [t]
-  (if (array? (.-children t))
-    (assoc t :children (vec (map debug-tree (.-children t))))
-    t))
 
 (defn play [t operation]
   (root (reduce (fn [loc [code arg]]
