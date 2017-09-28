@@ -149,6 +149,24 @@
   (let [carret-line (get-caret-line caret text)]
     (set-caret-at-line-end state (get-caret-line caret text) selection?)))
 
+(defn next-word-delta [state]
+  (let [text (-> state :document :text)
+        caret-offset (core/caret-offset state)
+        {caret-line :line caret-col :col} (utils/offset->line-col caret-offset text)
+        line-text (text/line-text text caret-line)]
+    (max (some-> (re-find #"^.+?\b" (subs line-text caret-col))
+                          count)
+                  1)))
+
+(defn prev-word-delta [state]
+  (let [text (-> state :document :text)
+        caret-offset (core/caret-offset state)
+        {caret-line :line caret-col :col} (utils/offset->line-col caret-offset text)
+        line-text (text/line-text text caret-line)]
+    (min (- (some-> (second (re-find #".*(\b.+)$" (subs line-text 0 caret-col)))
+                    count))
+        -1)))
+
 (defn move-caret [{:keys [document editor] :as state} dir selection?]
   (let [{:keys [caret selection]} editor
         text (:text document)
@@ -159,6 +177,12 @@
                      :right (-> caret
                                 (translate-caret text 1)
                                 (drop-virtual-position text))
+                     :word-forward (-> caret
+                                       (translate-caret text (next-word-delta state))
+                                       (drop-virtual-position text))
+                     :word-backward (-> caret
+                                        (translate-caret text (prev-word-delta state))
+                                        (drop-virtual-position text))
                      :up    (translate-caret-verticaly caret text -1)
                      :down  (translate-caret-verticaly caret text 1))
         caret-offset' (core/caret->offset caret')
