@@ -9,15 +9,21 @@
   (assert (<= left right) (str "Wrong selection positioning: " selection))
   (- right left))
 
+(defn drop-virtual-position [caret text]
+  (let [{:keys [line col]} (utils/offset->line-col (:offset caret) text)]
+    (assoc caret :v-col col)))
+
 (defn backspace [state]
   (let [selection (core/selection state)
         sel-from  (nth selection 0)
         sel-length (selection-length selection)
         caret-offset (core/caret-offset state)]
-    (cond
-      (< 0 sel-length) (core/delete-at-offset state sel-from sel-length)
-      (= 0 caret-offset) state
-      :else (core/delete-at-offset state (dec caret-offset) 1))))
+    (as-> state st
+          (cond
+            (< 0 sel-length) (core/delete-at-offset st sel-from sel-length)
+            (= 0 caret-offset) st
+            :else (core/delete-at-offset st (dec caret-offset) 1))
+          (update-in st [:editor :caret] drop-virtual-position (get-in st [:document :text])))))
 
 (defn delete [state]
   (let [selection (core/selection state)
@@ -38,7 +44,8 @@
     (-> state
         (cond-> (< 0 selection-len)
                 (core/delete-at-offset (first selection) selection-len))
-        (core/insert-at-offset caret-offset str))))
+        (core/insert-at-offset caret-offset str)
+        (as-> st (update-in st [:editor :caret] drop-virtual-position (get-in st [:document :text]))))))
 
 (defn caret->offset [{:keys [offset] :as caret}]
   offset)
@@ -59,10 +66,6 @@
 (defn drop-selection-on-esc [state]
   (let [caret-offset (core/caret-offset state)]
     (core/set-selection state [caret-offset caret-offset] caret-offset)))
-
-(defn drop-virtual-position [caret text]
-  (let [{:keys [line col]} (utils/offset->line-col (:offset caret) text)]
-    (assoc caret :v-col col)))
 
 (defn restrict-to-text-length [offset text]
   (let [text-length (text/text-length text)]
