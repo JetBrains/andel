@@ -7,7 +7,6 @@
             [garden.core :as g]
             [garden.stylesheet :refer [at-keyframes]]
 
-            [andel.keybind :as keybind]
             [andel.styles :as styles]
             [andel.theme :as theme]
             [andel.lexer :as lexer]
@@ -708,30 +707,57 @@
           (this-as cmp
             (let [props    (aget cmp "props")
                   focused? (aget props "isFocused")
-                  dom-node (aget (aget cmp "refs") "textarea")]
+                  dom-node (aget (aget cmp "refs") "textarea")
+                  selected-text (aget props "selectedText")
+                  sync-with-clipboard (aget props "syncWithClipboard")
+                  on-clipboard-updated (aget props "onClipboardUpdated")]
               (when focused?
-                (.focus dom-node)))))
+                (.focus dom-node))
+              (when sync-with-clipboard
+                (set! (.-value dom-node) selected-text)
+                (.setAttribute dom-node "readonly" "")
+                (.select dom-node)
+                (.setSelectionRange dom-node 0 (count selected-text))
+                (js/document.execCommand "copy")
+                (.removeAttribute dom-node "readonly")
+                (set! (.-value dom-node) "")
+                (on-clipboard-updated)))))
+        :shouldComponentUpdate
+        (fn [new-props new-state]
+          true
+          #_(this-as this
+                   (let [old-props ($ this :props)]
+                     (not= (aget old-props "isFocused") (aget new-props "isFocused")))))
         :render
         (fn []
           (this-as cmp
             (let [props       (aget cmp "props")
-                  focused?    (aget props "isFocused")
                   on-input    (aget props "onInput")
+                  focused?    (aget props "isFocused")
                   on-key-down (aget props "onKeyDown")]
               (el "textarea"
                   #js {:key       "textarea"
                        :ref       "textarea"
+                       :autoFocus focused?
                        :style     #js {:opacity 0
                                        :padding "0px"
                                        :border  "none"
-                                       :height  "0px"
-                                       :width   "0px"}
+                                       :position "absolute"
+                                       :left    "-9999px"
+                                       ;; :height  "0px" ;;
+                                       ;; :width   "0px"
+                                       }
                        :onInput   (fn [evt]
                                     (let [e   (.-target evt)
                                           val (.-value e)]
                                       (set! (.-value e) "")
                                       (on-input val)))
                        :onKeyDown on-key-down}))))}))
+
+(defn selected-text [state]
+  (let [text (get-in state [:document :text])
+        [from to] (get-in state [:editor :selection])]
+    (text/text (text/scan-to-offset (text/zipper text) from) (- to from))))
 
 (def editor-cmp
   (js/createReactClass
@@ -746,7 +772,7 @@
           (this-as cmp
             (let [props             ($ cmp :props)
                   state             ($ props :editorState)
-                  {:keys [on-input on-mouse-down on-drag-selection on-resize on-scroll on-focus on-key-down]
+                  {:keys [on-input on-mouse-down on-drag-selection on-resize on-scroll on-focus on-key-down on-clipboard-updated]
                    :as   callbacks} ($ props :callbacks)
                   *bindings         ($ cmp :bindings)]
               (if (ready-to-view? state)
@@ -772,7 +798,10 @@
                              #js {:key       "textarea"
                                   :isFocused (get-in state [:viewport :focused?])
                                   :onInput   on-input
-                                  :onKeyDown on-key-down})])
+                                  :onKeyDown on-key-down
+                                  :onClipboardUpdated on-clipboard-updated
+                                  :selectedText (selected-text state)
+                                  :syncWithClipboard (get-in state [:viewport :sync-with-clipboard])})])
                 (el "div" #js {:key "editor-placeholder"} #js ["EDITOR PLACEHOLDER"])))))}))
 
 (defn editor-view [editor-state callbacks]

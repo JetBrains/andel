@@ -18,7 +18,8 @@
    :viewport {:pos [0 0]
               :view-size [0 0]
               :metrics nil
-              :focused? false}})
+              :focused? false
+              :sync-with-clipboard false}})
 
 (defn- edit-at-offset
   [{:keys [document] :as state} offset f]
