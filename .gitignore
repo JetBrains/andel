@@ -15,3 +15,5 @@ pom.xml.asc
 /.sass-cache
 /.idea
 .projectile
+/.DS_Store
+
