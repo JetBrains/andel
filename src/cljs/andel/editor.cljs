@@ -15,6 +15,7 @@
             [andel.intervals :as intervals]
             [andel.utils :as utils]
             [andel.tree :as tree]
+            [andel.render :as render]
             [cljsjs.element-resize-detector])
   (:require-macros [reagent.interop :refer [$ $!]]
                    [cljs.core.async.macros :refer [go]]))
@@ -109,6 +110,28 @@
             result))
         result))))
 
+(defn merge-tokens [lexer-markers]
+  (fn [rf]
+    (let [lexer-markers-count (count lexer-markers)
+          *i                  (atom 0)]
+      (fn
+        ([] (rf))
+        ([acc m]
+         (loop [i   @*i
+                acc acc]
+           (if (and (< i lexer-markers-count) (< (.-from (aget lexer-markers i)) (.-from m)))
+             (recur (inc i) (rf acc (aget lexer-markers i)))
+             (do
+               (reset! *i i)
+               (rf acc m)))))
+        ([acc]
+         (loop [i   @*i
+                acc acc]
+           (if (< i lexer-markers-count)
+             (recur (inc i)
+                    (rf acc (aget lexer-markers i)))
+             (rf acc))))))))
+
 (defn deliver-lexems! [{:keys [req-ts tokens index text]} state-ref]
   (let [res (swap! state-ref
                    (fn [state]
@@ -184,11 +207,7 @@
         (.setAttribute "class" class)
         (.appendChild (js/document.createTextNode text))))
 
-(defn style [m]
-  (reduce-kv
-    (fn [s k v]
-      (str s (name k) ":" (if (keyword? v) (name v) v) ";"))
-    nil m))
+
 
 (defn make-node [tag]
   (js/document.createElement (name tag)))
@@ -204,46 +223,17 @@
   (.appendChild e c)
   e)
 
-(defn infinity? [x] (keyword? x))
-
-(defn render-selection [[from to] {:keys [width] :as metrics}]
+(defn render-selection [[from to] metrics]
   (div nil
-       (style
-         {:background-color theme/selection
-          :height           (styles/px (utils/line-height metrics))
-          :position         :absolute
-          :top              (styles/px 0)
-          :left             (if (infinity? to)
-                              0
-                              (styles/px (* from width)))
-          :margin-left      (when (infinity? to) (styles/px (* from width)))
-          :width            (if (infinity? to)
-                              "100%"
-                              (styles/px (* (- to from) width)))})))
-
+       (render/style
+        (render/selection-style from to metrics))))
 
 (defn render-caret [col {:keys [width] :as metrics}]
   (doto (div nil nil)
         (.appendChild
-          (div nil
-               (style
-                 {:height           (styles/px (inc (utils/line-height metrics)))
-                  :width            "100%"
-                  :background-color (:bg-05 theme/zenburn)
-                  :position         :absolute
-                  :left             0
-                  :top              0
-                  :z-index          "-1"})))
+          (div nil (render/style (render/active-line-style metrics))))
         (.appendChild
-          (div nil
-               (style
-                 {:width            (styles/px 1)
-                  :animation        "blinker 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite"
-                  :top              0
-                  :background-color "white"
-                  :position         :absolute
-                  :left             (styles/px (* col width))
-                  :height           (styles/px (inc (utils/line-height metrics)))})))))
+          (div nil (render/style (render/caret-style col metrics))))))
 
 (defn push! [a x]
   (.push a x)
@@ -262,58 +252,6 @@
         (js/performance.mark end)
         (js/performance.measure (str name) start end)
         result))))
-
-(defn shred-markup [type]
-  (fn [rf]
-        (let
-          [pendings     (array)
-          *last-pos    (atom 0)
-          next-pending (fn [pendings] (reduce (fn [c p] (if (or (nil? c) (< (.-to p) (.-to c))) p c)) nil pendings))
-          make-class   (fn [markers] (reduce (fn [c m] (str c " " (case type
-                                                                    :background (some-> m (.-attrs) (.-background))
-                                                                    :foreground (some-> m (.-attrs) (.-foreground))))) nil pendings))
-          js-disj!     (fn [arr v]
-                         (let [idx (.indexOf arr v)]
-                           (if (< -1 idx)
-                             (do
-                               (.splice arr idx 1)
-                               arr)
-                             arr)))]
-      (fn
-        ([] (rf))
-        ([res m]
-         (loop [res res]
-           (let [p         (next-pending pendings)
-                 last-pos  @*last-pos
-                 new-class (make-class pendings)]
-             (if (or (nil? p) (< (.-from m) (.-to p)))
-               (do
-                 (push! pendings m)
-                 (reset! *last-pos (.-from m))
-                 (if (identical? last-pos (.-from m))
-                   res
-                   (rf res (- (.-from m) last-pos) new-class)))
-
-               (do
-                 (js-disj! pendings p)
-                 (reset! *last-pos (.-to p))
-                 (if (identical? last-pos (.-to p))
-                   (recur res)
-                   (recur (rf res (- (.-to p) last-pos) new-class))))))))
-        ([res]
-         (rf
-           (loop [res res]
-             (let [p         (next-pending pendings)
-                   last-pos  @*last-pos
-                   new-class (make-class pendings)]
-               (if (some? p)
-                 (do
-                   (js-disj! pendings p)
-                   (reset! *last-pos (.-to p))
-                   (if (identical? last-pos (.-to p))
-                     (recur res)
-                     (recur (rf res (- (.-to p) last-pos) new-class))))
-                 res)))))))))
 
 (def real-dom
   (js/createReactClass
@@ -336,110 +274,8 @@
         :render
         (fn [_] (el "div" #js {:key "realDOM"}))}))
 
-(defn multiplex [rf1 rf2]
-  (fn [rf]
-    (fn
-      ([] (transient [(rf1) (rf2)]))
-      ([result input]
-       (assoc! result
-               0 (rf1 (get result 0) input)
-               1 (rf2 (get result 1) input)))
-      ([result] (rf (rf) [(rf1 (get result 0)) (rf2 (get result 1))])))))
-
-(defn transduce2
-  ([xform f coll]
-   (let [r-f (xform f)]
-     (r-f (reduce r-f (r-f) coll))))
-  ([xform f init coll]
-   (transduce2 xform
-               (fn
-                 ([] init)
-                 ([acc input] (f acc input)))
-               coll)))
-
-(comment
-
-  (defn fancy [start]
-    (fn [rf]
-      (fn
-        ([] [start (rf)])
-        ([[start result] input]
-         [(inc start) (rf result (str input start))])
-        ([result] (second result)))))
 
 
-  (transduce2
-    (comp
-     (map (fn [x] (str x x)))
-     (fancy 10)
-     (map clojure.string/upper-case))
-    conj [] ["a" "a" "b" "c"]))
-
-(defn merge-tokens [lexer-markers]
-  (fn [rf]
-    (let [lexer-markers-count (count lexer-markers)
-          *i                  (atom 0)]
-      (fn
-        ([] (rf))
-        ([acc m]
-         (loop [i   @*i
-                acc acc]
-           (if (and (< i lexer-markers-count) (< (.-from (aget lexer-markers i)) (.-from m)))
-             (recur (inc i) (rf acc (aget lexer-markers i)))
-             (do
-               (reset! *i i)
-               (rf acc m)))))
-        ([acc]
-         (loop [i   @*i
-                acc acc]
-           (if (< i lexer-markers-count)
-             (recur (inc i)
-               (rf acc (aget lexer-markers i)))
-             (rf acc))))))))
-
-(defrecord LineInfo
-  [text
-   caret
-   selection
-   foreground
-   background])
-
-(defn build-line-info [{:keys [caret selection markers-zipper start-offset end-offset deleted-markers tokens text-zipper]}]
-  (let [markup              (intervals/xquery-intervals markers-zipper start-offset end-offset)
-        text                (text/text text-zipper (- end-offset start-offset))
-        text-length         (count text)
-        to-relative-offsets (map
-                              (fn [marker]
-                                (intervals/->Marker (min text-length (max 0 (- (.-from marker) start-offset)))
-                                                    (min text-length (max 0 (- (.-to marker) start-offset)))
-                                                    false
-                                                    false
-                                                    (.-attrs marker))))
-        collect-to-array    (fn
-                              ([] (array))
-                              ([r t style]
-                               (doto r
-                                 (.push t)
-                                 (.push style)))
-                              ([r] r))
-        bg-xf               (comp
-                              (filter (fn [marker] (some-> marker (.-attrs) (.-background))))
-                              (shred-markup :background))
-        fg-xf               (comp
-                              (filter (fn [marker] (some-> marker (.-attrs) (.-foreground))))
-                              (shred-markup :foreground))]
-
-    (transduce2
-     (comp
-      (remove (fn [m] (contains? deleted-markers (.-id (.-attrs m)))))
-      to-relative-offsets
-      (merge-tokens (tokens->markers tokens))
-      (multiplex (bg-xf collect-to-array)
-                 (fg-xf collect-to-array)))
-     (fn [acc [bg fg]]
-       (LineInfo. text caret selection fg bg))
-     nil
-     markup)))
 
 (defn line-info-eq? [x y]
   (let [array-eq? (fn [a b]
@@ -513,7 +349,9 @@
                                                          (append-child! bg-dom)
                                                          (append-child! fg-dom)
                                                          (cond-> (some? caret)
-                                                                 (append-child! (render-caret caret metrics))))}))))}))
+                                                           (append-child! (render-caret caret metrics))))}))))}))
+
+
 
 (def render-line
   (js/createReactClass
@@ -521,40 +359,16 @@
         (fn [new-props new-state]
           (this-as this
             (let [old-props (aget ($ this :props) "props")
-                  new-props (aget new-props "props")
-                  old-start (:start-offset old-props)
-                  old-end   (:end-offset old-props)
-                  new-start (:start-offset new-props)
-                  new-end   (:end-offset new-props)]
-              (not
-                (and (= (- old-end old-start) (- new-end new-start))
-                     (tree/compare-zippers (:text-zipper old-props) (:text-zipper new-props) (text/by-offset (max old-end new-end)))
-                     (tree/compare-zippers (:markers-zipper old-props) (:markers-zipper new-props) (intervals/by-offset (max old-end new-end)))
-                     (= (:caret old-props) (:caret new-props))
-                     (= (:selection old-props) (:selection new-props))
-                     (identical? (:deleted-markers old-props) (:deleted-markers new-props))
-                     (identical? (:tokens old-props) (:tokens new-props)))))))
+                  new-props (aget new-props "props")]
+              (not (render/line-info-equiv? old-props new-props)))))
         :render (fn [_]
                   (this-as this
                     (let [props (aget (aget this "props") "props")
-                          {:keys [metrics]} props
+                          metrics (aget (aget this "props") "metrics")
                           line-info (build-line-info props)]
 
                       (el render-raw-line #js{:lineInfo line-info
                                               :metrics metrics}))))}))
-
-
-(defn line-selection [[from to] [line-start-offset line-end-offset]]
-  (cond (and (< from line-start-offset) (< line-start-offset to))
-    (if (< line-end-offset to)
-      [0 :infinity]
-      [0 (- to line-start-offset)])
-    (and (<= line-start-offset from) (<= from line-end-offset))
-    [(- from line-start-offset)
-     (if (<= to line-end-offset)
-       (- to line-start-offset)
-       :infinity)]
-    :else nil))
 
 (defonce erd (js/elementResizeDetectorMaker #js{:strategy "scroll"}))
 
@@ -606,63 +420,27 @@
                           [child]))))}))
 
 (defn editor-viewport [props]
-  (let [state                              ($ props :editorState)
-        on-mouse-down                      (aget props "onMouseDown")
-        on-drag-selection                  (aget props "onDragSelection")
-        {:keys [editor document viewport]} state
-        {:keys [pos view-size metrics]}    viewport
-        line-height                        (utils/line-height metrics)
-        {:keys [text lines hashes]}        document
-        {:keys [caret selection]}          editor
-        [_ from-y-offset]                  pos
-        [w h]                              view-size
-        left-columnt                       0
-        top-line                           (int (/ from-y-offset line-height))
-        bottom-line                        (+ top-line (int (/ h line-height)) 2)
-        y-shift                            (- (* line-height (- (/ from-y-offset line-height) top-line)))
-        caret-offset                       (get caret :offset)
-        _                                  (styles/defstyle :render-line
-                                                            [:.render-line
-                                                             {:height   (styles/px (utils/line-height metrics))
-                                                              :position :relative
-                                                              :overflow :hidden}])
-        deleted-markers                    (-> state :document :deleted-markers)
-        children                           (loop [text-zipper    (text/scan-to-line-start (text/zipper text) top-line)
-                                                  markers-zipper (intervals/zipper (:markup document))
-                                                  line-number    top-line
-                                                  result         #js[]]
-                                             (if (and (or (>= line-number bottom-line) (tree/end? text-zipper))
-                                                      (not (empty? result)))
-                                               result
-                                               (let [start-offset          (text/offset text-zipper)
-                                                     next-line-text-zipper (text/scan-to-line-start text-zipper (inc line-number))
-                                                     end-offset            (cond-> (text/offset next-line-text-zipper)
-                                                                             (not (tree/end? next-line-text-zipper)) (dec))
-                                                     intersects?           (intervals/by-intersect start-offset end-offset)
-                                                     overscans?            (intervals/by-offset end-offset)
-                                                     markers-zipper        (tree/scan markers-zipper
-                                                                                      (fn [acc metrics]
-                                                                                        (or (intersects? acc metrics)
-                                                                                            (overscans? acc metrics))))]
-                                                 (recur next-line-text-zipper
-                                                   markers-zipper
-                                                   (inc line-number)
-                                                   (push! result
-                                                          (el "div"
-                                                              (js-obj "key" line-number
-                                                                      "style" (js-obj "transform" (str "translate3d(0px, " y-shift "px, 0px)")))
-                                                              #js [(el render-line
-                                                                       #js{:key   line-number
-                                                                           :props {:text-zipper     text-zipper
-                                                                                   :markers-zipper  markers-zipper
-                                                                                   :tokens          (:tokens (get lines line-number))
-                                                                                   :start-offset    start-offset
-                                                                                   :selection       (line-selection selection [start-offset end-offset])
-                                                                                   :caret           (when (and (<= start-offset caret-offset) (<= caret-offset end-offset))
-                                                                                                      (- caret-offset start-offset))
-                                                                                   :end-offset      end-offset
-                                                                                   :metrics         metrics
-                                                                                   :deleted-markers deleted-markers}})]))))))]
+  (let [state ($ props :editorState)
+        on-mouse-down (aget props "onMouseDown")
+        on-drag-selection (aget props "onDragSelection")
+        viewport (:viewport state)
+        _ (styles/defstyle :render-line
+            [:.render-line
+             {:height   (str (utils/line-height (:metrics viewport)) "px")
+              :position :relative
+              :overflow :hidden}])
+        {:keys [y-shift] :as viewport-info} (render/viewport-info viewport)
+        children (transduce
+                  (map (fn  [props]
+                         (el "div"
+                             #js {:key (:line-number props)
+                                  :style #js {:transform (str "translate3d(0px, " y-shift "px, 0px)")}}
+                             #js [(el render-line
+                                      #js{:props props
+                                          :metrics metrics})])))
+                  (completing push!)
+                  (array)
+                  (render/viewport-lines state viewport-info))]
     (el "div"
         #js {:style       #js {:background theme/background
                                :width      "100%"

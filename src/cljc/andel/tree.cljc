@@ -11,25 +11,28 @@
 
 (ns andel.tree
   (:refer-clojure :exclude (replace remove next skip))
-  #?(:cljs (:require-macros [andel.tree :refer [->zipper z-merge]])))
+  #?(:cljs (:require-macros [andel.tree :refer [->zipper z-merge]])
+     :clj (:import [java.util ArrayList Collection])))
 
-(defonce records
-  (do
-    (defrecord Node [metrics children])
-    (defrecord Leaf [metrics data])
-    (defrecord ZipperOps [branch?
-                          children
-                          make-node
+(defrecord Node [metrics children])
+(defrecord Leaf [metrics data])
+(defrecord ZipperOps [branch?
+                      children
+                      make-node
 
-                          reducing-fn
-                          metrics-fn
-                          leaf-overflown?
-                          split-thresh
-                          split-leaf
-                          leaf-underflown?
-                          merge-leafs])
-    (defrecord ZipperLocation [ops node l r changed? acc o-acc pzip end? root?])
-     :defined))
+                      reducing-fn
+                      metrics-fn
+                      leaf-overflown?
+                      split-thresh
+                      split-leaf
+                      leaf-underflown?
+                      merge-leafs])
+(defrecord ZipperLocation [^ZipperOps ops node l r changed? acc o-acc pzip end? root?])
+
+(defn metrics [x]
+  (if (node? x)
+    (.-metrics ^Node x)
+    (.-metrics ^Leaf x)))
 
 #?(:clj
    (defmacro ->zipper [{:keys [ops node l r changed? acc o-acc pzip end? root?]}]
@@ -37,7 +40,7 @@
 
 #?(:clj
    (defmacro z-merge [loc props]
-     (let [loc-sym (gensym "loc")]
+     (let [loc-sym (with-meta (gensym "loc") {:tag `ZipperLocation})]
        `(let [~loc-sym ~loc]
           (->zipper ~{:ops (or (:ops props) `(.-ops ~loc-sym))
                       :node (or (:node props) `(.-node ~loc-sym))
@@ -53,34 +56,31 @@
 (defn assoc-o-acc [loc o-acc]
   (z-merge loc {:o-acc o-acc}))
 
-#?(:clj
-    (do
-      (defn array [& args] (object-array args))
-      (def some-array (array 1 2 3))
-      (defn array? [x]
-        (= (type some-array) (type x)))))
-
-#?(:clj  (defn push!
+#?(:clj (defn push!
            "Arity 1 added to be trancducer-friendly"
            ([a] a)
-           ([^java.util.ArrayList a x] (.add a x) a))
+           ([^ArrayList a x] (.add a x) a))
    :cljs (defn push!
            "Arity 1 added to be trancducer-friendly"
            ([a] a)
            ([a x] (.push a x) a)))
 
-#?(:clj (defn into-array-list [coll]
-          (reduce push! (java.util.ArrayList.) coll))
+#?(:clj (defn into-array-list [^Collection coll]
+          (ArrayList. coll))
    :cljs (def into-array-list into-array))
 
 #?(:clj (defn array-list? [x]
-         (instance? java.util.ArrayList x))
+         (instance? ArrayList x))
    :cljs (def array-list? array?))
 
-#?(:clj (defn sub-array [x from to]
+#?(:clj (defn sub-array-list [^ArrayList x from to]
           (.subList x from to))
-   :cljs (defn sub-array [x from to]
+   :cljs (defn sub-array-list [x from to]
            (.slice x from to)))
+
+#?(:clj (defn al-get [^ArrayList a i]
+          (.get a i))
+   :cljs (defn al-get [a i] (aget a i)))
 
 (defn make-node [children config-map]
   ((:make-node config-map) (if (array-list? children) children (into-array-list children))))
@@ -110,7 +110,7 @@
   (let [make-node-fn (:make-node config)]
     (assert (some? tree))
     (->zipper {:ops (ZipperOps. node?
-                                #(.-children %)
+                                (fn [^Node x] (.-children x))
                                 (fn [children] (make-node-fn (if (array-list? children)
                                                                children
                                                                (into-array-list children))))
@@ -136,7 +136,7 @@
   "Returns the acc at loc"
   [^ZipperLocation loc]
   (or (.-acc loc)
-      ((.-reducing-fn (.-ops loc)))))
+      ((.-reducing-fn ^ZipperOps (.-ops loc)))))
 
 (defn loc-acc [loc]
   (acc loc))
@@ -156,11 +156,11 @@
 
 (defn nodes? [c]
   (node?
-    (if (array? c)
-      (aget c 0)
+   (if (array-list? c)
+      (al-get c 0)
       (first c))))
 
-(defn root? [loc]
+(defn root? [^ZipperLocation loc]
   (.-root? loc))
 
 (defn log2 [i]
@@ -179,7 +179,7 @@
 (defn chunk-size [c thresh]
   (ceil (/ c (pow 2 (ceil (log2 (/ c thresh)))))))
 
-(defn split-needed? [children config]
+(defn split-needed? [children ^ZipperOps config]
   (let [leaf-overflown? (.-leaf-overflown? config)
         split-thresh (.-split-thresh config)]
     (fast-some (if (nodes? children)
@@ -187,7 +187,7 @@
                  (fn [^Leaf leaf] (leaf-overflown? (.-data leaf))))
                children)))
 
-(defn split-children [children config]
+(defn split-children [children ^ZipperOps config]
   (let [leaf-overflown? (.-leaf-overflown? config)
         split-leaf (.-split-leaf config)
         split-thresh (.-split-thresh config)
@@ -195,32 +195,32 @@
     (if (split-needed? children config)
       (reduce
         (fn [result node]
-          (cond (and (node? node) (<= split-thresh (count (.-children node))))
+          (cond (and (node? node) (<= split-thresh (count (.-children ^Node node))))
 
-                (transduce (comp (partition-all (chunk-size (count (.-children node)) split-thresh))
+                (transduce (comp (partition-all (chunk-size (count (.-children ^Node node)) split-thresh))
                                  (map make-node-fn))
                            push!
                            result
-                           (.-children node))
+                           (.-children ^Node node))
 
-                (and (leaf? node) (leaf-overflown? (.-data node)))
-                (reduce push! result (map #(make-leaf % config) (split-leaf (.-data node))))
+                (and (leaf? node) (leaf-overflown? (.-data ^Leaf node)))
+                (reduce push! result (map #(make-leaf % config) (split-leaf (.-data ^Leaf node))))
 
                 :else (push! result node)))
         (into-array-list [])
         children)
       children)))
 
-(defn merge-needed? [children config]
+(defn merge-needed? [children ^ZipperOps config]
   (let [leaf-underflown? (.-leaf-underflown? config)
         split-thresh (.-split-thresh config)
         merge-thresh (quot split-thresh 2)
         merge? (if (nodes? children)
-                 #(< (count (.-children %)) merge-thresh)
-                 #(leaf-underflown? (.-data %)))]
+                 #(< (count (.-children ^Node %)) merge-thresh)
+                 #(leaf-underflown? (.-data ^Leaf %)))]
     (fast-some merge? children)))
 
-(defn merge-children [children config]
+(defn merge-children [children ^ZipperOps config]
   (let [leaf-underflown? (.-leaf-underflown? config)
         merge-leafs (.-merge-leafs config)
         leaf-overflown? (.-leaf-overflown? config)
@@ -232,9 +232,9 @@
         (let [merge-thresh (quot split-thresh 2)]
           (loop [i 1
                  result (into-array-list [])
-                 left (aget children 0)]
+                 ^Node left (al-get children 0)]
             (if (< i (count children))
-              (let [right (aget children i)
+              (let [^Node right (al-get children i)
                     left-children (.-children left)
                     right-children (.-children right)
                     left-c (count left-children)
@@ -245,8 +245,8 @@
                           s (as-> (into-array-list []) al
                                   (reduce push! al left-children)
                                   (reduce push! al right-children))
-                          children-left (sub-array s 0 n)
-                          children-right (sub-array s n (count s))]
+                          children-left (sub-array-list s 0 n)
+                          children-right (sub-array-list s n (count s))]
                       (recur (inc i)
                              (push! result (make-node (merge-children children-left config)))
                              (make-node children-right config)))
@@ -259,9 +259,9 @@
               (push! result left))))
         (loop [i 1
                result (into-array-list [])
-               left-data (.-data (aget children 0))]
+               left-data (.-data ^Leaf (al-get children 0))]
           (if (< i (count children))
-            (let [right (aget children i)]
+            (let [^Leaf right (al-get children i)]
               (if (or (leaf-underflown? left-data) (leaf-underflown? (.-data right)))
                 (let [merged-data (merge-leafs left-data (.-data right))]
                   (if (leaf-overflown? merged-data)
@@ -284,7 +284,7 @@
       (split-children config)
       (merge-children config)))
 
-(defn grow-tree [children config]
+(defn grow-tree [children ^ZipperOps config]
   (let [split-thresh (.-split-thresh config)
         make-node-fn (.-make-node config)
         balanced-children (balance-children children config)]
@@ -293,7 +293,7 @@
       (recur (into-array-list [(make-node-fn balanced-children)]) config))))
 
 
-(defn shrink-tree [node]
+(defn shrink-tree [^Node node]
   (let [children (.-children node)
         [c] children]
     (if (and (node? c) (= 1 (count children)))
@@ -306,11 +306,11 @@
   (z-merge loc {:node node
                 :changed? true}))
 
-(defn up [loc]
+(defn up [^ZipperLocation loc]
   (let [node (.-node loc)
         changed? (.-changed? loc)
         pzip (.-pzip loc)
-        config (.-ops loc)
+        ^ZipperOps config (.-ops loc)
         make-node-fn (.-make-node config)]
     (if changed?
       (if (some? pzip)
@@ -320,22 +320,22 @@
                                      (some? (.-node loc)) (push! (.-node loc)))
                              (reduce push! a (.-r loc)))]
           (replace pzip (make-node-fn (balance-children children config))))
-        (->zipper {:ops (.-ops loc)
+        (->zipper {:ops config
                    :node (shrink-tree (grow-tree (into-array-list [node]) config))
                    :root? true}))
       pzip)))
 
-(defn right [loc]
+(defn right [^ZipperLocation loc]
   (when-let [[r & rs] (.-r loc)]
-    (let [reducing-fn (.-reducing-fn (.-ops loc))
-          node (.-node loc)]
+    (let [reducing-fn (.-reducing-fn ^ZipperOps (.-ops loc))
+          ^Node node (.-node loc)]
       (z-merge loc {:node r
                     :l (conj (.-l loc) node)
                     :r rs
                     :acc (reducing-fn (acc loc) (.-metrics node))
                     :o-acc nil}))))
 
-(defn down [loc]
+(defn down [^ZipperLocation loc]
   (when (branch? loc)
     (when-let [[c & cs] (children loc)]
       (->zipper
@@ -353,7 +353,7 @@
 
 (defn root
   "Modified version of clojure.zip/root to work with balancing version of up"
-  [loc]
+  [^ZipperLocation loc]
   (if (end? loc)
     (node loc)
     (let [p (up loc)]
@@ -363,13 +363,13 @@
 
 (defn next
   "Modified version of clojure.zip/next to work with balancing version of up"
-  [loc]
+  [^ZipperLocation loc]
   (if (end? loc)
     loc
     (or
      (and (branch? loc) (down loc))
      (right loc)
-     (loop [p loc]
+     (loop [^ZipperLocation p loc]
        (if-let [u (up p)]
          (or (right u) (recur u))
          (->zipper {:ops (.-ops loc)
@@ -378,12 +378,12 @@
 
 (defn skip
   "Just like next but not going down"
-  [loc]
+  [^ZipperLocation loc]
   (if (end? loc)
     loc
     (or
      (right loc)
-     (loop [p loc]
+     (loop [^ZipperLocation p loc]
        (if-let [u (up p)]
          (or (right u) (recur u))
          (->zipper {:ops (.-ops loc)
@@ -405,17 +405,17 @@
 (defn insert-child
   "Inserts the item as the leftmost child of the node at this loc, without moving"
   [^ZipperLocation loc item]
-  (let [make-node-fn (.-make-node (.-ops loc))]
+  (let [make-node-fn (.-make-node ^ZipperOps (.-ops loc))]
     (replace loc (make-node-fn (cons item (children loc))))))
 
-(defn next-leaf [loc]
+(defn next-leaf [^ZipperLocation loc]
   (let [loc (next loc)]
     (if (or (leaf? (node loc))
             (end? loc))
       loc
       (recur loc))))
 
-(defn reset [loc]
+(defn reset [^ZipperLocation loc]
   (zipper (root loc)
           (.-ops loc)))
 
@@ -429,18 +429,18 @@
                   (-reduce [this f] (reduction (f) f))
                   (-reduce [this init f] (reduction init f)))))
 
-(defn scan [loc pred]
+(defn scan [^ZipperLocation loc pred]
   (if (end? loc)
     loc
     (let [node (.-node loc)
           rights (.-r loc)
           lefts (.-l loc)
           acc (.-acc loc)
-          reducing-fn (.-reducing-fn (.-ops loc))
+          reducing-fn (.-reducing-fn ^ZipperOps (.-ops loc))
           next-loc (if (root? loc)
                      loc
                      (loop [l (transient lefts)
-                            n node
+                            ^Node n node
                             r rights
                             acc (or acc (reducing-fn))]
                        (when (some? n)
@@ -467,15 +467,15 @@
   "Inserts the item as the left sibling of the node at this loc, without moving"
   [^ZipperLocation loc item]
   (assert (some? (.-l loc)) "Insert at top")
-  (let [reducing-fn (.-reducing-fn (.-ops loc))]
+  (let [reducing-fn (.-reducing-fn ^ZipperOps (.-ops loc))]
     (z-merge loc {:l (conj (.-l loc) item)
                   :changed? true
                   :acc (reducing-fn (.-acc loc)
-                                    (.-metrics item))})))
+                                    (metrics item))})))
 
-(defn remove [loc]
+(defn remove [^ZipperLocation loc]
   (let [node (.-node loc)
-        make-node-fn (.-make-node (.-ops loc))]
+        make-node-fn (.-make-node ^ZipperOps (.-ops loc))]
     (if (root? loc)
       (replace loc (make-node-fn []))
       (if-let [[r & rs] (.-r loc)]
@@ -500,7 +500,7 @@
   (loop [z1 z1
          z2 z2]
     (if (identical? (node z1) (node z2))
-      (if (or (stop? (loc-acc z1) (.-metrics (node z1)))
+      (if (or (stop? (loc-acc z1) (metrics (node z1)))
               (and (end? z1) (end? z2)))
         true
         (recur (next z1) (next z2)))

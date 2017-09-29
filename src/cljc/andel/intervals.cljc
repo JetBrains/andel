@@ -1,6 +1,7 @@
 (ns andel.intervals
   (:require [andel.tree :as tree]
-            [andel.bloomfilter :as bloom]))
+            [andel.bloomfilter :as bloom])
+  (:import [andel.tree Leaf Node ZipperLocation ZipperOps]))
 
 (def plus-infinity
   #?(:cljs 1000000000.0 #_js/Number.POSITIVE_INFINITY
@@ -15,18 +16,18 @@
    bloom
    greedy-left?
    greedy-right?
-   attrs])
+   ^Attrs attrs])
 
 (defrecord Marker
   [from
    to
    greedy-left?
    greedy-right?
-   attrs])
+   ^Attrs attrs])
 
 (defn reducing-fn
   ([] nil)
-  ([left right]
+  ([^Data left ^Data right]
    (cond
      (nil? left) right
      (nil? right) left
@@ -47,12 +48,12 @@
   (assert (tree/leaf? loc))
   (let [acc  (tree/loc-acc loc)
         node (tree/node loc)
-        acc' (reducing-fn acc (.-metrics node))]
+        ^Data acc' (reducing-fn acc (tree/metrics node))]
     (+ (.-offset acc') (.-rightest acc'))))
 
 (defn marker-to [loc]
   (+ (marker-from loc)
-     (-> (tree/node loc) (.-data) (.-length))))
+     (.-length ^Data (.-data ^Leaf (tree/node loc)))))
 
 (def tree-config
   {:reducing-fn      reducing-fn
@@ -61,9 +62,9 @@
                 (if (empty? children)
                   (tree/->Node (Data. 0 0 0 (bloom/create) nil nil nil) [])
                   (let [bloom (if (tree/node? (first children))
-                                (bloom/merge-many (into [] (map (fn [c] (-> c (.-metrics) (.-bloom)))) children))
-                                (reduce (fn [f c] (bloom/add! f (-> c (.-data) (.-attrs) (.-id)))) (bloom/create) children))
-                        data (reduce (fn [acc x] (reducing-fn acc (.-metrics x))) (reducing-fn) children)]
+                                (bloom/merge-many (into [] (map (fn [c] (.-bloom ^Data (tree/metrics c)))) children))
+                                (reduce (fn [f ^Leaf c] (bloom/add! f (.-id ^Attrs (.-attrs ^Data (.-data c))))) (bloom/create) children))
+                        ^Data data (reduce (fn [acc x] (reducing-fn acc (tree/metrics x))) (reducing-fn) children)]
                     (tree/->Node (Data. (.-offset data)
                                         (.-length data)
                                         (.-rightest data)
@@ -81,7 +82,7 @@
 
 (defn by-offset [offset]
   (fn [acc m]
-    (let [m (reducing-fn acc m)]
+    (let [^Data m (reducing-fn acc m)]
       (< offset (+ (.-offset m) (.-rightest m))))))
 
 (defn offset->tree-basis [offset]
@@ -91,11 +92,11 @@
   (dec offset))
 
 (defn loc->Marker [loc]
-  (let [node     (tree/node loc)
-        metrics  (.-metrics node)
-        data     (.-data node)
-        length   (.-length metrics)
-        from     (marker-from loc)]
+  (let [^Leaf node (tree/node loc)
+        ^Data metrics (tree/metrics node)
+        ^Data data (.-data node)
+        length (.-length metrics)
+        from (marker-from loc)]
     (Marker. (tree-basis->offset from)
              (tree-basis->offset (+ from length))
              (.-greedy-left? data)
@@ -105,11 +106,11 @@
 (defn loc->tree-marker
   "Same as loc->Marker but offsets are in tree basis"
   [loc]
-  (let [node     (tree/node loc)
-        metrics  (.-metrics node)
-        data     (.-data node)
-        length   (.-length metrics)
-        from     (marker-from loc)]
+  (let [^Leaf node (tree/node loc)
+        ^Data metrics (.-metrics node)
+        ^Data data (.-data node)
+        length (.-length metrics)
+        from (marker-from loc)]
     (Marker. from
              (+ from length)
              (.-greedy-left? data)
@@ -117,17 +118,17 @@
              (.-attrs data))))
 
 
-(defn update-leaf [loc f]
+(defn update-leaf [^ZipperLocation loc f]
   (assert (tree/leaf? (tree/node loc)) "update-leaf should recieve leaf")
-  (let [metrics-fn (.-metrics-fn (.-ops loc))]
+  (let [metrics-fn (.-metrics-fn ^ZipperOps (.-ops loc))]
     (tree/edit loc
-               (fn [leaf]
+               (fn [^Leaf leaf]
                  (let [data' (f (.-data leaf))]
                    (tree/->Leaf (metrics-fn data') data'))))))
 
 (defn update-leaf-offset [loc f]
   (update-leaf loc
-               (fn [data]
+               (fn [^Data data]
                  (Data. (f (.-offset data))
                         (.-length data)
                         (.-rightest data)
@@ -138,7 +139,7 @@
 
 (defn update-leaf-length [loc f]
   (update-leaf loc
-               (fn [data]
+               (fn [^Data data]
                  (Data. (.-offset data)
                         (f (.-length data))
                         (.-rightest data)
@@ -179,7 +180,7 @@
     (<= from-snd to-fst)))
 
 (defn by-intersect [from to]
-  (fn [acc-metrics node-metrics]
+  (fn [^Data acc-metrics ^Data node-metrics]
     (let [rightest (or (some-> acc-metrics (.-rightest)) 0)
           offset   (.-offset node-metrics)
           length   (.-length node-metrics)
@@ -198,7 +199,8 @@
 (defn insert-one
   ([loc from to greedy-left? greedy-right? attrs]
    (let [r-sibling-loc    (tree/scan loc (by-offset from))
-         r-offset         (-> r-sibling-loc tree/node (.-metrics) (.-offset))
+         ^Data r-metrics  (-> r-sibling-loc tree/node (tree/metrics))
+         r-offset         (.-offset r-metrics)
          r-from           (marker-from r-sibling-loc)
          r-to             (marker-to r-sibling-loc)
          len              (- to from)
@@ -207,7 +209,7 @@
      (-> r-sibling-loc
          (tree/insert-left (make-leaf offset len greedy-left? greedy-right? attrs))
          (update-leaf-offset (constantly new-r-offset)))))
-  ([loc marker]
+  ([loc ^Marker marker]
    (let [from             (.-from marker)
          to               (.-to marker)
          greedy-left?     (.-greedy-left? marker)
@@ -218,7 +220,7 @@
 (defn add-markers [itree markers]
   (root
     (reduce
-      (fn [loc m]
+      (fn [loc ^Marker m]
         (insert-one loc
                     (offset->tree-basis (.-from m))
                     (offset->tree-basis (.-to m))
@@ -229,7 +231,7 @@
       markers)))
 
 (defn remove-leaf [loc]
-  (let [data   (.-data (tree/node loc))
+  (let [^Data data (.-data ^Leaf (tree/node loc))
         offset (.-offset data)
         length (.-length data)
         from   (marker-from loc)
@@ -244,8 +246,8 @@
 
 (defn next-changed [loc offset]
   (tree/scan loc
-             (fn [acc-metrics node-metrics]
-               (let [metrics     (reducing-fn acc-metrics node-metrics)
+             (fn [^Data acc-metrics ^Data node-metrics]
+               (let [^Data metrics     (reducing-fn acc-metrics node-metrics)
                      rightest    (or (some-> acc-metrics (.-rightest)) 0)
                      node-offset (.-offset node-metrics)
                      length      (.-length node-metrics)
@@ -270,7 +272,7 @@
             [(tree/root (update-leaf-offset new-loc #(+ % size))) (persistent! acc)]
             (recur (remove-leaf new-loc) (conj! acc (loc->tree-marker new-loc)))))))))
 
-(defn process-interval [marker offset size]
+(defn process-interval [^Marker marker offset size]
   (let [from          (.-from marker)
         to            (.-to marker)
         greedy-left?  (.-greedy-left? marker)
@@ -308,8 +310,8 @@
          root)))
 
 (defn collect-with-remove-changed [itree offset size]
-  (let [changed? (fn [acc-metrics node-metrics]
-                   (let [metrics     (reducing-fn acc-metrics node-metrics)
+  (let [changed? (fn [^Data acc-metrics ^Data node-metrics]
+                   (let [^Data metrics     (reducing-fn acc-metrics node-metrics)
                          rightest    (or (some-> acc-metrics (.-rightest)) 0)
                          node-offset (.-offset node-metrics)
                          length      (.-length node-metrics)
@@ -330,7 +332,7 @@
               [(tree/root (update-leaf-offset new-loc #(- % size))) (persistent! acc)]
               (recur (remove-leaf new-loc) (conj! acc (loc->tree-marker new-loc))))))))))
 
-(defn process-single-interval-deletion [marker offset length]
+(defn process-single-interval-deletion [^Marker marker offset length]
   (let [from         (.-from marker)
         to           (.-to marker)
         g-l?         (.-greedy-left? marker)
@@ -393,7 +395,7 @@
            changed? false
            res (tree/into-array-list [])]
       (if (< i len)
-        (let [n (aget children i)
+        (let [n (tree/al-get children i)
               data (.-data n)]
           (cond
             (deleted? (-> n (.-data) (.-attrs) (.-id)))
