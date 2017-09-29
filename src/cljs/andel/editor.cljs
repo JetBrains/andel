@@ -697,31 +697,27 @@
    #js {:componentDidMount
         (fn []
           (this-as cmp
-            (let [props    (aget cmp "props")
-                  focused? (aget props "isFocused")
-                  dom-node (aget (aget cmp "refs") "textarea")]
+            (let [props         (aget cmp "props")
+                  focused?      (aget props "isFocused")
+                  dom-node      (aget (aget cmp "refs") "textarea")
+                  selected-text (aget props "selectedText")]
               (when focused?
-                (.focus dom-node)))))
+                (.focus dom-node)
+                (set! (.-value dom-node) selected-text)
+                (.select dom-node)
+                (.setSelectionRange dom-node 0 (count selected-text))))))
         :componentDidUpdate
         (fn []
           (this-as cmp
             (let [props    (aget cmp "props")
                   focused? (aget props "isFocused")
                   dom-node (aget (aget cmp "refs") "textarea")
-                  selected-text (aget props "selectedText")
-                  sync-with-clipboard (aget props "syncWithClipboard")
-                  on-clipboard-updated (aget props "onClipboardUpdated")]
+                  selected-text (aget props "selectedText")]
               (when focused?
-                (.focus dom-node))
-              (when sync-with-clipboard
+                (.focus dom-node)
                 (set! (.-value dom-node) selected-text)
-                (.setAttribute dom-node "readonly" "")
                 (.select dom-node)
-                (.setSelectionRange dom-node 0 (count selected-text))
-                (js/document.execCommand "copy")
-                (.removeAttribute dom-node "readonly")
-                (set! (.-value dom-node) "")
-                (on-clipboard-updated)))))
+                (.setSelectionRange dom-node 0 (count selected-text))))))
         :shouldComponentUpdate
         (fn [new-props new-state]
           true
@@ -772,7 +768,7 @@
           (this-as cmp
             (let [props             ($ cmp :props)
                   state             ($ props :editorState)
-                  {:keys [on-input on-mouse-down on-drag-selection on-resize on-scroll on-focus on-key-down on-clipboard-updated]
+                  {:keys [on-input on-mouse-down on-drag-selection on-resize on-scroll on-focus on-key-down]
                    :as   callbacks} ($ props :callbacks)
                   *bindings         ($ cmp :bindings)]
               (if (ready-to-view? state)
@@ -799,9 +795,7 @@
                                   :isFocused (get-in state [:viewport :focused?])
                                   :onInput   on-input
                                   :onKeyDown on-key-down
-                                  :onClipboardUpdated on-clipboard-updated
-                                  :selectedText (selected-text state)
-                                  :syncWithClipboard (get-in state [:viewport :sync-with-clipboard])})])
+                                  :selectedText (selected-text state)})])
                 (el "div" #js {:key "editor-placeholder"} #js ["EDITOR PLACEHOLDER"])))))}))
 
 (defn editor-view [editor-state callbacks]

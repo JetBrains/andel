@@ -210,6 +210,3 @@
 
 (defn resize [state width height]
   (assoc-in state [:viewport :view-size] [width height]))
-
-(defn set-sync-with-clipboard [state v]
-  (assoc-in state [:viewport :sync-with-clipboard] v))
