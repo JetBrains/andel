@@ -15,7 +15,7 @@
 
 (defn infinity? [x] (keyword? x))
 
-(defn selection-style [from to {:keys [width] :as metrics}]
+(defn selection-style [[from to] {:keys [width] :as metrics}]
   {:background-color theme/selection
    :height           (str  (utils/line-height metrics) "px")
    :position         :absolute
@@ -59,7 +59,9 @@
      (reduce (fn [c p] (if (or (nil? c) (< (.-to p) (.-to c))) p c)) nil pendings))
    :clj
    (defn next-pending [^TreeSet pendings]
-     (.first pendings)))
+     (if (.isEmpty pendings)
+       nil
+       (.first pendings))))
 
 #?(:cljs 
    (defn remove-pending! [arr p]
@@ -195,8 +197,8 @@
      markup)))
 
 (defn line-props-equiv? [old new]
-  (let [end-offset (max (:end old) (:end new))]
-    (and (= (- (:end old) (:start old)) (- (:end new) (:start new)))
+  (let [end-offset (max (:end-offset old) (:end-offset new))]
+    (and (= (- (:end-offset old) (:start-offset old)) (- (:end-offset new) (:start-offset new)))
          (tree/compare-zippers (:text-zipper old)
                                (:text-zipper new)
                                (text/by-offset end-offset))
@@ -221,13 +223,13 @@
         :else nil))
 
 (defn viewport-info [{metrics :metrics
-                                [w h] :view-size
-                                [_ from-y-offset] :pos :as viewport}]
+                      [w h] :view-size
+                      [_ from-y-offset] :pos :as viewport}]
   (let [line-height (utils/line-height metrics)
         top-line (int (/ from-y-offset line-height))]
     {:top-line top-line
      :bottom-line (+ top-line (int (/ h line-height)) 2)
-     :y-shift (- (* line-height (- (/ from-y-offset line-height) top-line)))}))
+     :y-shift (double (- (* line-height (- (/ from-y-offset line-height) top-line))))}))
 
 (defn viewport-lines [state viewport-info]
   (let [{{:keys [text lines markup hashes deleted-markers]} :document
@@ -239,9 +241,10 @@
        (loop [text-zipper    (text/scan-to-line-start (text/zipper text) top-line)
               markers-zipper (intervals/zipper markup)
               line-number    top-line
-              result         init]
+              result         init
+              result-empty?  true]
          (if (and (or (>= line-number bottom-line) (tree/end? text-zipper))
-                  (not (empty? result)))
+                  (not result-empty?))
            result
            (let [start-offset          (text/offset text-zipper)
                  next-line-text-zipper (text/scan-to-line-start text-zipper (inc line-number))
@@ -265,4 +268,5 @@
                                :caret           (when (and (<= start-offset caret-offset) (<= caret-offset end-offset))
                                                   (- caret-offset start-offset))
                                :end-offset      end-offset
-                               :deleted-markers deleted-markers})))))))))
+                               :deleted-markers deleted-markers})
+                    false))))))))

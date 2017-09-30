@@ -13,26 +13,25 @@
   (:refer-clojure :exclude (replace remove next skip))
   #?(:cljs (:require-macros [andel.tree :refer [->zipper z-merge]])
      :clj (:import [java.util ArrayList Collection])))
+(defonce records
+  (do
+    (defrecord Node [metrics children])
+    (defrecord Leaf [metrics data])
+    (defrecord ZipperOps [branch?
+                          children
+                          make-node
+                          
+                          reducing-fn
+                          metrics-fn
+                          leaf-overflown?
+                          split-thresh
+                          split-leaf
+                          leaf-underflown?
+                          merge-leafs])
+    
+    (defrecord ZipperLocation [ops node l r changed? acc o-acc pzip end? root?])
+    :done))
 
-(defrecord Node [metrics children])
-(defrecord Leaf [metrics data])
-(defrecord ZipperOps [branch?
-                      children
-                      make-node
-
-                      reducing-fn
-                      metrics-fn
-                      leaf-overflown?
-                      split-thresh
-                      split-leaf
-                      leaf-underflown?
-                      merge-leafs])
-(defrecord ZipperLocation [^ZipperOps ops node l r changed? acc o-acc pzip end? root?])
-
-(defn metrics [x]
-  (if (node? x)
-    (.-metrics ^Node x)
-    (.-metrics ^Leaf x)))
 
 #?(:clj
    (defmacro ->zipper [{:keys [ops node l r changed? acc o-acc pzip end? root?]}]
@@ -99,6 +98,11 @@
              (instance? Node x))
 
            (defn ^boolean leaf? [x] (not (node? x)))))
+
+(defn metrics [x]
+  (if (node? x)
+    (.-metrics ^Node x)
+    (.-metrics ^Leaf x)))
 
 (defn zipper [tree {:keys [reducing-fn
                            metrics-fn
@@ -328,11 +332,11 @@
 (defn right [^ZipperLocation loc]
   (when-let [[r & rs] (.-r loc)]
     (let [reducing-fn (.-reducing-fn ^ZipperOps (.-ops loc))
-          ^Node node (.-node loc)]
+          node (.-node loc)]
       (z-merge loc {:node r
                     :l (conj (.-l loc) node)
                     :r rs
-                    :acc (reducing-fn (acc loc) (.-metrics node))
+                    :acc (reducing-fn (acc loc) (metrics node))
                     :o-acc nil}))))
 
 (defn down [^ZipperLocation loc]
@@ -422,12 +426,12 @@
 (defn reducible [reduction]
   #?(:clj (reify
             clojure.lang.IReduce
-            (reduce [this f] (reduction (f) f))
+            (reduce [this f] (reduction f (f)))
             clojure.lang.IReduceInit
-            (reduce [this init f] (reduction init f)))
+            (reduce [this f init] (reduction f init)))
           :cljs (reify IReduce
-                  (-reduce [this f] (reduction (f) f))
-                  (-reduce [this init f] (reduction init f)))))
+                  (-reduce [this f] (reduction f (f)))
+                  (-reduce [this init f] (reduction f init)))))
 
 (defn scan [^ZipperLocation loc pred]
   (if (end? loc)
@@ -440,11 +444,11 @@
           next-loc (if (root? loc)
                      loc
                      (loop [l (transient lefts)
-                            ^Node n node
+                            n node
                             r rights
                             acc (or acc (reducing-fn))]
                        (when (some? n)
-                         (let [m (.-metrics n)]
+                         (let [m (metrics n)]
                            (if (pred acc m)
                              (->zipper {:ops (.-ops loc)
                                         :node n

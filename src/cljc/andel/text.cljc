@@ -4,10 +4,7 @@
 
 #?(:clj
    (do
-     (defn array [& args] (object-array args))
-     (def some-array (array 1 2 3))
-     (defn array? [x]
-       (= (type some-array) (type x)))))
+     (defn array [& args] (long-array args))))
 
 #?(:clj
    (defn metrics [^String x]

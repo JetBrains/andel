@@ -223,10 +223,10 @@
   (.appendChild e c)
   e)
 
-(defn render-selection [[from to] metrics]
+(defn render-selection [selection metrics]
   (div nil
        (render/style
-        (render/selection-style from to metrics))))
+        (render/selection-style selection metrics))))
 
 (defn render-caret [col {:keys [width] :as metrics}]
   (doto (div nil nil)
