@@ -44,12 +44,12 @@
 (defn count-lines-in-view [viewport metrics]
   (let [{:keys [view-size]} viewport
         [_ view-size] view-size]
-    (Math/round (/ view-size (utils/line-height metrics)))))
+    (Math/round (double (/ view-size (utils/line-height metrics))))))
 
 (defn get-view-in-lines [viewport metrics]
   (let [{:keys [pos]} viewport
         [_ pos-px] pos
-        pos-in-lines (Math/round (/ pos-px (utils/line-height metrics)))
+        pos-in-lines (Math/round (double (/ pos-px (utils/line-height metrics))))
         pos-in-lines-end (+ pos-in-lines (count-lines-in-view viewport metrics))]
     [pos-in-lines pos-in-lines-end]))
 

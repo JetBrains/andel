@@ -110,5 +110,7 @@
                                  :style (render/style {:transform (str "translate3d(0px, " y-shift "px, 0px)")})}
                            [render-line props metrics]]))
                    (render/viewport-lines state viewport-info))}]
+         [:hidden-text-area {:on-input on-input
+                             :focused? (get-in state [:viewport :focused?])}]
          [styles-container styles-map]])))))
 
