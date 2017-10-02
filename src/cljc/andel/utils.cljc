@@ -16,9 +16,9 @@
         y-shift (- (* line-height (- (/ top-px line-height) top-line)))
         x pix-x
         y (- (- pix-y y-shift) (/ line-height 2))
-        rel-line (Math/round (/ y line-height))
+        rel-line (Math/round (double (/ y line-height)))
         abs-line (+ top-line rel-line)
-        abs-col (Math/round (/ x font-width))]
+        abs-col (Math/round (double (/ x font-width)))]
     {:line abs-line
      :col abs-col}))
 

@@ -65,26 +65,6 @@
            [:div {:key :caret
                   :style (render/style (render/caret-style caret metrics))}])])))))
 
-(def editor-viewport
-  (comp
-   (should-subtree-update
-    (fn [state state']
-      (not (identical? state state'))))
-   (stateless
-    (fn [state]
-      (let [viewport (:viewport state)
-            metrics (:metrics viewport)
-            {:keys [y-shift] :as viewport-info} (render/viewport-info viewport)]
-        (into
-         [:div {:style (render/style {:background theme/background
-                                      :width      "100%"
-                                      :overflow   "hidden"})}]
-         (map (fn [props]
-                [:div {:key (:line-number props)
-                       :style (render/style {:transform (str "translate3d(0px, " y-shift "px, 0px)")})}
-                 [render-line props metrics]]))
-         (render/viewport-lines state viewport-info)))))))
-
 (def style-cmp
   (comp
    (should-subtree-update (constantly false))
@@ -110,13 +90,25 @@
       (or (not (identical? state state'))
           (not= callbacks callbacks'))))
    (stateless
-    (fn [state {:keys [on-input on-mouse-down on-drag-selection on-resize on-scroll on-focus on-key-down]} styles-map]
-      [:div {:style (render/style {:display "flex"
-                                   :flex    "1"
-                                   :cursor  "text"
-                                   :outline "transparent"})}
-       [scroll
-        {:on-wheel on-scroll
-         :child [editor-viewport state]}]
-       [styles-container styles-map]]))))
+    (fn [state {:keys [on-input on-mouse-down on-drag-selection on-resize on-scroll on-focus]} styles-map]
+      (let [viewport (:viewport state)
+            metrics (:metrics viewport)
+            {:keys [y-shift] :as viewport-info} (render/viewport-info viewport)]
+        [:div {:style (render/style {:display "flex"
+                                     :flex    "1"
+                                     :cursor  "text"
+                                     :outline "transparent"})}
+         [scroll
+          {:on-wheel on-scroll
+           :child (into
+                   [:div {:style (render/style {:background theme/background
+                                                :width      "100%"
+                                                :overflow   "hidden"})
+                          :on-mouse-down on-mouse-down}]
+                   (map (fn [props]
+                          [:div {:key (:line-number props)
+                                 :style (render/style {:transform (str "translate3d(0px, " y-shift "px, 0px)")})}
+                           [render-line props metrics]]))
+                   (render/viewport-lines state viewport-info))}]
+         [styles-container styles-map]])))))
 
