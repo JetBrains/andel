@@ -230,7 +230,7 @@
         leaf-overflown? (.-leaf-overflown? config)
         split-leaf (.-split-leaf config)
         split-thresh (.-split-thresh config)
-        make-node (.-make-node config)]
+        make-node-fn (.-make-node config)]
     (if (merge-needed? children config)
       (if (nodes? children)
         (let [merge-thresh (quot split-thresh 2)]
@@ -252,13 +252,13 @@
                           children-left (sub-array-list s 0 n)
                           children-right (sub-array-list s n (count s))]
                       (recur (inc i)
-                             (push! result (make-node (merge-children children-left config)))
-                             (make-node children-right config)))
+                             (push! result (make-node-fn (merge-children children-left config)))
+                             (make-node-fn children-right)))
                     (recur (inc i)
                            result
-                           (make-node (merge-children (as-> (into-array-list []) a
+                           (make-node-fn (merge-children (as-> (into-array-list []) a
                                                             (reduce push! a left-children)
-                                                            (reduce push! a right-children)) config) config)))
+                                                            (reduce push! a right-children)) config))))
                   (recur (inc i) (push! result left) right)))
               (push! result left))))
         (loop [i 1

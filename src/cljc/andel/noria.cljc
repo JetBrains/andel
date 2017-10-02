@@ -9,7 +9,7 @@
       ([] {:s (r-f)
            :args nil})
       ([state & args]
-       (if (pred args (:args state))
+       (if (or (nil? (:args state)) (pred args (:args state)))
          {:s (apply r-f (:s state) args)
           :args args}
          state))
@@ -85,6 +85,24 @@
                  [render-line props metrics]]))
          (render/viewport-lines state viewport-info)))))))
 
+(def style-cmp
+  (comp
+   (should-subtree-update (constantly false))
+   (stateless
+    (fn [name style]
+      [:style {:name name
+               :style (render/style style)}]))))
+
+(def styles-container
+  (comp
+   (should-subtree-update not=)
+   (stateless
+    (fn [s]
+      (into
+       [:div]
+       (map (fn [[n s]] ^{:key n} [style-cmp n s]))
+       s)))))
+
 (def editor-component
   (comp
    (should-subtree-update
@@ -92,11 +110,13 @@
       (or (not (identical? state state'))
           (not= callbacks callbacks'))))
    (stateless
-    (fn [state {:keys [on-input on-mouse-down on-drag-selection on-resize on-scroll on-focus on-key-down]}]
+    (fn [state {:keys [on-input on-mouse-down on-drag-selection on-resize on-scroll on-focus on-key-down]} styles-map]
       [:div {:style (render/style {:display "flex"
                                    :flex    "1"
                                    :cursor  "text"
                                    :outline "transparent"})}
        [scroll
         {:on-wheel on-scroll
-         :child [editor-viewport state]}]]))))
+         :child [editor-viewport state]}]
+       [styles-container styles-map]]))))
+

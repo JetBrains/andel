@@ -87,12 +87,12 @@
           [pendings (make-pendings)
            *last-pos (atom 0)
            make-class (fn [markers]
-                        (reduce
-                         (fn [c ^Marker m]
-                           (str c " " (case type
-                                        :background (some-> m ^Attrs (.-attrs) (.-background))
-                                        :foreground (some-> m ^Attrs (.-attrs) (.-foreground)))))
-                         nil pendings))]
+                        (->> markers
+                             (map (fn [^Marker m]
+                                    (case type
+                                      :background (some-> m ^Attrs (.-attrs) (.-background))
+                                      :foreground (some-> m ^Attrs (.-attrs) (.-foreground)))))
+                             (clojure.string/join " ")))]
       (fn
         ([] (rf))
         ([res ^Marker m]

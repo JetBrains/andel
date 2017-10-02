@@ -2,7 +2,6 @@
   (:require [clojure.core.async :as a]
             [clojure.tools.reader.edn :as edn]
             [cljs-http.client :as http]
-
             [andel.core :as core]
             [andel.styles :as styles]
             [andel.editor :as editor]
