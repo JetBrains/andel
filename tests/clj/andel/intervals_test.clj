@@ -17,8 +17,7 @@
                                           :to (max a b)
                                           :greedy-left? g-l?
                                           :greedy-right? g-r?
-                                          :background "bg"
-                                          :foreground "fg"}))
+                                          :attrs nil}))
                           (g/tuple (g/large-integer* {:min 0 :max 10000})
                                    (g/large-integer* {:min 0 :max 10000})
                                    g/boolean
@@ -30,14 +29,14 @@
 (deftest bulk-insertion
   (is (:result (tc/quick-check 100
                                (prop/for-all [bulk intervals-bulk-gen]
-                                             (let [itree (add-intervals (make-interval-tree) bulk)]
+                                             (let [itree (add-markers (make-interval-tree) bulk)]
                                                (= (tree->intervals itree)
                                                   bulk)))))))
 
 (deftest multiple-bulk-insertion
   (is (:result (tc/quick-check 30
                                (prop/for-all [bulk-bulk (g/vector intervals-bulk-gen)]
-                                             (let [itree (reduce add-intervals
+                                             (let [itree (reduce add-markers
                                                                  (make-interval-tree)
                                                                  bulk-bulk)]
                                                (= (set (mapcat vec bulk-bulk))
@@ -79,35 +78,38 @@
 
 (defn bulk->tree [bulk]
   (-> (make-interval-tree)
-      (add-intervals bulk)))
+      (add-markers bulk)))
+
 
 (deftest type-in-positive-test
   (is (:result (tc/quick-check 100
                                (prop/for-all [[bulk qs] bulk-offset-size-gen]
                                              (= (set (reduce play-type-in bulk qs))
                                                 (set (tree->intervals
-                                                      (reduce type-in (bulk->tree bulk) qs)))))))))
+                                                       (reduce (fn [t [o s]] (type-in t o s)) (bulk->tree bulk) qs)))))))))
 
 ;; model -> [offset size] -> model
 (defn play-delete-range [model [offset length]]
   (map (fn [interval]
          (let [update-point (fn [point offset length] (if (< offset point)
-                                                 (max offset (- point length))
-                                                 point))]
+                                                        (max offset (- point length))
+                                                        point))]
            (-> interval
                (update :from update-point offset length)
                (update :to update-point offset length))))
        model))
 
 (deftest test-delete-range
-  (is (:result (tc/quick-check 100
-                               (prop/for-all [[bulk qs] bulk-offset-size-gen]
-                                             (= (set (reduce play-delete-range bulk qs))
-                                                (set (tree->intervals
-                                                      (reduce delete-range (bulk->tree bulk) qs)))))))))
+  (is (:result
+       (tc/quick-check 1000
+                       (prop/for-all [[bulk qs] bulk-offset-size-gen]
+                                     (= (set (reduce play-delete-range bulk qs))
+                                        (set (tree->intervals
+                                               (reduce (fn [t [o s]] (delete-range t o s)) (bulk->tree bulk) qs))))))
+       )))
 
 (defn play-query [model {:keys [from to]}]
-  (vec (filter #(intersect % (map->Marker {:from from :to to})) model)))
+  (vec (filter (fn [m] (intersects? (.-from m) (.-to m) from to)) model)))
 
 (defn query-gen [max-val]
   (g/fmap (fn [[x y]]
@@ -136,14 +138,18 @@
                     (g/large-integer* {:min 0 :max 10000000}))))
 
 (deftest type-and-delete-test
-  (is (:result (tc/quick-check 100
+  (is (:result
+       (tc/quick-check 100
                                (prop/for-all
                                 [bulk intervals-bulk-gen
                                  ops (g/vector operation-gen)]
                                 (let [[tree model] (reduce (fn [[tree model] [[play real] args]]
-                                                             [(real tree args)
+                                                             [(apply real tree args)
                                                               (play model args)])
                                                            [(bulk->tree bulk) bulk]
                                                            ops)]
                                   (= (set (tree->intervals tree))
-                                     (set model))))))))
+                                     (set model)))))
+       )
+
+      ))

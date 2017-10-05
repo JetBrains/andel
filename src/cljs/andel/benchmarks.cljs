@@ -42,7 +42,7 @@
   (bench "TREE INSERT"
          (fn []
            (-> (intervals/make-interval-tree)
-               (intervals/add-intervals markup)))
+               (intervals/add-markers markup)))
          :count 1))
 
 (defn bench-insert-base [markup]
@@ -53,16 +53,16 @@
 
 (defn bench-query [markup]
   (let [itree (-> (intervals/make-interval-tree)
-                  (intervals/add-intervals markup))]
+                  (intervals/add-markers markup))]
     (bench "TREE QUERY"
            (fn []
              (let [from (rand-int 160000)
                    to (+ from 3200)]
-               (intervals/query-intervals itree {:from from :to to})))
+               (intervals/query-intervals itree from to)))
            :count 10000)))
 
 (defn play-query [model {:keys [from to]}]
-  (vec (filter #(intervals/intersect % {:from from :to to}) model)))
+  (vec (filter (fn [m] (intervals/intersects? (.-from m) (.-to m) from to)) model)))
 
 (defn bench-query-base [markup]
   (bench "QUERY BASE"
@@ -74,27 +74,27 @@
 
 (defn bench-type-in [markup]
   (let [itree (-> (intervals/make-interval-tree)
-                  (intervals/add-intervals markup))]
+                  (intervals/add-markers markup))]
     (bench "TYPE-IN BENCH"
            (fn []
              (let [offset (rand-int 160000)
                    size 1]
-               (intervals/type-in itree [offset size])))
+               (intervals/type-in itree offset size)))
            :count 1000)))
 
 (defn bench-delete [markup]
   (let [itree (-> (intervals/make-interval-tree)
-                  (intervals/add-intervals markup))]
+                  (intervals/add-markers markup))]
     (bench "DELETE BENCH"
            (fn []
              (let [offset (rand-int 160000)
                    size 1]
-               (intervals/delete-range itree [offset size])))
+               (intervals/delete-range itree offset size)))
            :count 1)))
 
 (defn bench-editing [markup]
   (let [itree (-> (intervals/make-interval-tree)
-                  (intervals/add-intervals markup))]
+                  (intervals/add-markers markup))]
     (bench "TREE EDITING"
            (fn []
              (let [cmd (rand-nth [:insert :delete])]

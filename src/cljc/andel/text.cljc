@@ -1,6 +1,5 @@
 (ns andel.text
-  (:require [andel.tree :as tree]
-            [andel.fast-zip :as fz]))
+  (:require [andel.tree :as tree]))
 
 #?(:clj
    (do
@@ -54,21 +53,21 @@
   (assert (<= string-thresh (count x)))
   (map (fn [[i j]] (subs x i j)) (split-count 0 (count x) string-thresh)))
 
-(def tree-config {:reducing-fn r-f
+(def tree-config {:make-node (fn [children]
+                               (tree/->Node (reduce (fn [acc x] (r-f acc (.-metrics x))) (r-f) children)
+                                            children))
+                  :reducing-fn r-f
                   :metrics-fn metrics
                   :leaf-overflown? (fn [x] (<= string-thresh (count x)))
-                  :split-thresh 64
+                  :split-thresh 32
                   :split-leaf split-string
                   :leaf-underflown? (fn [s] (< (count s) string-merge-thresh))
                   :merge-leafs (fn [s1 s2] (str s1 s2))})
 
-(defn mark-changed [loc]
-  (update loc :path assoc :changed? true))
-
 (defn make-text [s]
-  (-> (tree/zipper (tree/make-node [(tree/make-leaf s tree-config)] tree-config) tree-config)
+  (-> (tree/zipper (tree/make-node (tree/into-array-list [(tree/make-leaf s tree-config)]) tree-config) tree-config)
       (tree/down)
-      (mark-changed)
+      (tree/mark-changed)
       (tree/root)))
 
 (defn zipper [tree]
@@ -79,33 +78,31 @@
 (defn metrics-offset [m]
   (some-> m (aget 0)))
 
+(defn node-offset
+  "Returns offset of the current node ignoring overriding accumulator"
+  [loc]
+  (metrics-offset (tree/loc-acc loc)))
+
 (defn metrics-line [m]
   (some-> m (aget 1)))
 
 (defn by-offset [i]
-  (fn [acc m] (< i (metrics-offset (r-f acc m)))))
+  (fn [acc m] (<= i (metrics-offset (r-f acc m)))))
 
 (defn by-line [i]
   (fn [acc m] (<= i (metrics-line (r-f acc m)))))
 
-
 (defn offset [loc]
-  (let [node (.-node loc)
-        path (.-path loc)
-        acc (some-> path .-acc)
-        o-acc (.-o-acc path)]
-    (if (tree/end? loc)
-      (metrics-offset (.-metrics node))
-      (or (metrics-offset o-acc) (metrics-offset acc) 0))))
+  (if (tree/end? loc)
+    (metrics-offset (.-metrics (.-node loc)))
+    (or (metrics-offset (.-o-acc loc))
+        (metrics-offset (.-acc loc))
+        0)))
 
 (defn line [loc]
-  (let [node (.-node loc)
-        path (.-path loc)
-        acc (some-> path .-acc)
-        o-acc (.-o-acc path)]
-    (if (tree/end? loc)
-      (metrics-line (.-metrics node))
-      (or (metrics-line o-acc) (metrics-line acc) 0))))
+  (if (tree/end? loc)
+    (metrics-line (.-metrics (.-node loc)))
+    (or (metrics-line (.-o-acc loc)) (metrics-line (.-acc loc)) 0)))
 
 (defn count-of [s c from to]
   (loop [res 0
@@ -127,35 +124,56 @@
             (recur (inc i) (dec n))))))))
 
 (defn forget-acc [loc]
-  (fz/update-path loc #(fz/assoc-o-acc % nil)))
+  (tree/assoc-o-acc loc nil))
+
+(defn- at-the-right-border? [loc]
+  (let [s (.-data (tree/node loc))
+        o (offset loc)
+        loc-offset (metrics-offset (tree/loc-acc loc))
+        rel-offset (- o loc-offset)]
+    (identical? rel-offset (count s))))
 
 (defn scan-to-offset [loc i]
-  (let [loc' (tree/scan loc (by-offset i))]
-    (if (tree/end? loc')
-      loc'
-      (let [loc' (forget-acc loc')
-            o (offset loc')
-            l (line loc')]
-        (fz/update-path loc'
-                        #(fz/assoc-o-acc % (array i (+ l (count-of (.-data (tree/node loc')) \newline 0 (- i o))))))))))
+  (let [offset-loc (tree/scan loc (by-offset i))]
+    (if (tree/end? offset-loc)
+      offset-loc
+      (let [o (node-offset offset-loc)
+            l (line offset-loc)
+            count-of-newlines (count-of (.-data (tree/node offset-loc)) \newline 0 (- i o))
+            offset-loc (tree/assoc-o-acc offset-loc (array i (+ l count-of-newlines)))
+            next-node (tree/next offset-loc)]
+        (if (and (at-the-right-border? offset-loc)
+                 (not (tree/end? next-node)))
+          next-node
+          offset-loc)))))
 
 (defn retain [loc l]
   (scan-to-offset loc (+ (offset loc) l)))
 
-(defn scan-to-line [loc i]
-  (let [loc' (tree/scan loc (by-line i))]
-    (if (tree/end? loc')
-      loc'
-      (let [loc' (forget-acc loc')
-            o (offset loc')
-            l (line loc')
-            idx (nth-index (.-data (tree/node loc')) \newline (- i l))]
-        (-> loc'
-            (fz/update-path #(fz/assoc-o-acc % (array (+ o idx) i)))
-            (cond-> (< 0 i) (retain 1)))))))
+(defn- set-o-acc-to-nth-eol [loc line-number]
+  (let [loc (forget-acc loc)
+        o (offset loc)
+        l (line loc)
+        idx (nth-index (.-data (tree/node loc)) \newline (- line-number l))]
+    (tree/assoc-o-acc loc (array (+ o idx) line-number))))
 
-(defn line-length [loc]
-  (let [next-loc (scan-to-line loc (inc (line loc)))
+(defn scan-to-EOL [loc]
+  (let [i (line loc)
+        loc-with-eol (tree/scan loc (by-line (inc i)))]
+    (if (tree/end? loc-with-eol)
+      loc-with-eol
+      (set-o-acc-to-nth-eol loc-with-eol (inc i)))))
+
+(defn scan-to-line-start [loc i]
+  (let [line-loc (tree/scan loc (by-line i))]
+    (if (tree/end? line-loc)
+      line-loc
+      (cond-> line-loc
+              (< 0 i) (-> (set-o-acc-to-nth-eol i)
+                          (retain 1))))))
+
+(defn distance-to-EOL [loc]
+  (let [next-loc (scan-to-line-start loc (inc (line loc)))
         len (- (offset next-loc)
                (offset loc))]
     (if (tree/end? next-loc)
@@ -207,7 +225,7 @@
           rel-offset (- i chunk-offset)]
       (-> loc
           (tree/edit (fn [node]
-                       (let [data (.-data node)]
+                       (let [data (or (some-> node (.-data)) "")]
                          (tree/make-leaf (str (subs data 0 rel-offset) s (subs data rel-offset)) tree-config))))
           (retain (count s))))))
 
@@ -233,11 +251,6 @@
 
 (def reset tree/reset)
 
-(defn debug-tree [t]
-  (if (array? (.-children t))
-    (assoc t :children (vec (map debug-tree (.-children t))))
-    t))
-
 (defn play [t operation]
   (root (reduce (fn [loc [code arg]]
                   (case code
@@ -249,5 +262,7 @@
 
 
 (defn line-text [t i]
-  (let [loc (scan-to-line (zipper t) i)]
-    (text loc (line-length loc))))
+  (let [loc (scan-to-line-start (zipper t) i)]
+    (text loc (distance-to-EOL loc))))
+
+
