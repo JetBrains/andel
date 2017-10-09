@@ -1,0 +1,3 @@
+[submodule "resources/public/bloomfilter.js"]
+	path = resources/public/bloomfilter.js
+	url = https://github.com/jasondavies/bloomfilter.js.git
