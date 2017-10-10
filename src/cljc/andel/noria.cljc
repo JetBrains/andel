@@ -6,14 +6,13 @@
 (defn should-subtree-update [pred]
   (fn [r-f]
     (fn
-      ([] {:s (r-f)
-           :args nil})
+      ([] (assoc (r-f)
+                 ::args ::nil))
       ([state & args]
-       (if (or (nil? (:args state)) (pred args (:args state)))
-         {:s (apply r-f (:s state) args)
-          :args args}
+       (if (pred args (::args state))
+         (apply r-f state args)
          state))
-      ([state] (r-f (:s state))))))
+      ([state] (r-f state)))))
 
 (defn stateless [render-fn]
   (fn [r-f]
@@ -22,9 +21,6 @@
       ([state & args]
        (r-f state (apply render-fn args)))
       ([state] state))))
-
-(defn pure []
-  (should-subtree-update not=))
 
 (def scroll
   (stateless

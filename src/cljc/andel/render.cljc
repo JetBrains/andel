@@ -7,13 +7,13 @@
   (:import [andel.intervals Marker Attrs]
            [java.util TreeSet Comparator]))
 
+(defn infinity? [x] (keyword? x))
+
 (defn style [m]
   (reduce-kv
    (fn [s k v]
      (str s (name k) ":" (if (keyword? v) (name v) v) ";"))
    nil m))
-
-(defn infinity? [x] (keyword? x))
 
 (defn selection-style [[from to] {:keys [width] :as metrics}]
   {:background-color theme/selection
