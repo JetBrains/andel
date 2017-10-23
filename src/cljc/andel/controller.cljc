@@ -195,14 +195,16 @@
         (core/move-view-if-needed))))
 
 
-(defn scroll [{:keys [document viewport] :as state} dx dy]
-  (let [screen-height (get-in viewport [:view-size 1])
+(defn scroll [{:keys [document viewport] :as state} {:keys [x y width height]}]
+  (let [;screen-height (get-in viewport [:view-size 1])
         line-height (utils/line-height (:metrics viewport))
         lines-count (text/lines-count (:text document))
         document-height (* lines-count line-height)
-        allowed-y-offset (max 0 (- document-height (/ screen-height 2)))
+        ;allowed-y-offset (max 0 (- document-height (/ screen-height 2)))
         abs (fn [x] (max x (- x)))]
-    (update-in state [:viewport :pos]
+    (update state :viewport merge {:pos [x y]
+                                   :view-size [width height]})
+    #_(update-in state [:viewport :pos]
                (fn [[x y]]
                  (if (< (abs dx) (abs dy))
                    [x (min allowed-y-offset (max 0 (+ y dy)))]
