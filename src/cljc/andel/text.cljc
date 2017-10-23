@@ -109,12 +109,12 @@
         res))))
 
 (defn nth-index [s c n]
-  (if (identical? n 0)
+  (if (= n 0)
     0
     (loop [from 0
            n n]
       (let [i (clojure.string/index-of s c from)]
-        (if (identical? n 1)
+        (if (= n 1)
           i
           (when (some? i)
             (recur (inc i) (dec n))))))))
@@ -127,7 +127,7 @@
         o (offset loc)
         loc-offset (metrics-offset (tree/loc-acc loc))
         rel-offset (- o loc-offset)]
-    (identical? rel-offset (count s))))
+    (= rel-offset (count s))))
 
 (defn scan-to-offset [loc i]
   (let [offset-loc (tree/scan loc (by-offset i))]
