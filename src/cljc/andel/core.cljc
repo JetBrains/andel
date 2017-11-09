@@ -2,23 +2,26 @@
   (:require [clojure.core.async :as a]
             [andel.utils :as utils]
             [andel.text :as text]
-            [andel.intervals :as intervals]))
+            [andel.intervals :as intervals])
+  (:import [com.intellij.openapi.editor.ex.util LexerAndelHighlighter]))
 
-(defn make-editor-state []
-  {:document {:text (text/make-text "")
-              :markup (intervals/make-interval-tree)
-              :lexer-broker (a/chan)
-              :modespec "text/x-java"
-              :timestamp 0
-              :lines []
-              :first-invalid 0
-              :deleted-markers #{}}
-   :editor {:caret {:offset 0 :v-col 0}
-            :selection [0 0]}
-   :viewport {:pos [0 0]
-              :view-size [0 0]
-              :metrics nil
-              :focused? false}})
+(defn make-editor-state [language]
+  (let [initial-text ""]
+    {:document {:text (text/make-text initial-text)
+                :markup (intervals/make-interval-tree)
+                :tokens (LexerAndelHighlighter/createTokensContainer language initial-text)
+                :lexer-broker (a/chan)
+                :modespec language
+                :timestamp 0
+                :lines []
+                :first-invalid 0
+                :deleted-markers #{}}
+     :editor {:caret {:offset 0 :v-col 0}
+              :selection [0 0]}
+     :viewport {:pos [0 0]
+                :view-size [0 0]
+                :metrics nil
+                :focused? false}}))
 
 (defn- edit-at-offset
   [{:keys [document] :as state} offset f]
@@ -90,6 +93,10 @@
         text-length (-> state :document :text text/text-length)]
     (-> state
         (edit-at-offset offset #(text/insert % insertion))
+        ((fn [{{:keys [text ^com.intellij.openapi.editor.ex.util.LexerAndelHighlighter$TokensContainer tokens]} :document :as state}]
+           (let [new-text (text/->text-seq text)
+                 text-change (com.intellij.openapi.editor.ex.util.LexerAndelHighlighter$TextChange. new-text offset added-length 0)]
+             (assoc-in state [:document :tokens] (LexerAndelHighlighter/changeText tokens text-change)))))
         (update-in [:document :markup] intervals/type-in offset (count insertion))
         (cond->
           (<= offset sel-from) (update-in [:editor :selection 0] #(+ % added-length))
@@ -108,6 +115,10 @@
         text-length (text/text-length text)]
     (-> state
         (edit-at-offset offset #(text/delete % length))
+        ((fn [{{:keys [text ^com.intellij.openapi.editor.ex.util.LexerAndelHighlighter$TokensContainer tokens]} :document :as state}]
+          (let [new-text (text/->text-seq text)
+                text-change (com.intellij.openapi.editor.ex.util.LexerAndelHighlighter$TextChange. new-text offset 0 length)]
+            (assoc-in state [:document :tokens] (LexerAndelHighlighter/changeText tokens text-change)))))
         (update-in [:document :markup] intervals/delete-range offset length)
         (cond->
           (<= offset sel-from) (update-in [:editor :selection 0] #(max offset (- % length)))
