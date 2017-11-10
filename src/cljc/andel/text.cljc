@@ -9,14 +9,14 @@
 #?(:clj
    (defn metrics [^String x]
      (let [l (.length x)]
-       (array l
-              (loop [i 0
-                     c 0]
-                (if (= i l)
-                  c
-                  (if (= (.charAt x i) \newline)
-                    (recur (inc i) (inc c))
-                    (recur (inc i) c)))))))
+       (long-array [l
+                    (loop [i 0
+                           c 0]
+                      (if (= i l)
+                        c
+                        (if (= (.charAt x i) \newline)
+                          (recur (inc i) (inc c))
+                          (recur (inc i) c))))])))
    :cljs
    (defn metrics [x]
      (assert (string? x))
@@ -29,11 +29,19 @@
                   (if (identical? (.charAt x i) \newline)
                     (recur (inc i) (inc c))
                     (recur (inc i) c))))))))
-(defn r-f
-  ([] (array 0 0))
-  ([[x1 x2 :as acc] [y1 y2]]
-   (array (+ x1 y1)
-          (+ x2 y2))))
+#?(:clj
+   (defn r-f
+     ([] (long-array [0 0]))
+     ([^"[J" acc ^"[J" metrics]
+      (doto (long-array 2)
+        (aset 0 (+ (aget acc 0) (aget metrics 0)))
+        (aset 1 (+ (aget acc 1) (aget metrics 1))))))
+   :cljs
+   (defn r-f
+     ([] (array 0 0))
+     ([[x1 x2 :as acc] [y1 y2]]
+      (array (+ x1 y1)
+             (+ x2 y2)))))
 
 (defn split-count [i j thresh]
   (let [x (- j i)]
