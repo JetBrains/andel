@@ -5,10 +5,7 @@
             [andel.theme :as theme]
             [andel.utils :as utils])
   (:import [andel.intervals Marker Attrs]
-           [java.awt Color]
-           [com.intellij.openapi.editor.markup TextAttributes]
-           [java.util TreeSet Comparator]
-           [com.intellij.openapi.editor.ex.util LexerAndelHighlighter]))
+           #?(:clj  [java.util TreeSet Comparator])))
 
 (defn infinity? [x] (keyword? x))
 
@@ -257,94 +254,8 @@
      :y-shift (double (- (* line-height (- (/ from-y-offset line-height) top-line))))}))
 
 
-(defn to-hex [^Color color]
-  (str "#" (subs (Integer/toHexString (.getRGB color)) 2)))
-
-
-(defn text-attrs [^TextAttributes attrs]
-  #:text-attrs {:foreground (some-> (.getForegroundColor attrs) (to-hex))
-                :background (some-> (.getBackgroundColor attrs) (to-hex))
-                :effectColor (some-> (.getEffectColor attrs) (to-hex))
-                :effectType (or (some-> (.getEffectType attrs) (.ordinal)) -1)
-                :fontType (.getFontType attrs)})
-
-(defn- underwave [color]
-  {:border-color color
-   :border-bottom-style :dotted
-   :border-bottom-width "1px"})
-
-(def attrs->styles
-  (memoize
-    (fn [{:text-attrs/keys [background foreground effectColor effectType fontType]}]
-      (let [result (-> {:foreground {}
-                        :background {}}
-                       (cond->
-                         foreground (assoc-in [:foreground :color] (str foreground " !important"))
-                         background (assoc-in [:background :background-color] background)
-                         (or (identical? fontType 1)
-                             (identical? fontType 3)) (assoc-in [:foreground :font-weight] "500" ;;font-weight-bold
-                                                                )
-
-                         (or (identical? fontType 2)
-                             (identical? fontType 3)) (assoc-in [:foreground :font-style] "italic")
-
-                         (and effectColor (= effectType 0)) (update :background merge {:border-bottom-style :solid
-                                                                                       :border-color effectColor
-                                                                                       :border-width "1px"}) ;;underscore
-
-                         (and effectColor (= effectType 1)) (update :background merge
-                                                                    (underwave effectColor)
-                                                                    {:position :relative}) ;;wave-underscore
-
-                         (and effectColor (= effectType 2)) (update :background merge {:border-style :solid
-                                                                                       :border-color effectColor
-                                                                                       :border-width "1px"}) ;;boxed
-
-                         (and effectColor (= effectType 4)) (update :background merge {:border-bottom-style :solid
-                                                                                       :border-color effectColor
-                                                                                       :border-width "2px"}) ;; bold-underscore
-
-                         (and effectColor (= effectType 5)) (update :background merge  {:border-bottom-style :dotted
-                                                                                        :border-color effectColor
-                                                                                        :border-width "2px"}) ;; bold-dotted
-
-                         (and effectColor (= effectType 7)) (update :background merge  {:border-style :solid
-                                                                                        :border-radius "3px"
-                                                                                        :border-color effectColor
-                                                                                        :border-width "1px"})))]
-        (cond-> result
-                (empty? (:foreground result)) (dissoc :foreground)
-                (empty? (:background result)) (dissoc :background))))))
-
-(def attrs->class
-  (let [cache (atom {})]
-    (fn [attrs layer]
-      (let [{:text-attrs/keys [background foreground effectColor effectType fontType]} attrs
-            k (str layer background foreground effectColor effectType fontType)]
-        (if-let [t (find @cache k)]
-          (val t)
-          (let [style (attrs->styles attrs)
-                v (some-> style (get layer) (onair.frontend.styles/style->class))]
-            (swap! cache assoc k v)
-            v))))))
-
-(defn token-range [^com.intellij.openapi.editor.ex.util.LexerAndelHighlighter$TokensContainer tokens from to]
-    (let [idx-from (.getTokenIndexByOffset tokens from)
-          idx-to (.getTokenIndexByOffset tokens to)
-          tokens-count (.getTokensCount tokens)
-          len (- to from)]
-      (loop [result []
-             i idx-from]
-        (if (and (<= i idx-to) (< i tokens-count))
-            (let [start (-> (.getStart tokens i) (- from) (max 0))
-                  end (-> (.getEnd tokens i) (- from) (min len))
-                  attrs (text-attrs (.getTextAttributes tokens i))
-                  m (intervals/->Marker start end false false (intervals/->Attrs nil (attrs->class attrs :background) (attrs->class attrs :foreground) 0))]
-              (recur (conj result m) (inc i)))
-            (into-array result)))))
-
 (defn viewport-lines [state viewport-info]
-  (let [{{:keys [text lines markup hashes deleted-markers tokens]} :document
+  (let [{{:keys [text lines markup hashes deleted-markers lexer]} :document
          {:keys [caret selection]} :editor} state
         {:keys [top-line bottom-line]} viewport-info
         caret-offset (get caret :offset)]
@@ -374,7 +285,7 @@
                     (f result {:text-zipper     text-zipper
                                :line-number     line-number
                                :markers-zipper  markers-zipper
-                               :tokens          (token-range tokens start-offset end-offset)
+                               :tokens          (intervals/lexemes lexer start-offset end-offset)
                                :start-offset    start-offset
                                :selection       (line-selection selection start-offset end-offset)
                                :caret           (when (and (<= start-offset caret-offset) (<= caret-offset end-offset))

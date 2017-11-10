@@ -2,14 +2,14 @@
   (:require [clojure.core.async :as a]
             [andel.utils :as utils]
             [andel.text :as text]
-            [andel.intervals :as intervals])
-  (:import [com.intellij.openapi.editor.ex.util LexerAndelHighlighter]))
+            [andel.intervals :as intervals]))
 
-(defn make-editor-state [language]
+
+(defn make-editor-state [language lexer-constructor]
   (let [initial-text ""]
     {:document {:text (text/make-text initial-text)
                 :markup (intervals/make-interval-tree)
-                :tokens (LexerAndelHighlighter/createTokensContainer language initial-text)
+                :lexer (lexer-constructor language initial-text)
                 :lexer-broker (a/chan)
                 :modespec language
                 :timestamp 0
@@ -93,10 +93,8 @@
         text-length (-> state :document :text text/text-length)]
     (-> state
         (edit-at-offset offset #(text/insert % insertion))
-        ((fn [{{:keys [text ^com.intellij.openapi.editor.ex.util.LexerAndelHighlighter$TokensContainer tokens]} :document :as state}]
-           (let [new-text (text/->text-seq text)
-                 text-change (com.intellij.openapi.editor.ex.util.LexerAndelHighlighter$TextChange. new-text offset added-length 0)]
-             (assoc-in state [:document :tokens] (LexerAndelHighlighter/changeText tokens text-change)))))
+        (update :document (fn [{:keys [text lexer] :as document}]
+                            (assoc document :lexer (intervals/update-text lexer (text/text->char-seq text) offset added-length 0))))
         (update-in [:document :markup] intervals/type-in offset (count insertion))
         (cond->
           (<= offset sel-from) (update-in [:editor :selection 0] #(+ % added-length))
@@ -115,10 +113,8 @@
         text-length (text/text-length text)]
     (-> state
         (edit-at-offset offset #(text/delete % length))
-        ((fn [{{:keys [text ^com.intellij.openapi.editor.ex.util.LexerAndelHighlighter$TokensContainer tokens]} :document :as state}]
-          (let [new-text (text/->text-seq text)
-                text-change (com.intellij.openapi.editor.ex.util.LexerAndelHighlighter$TextChange. new-text offset 0 length)]
-            (assoc-in state [:document :tokens] (LexerAndelHighlighter/changeText tokens text-change)))))
+        (update :document (fn [{:keys [text lexer] :as document}]
+                            (assoc document :lexer (intervals/update-text lexer (text/text->char-seq text) offset 0 length))))
         (update-in [:document :markup] intervals/delete-range offset length)
         (cond->
           (<= offset sel-from) (update-in [:editor :selection 0] #(max offset (- % length)))

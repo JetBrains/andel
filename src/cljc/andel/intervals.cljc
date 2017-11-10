@@ -453,3 +453,7 @@
 
         :else (let [[loc' bias] (gc-leafs (tree/up loc) bias deleted?)]
                 (recur (tree/skip loc') bias))))))
+
+(defprotocol Lexer
+  (lexemes [this from to])
+  (update-text [this new-text offset removed added]))
