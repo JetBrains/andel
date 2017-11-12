@@ -1,5 +1,6 @@
 (ns andel.text
   (:require [andel.tree :as tree])
+  (:require [andel.array-list :as al])
   #?(:clj (:import [andel.tree ZipperLocation Leaf])))
 
 #?(:clj
@@ -58,7 +59,8 @@
   (map (fn [[i j]] (subs x i j)) (split-count 0 (count x) string-thresh)))
 
 (def tree-config {:make-node (fn [children]
-                               (tree/->Node (reduce (fn [acc x] (r-f acc (tree/metrics x))) (r-f) children)
+                               (tree/->Node (reduce (fn [acc x] (r-f acc (tree/metrics x)))
+                                                    (r-f) children)
                                             children))
                   :reducing-fn r-f
                   :metrics-fn metrics
@@ -69,7 +71,7 @@
                   :merge-leafs (fn [s1 s2] (str s1 s2))})
 
 (defn make-text [s]
-  (-> (tree/zipper (tree/make-node (tree/into-array-list [(tree/make-leaf s tree-config)]) tree-config) tree-config)
+  (-> (tree/zipper (tree/make-node (al/into-array-list [(tree/make-leaf s tree-config)]) tree-config) tree-config)
       (tree/down)
       (tree/mark-changed)
       (tree/root)))

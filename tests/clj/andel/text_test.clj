@@ -60,4 +60,5 @@
                      (play-naive text operation)))))
 
 (deftest generative
-  (is (:result (tc/quick-check 300 play-test))))
+  (is (:result (tc/quick-check 10000 play-test))))
+

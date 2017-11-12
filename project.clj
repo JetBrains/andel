@@ -3,8 +3,8 @@
   :url "https://github.com/JetBrains/andel"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-
-  :dependencies [[org.clojure/clojure "1.9.0-alpha19"]                 
+  :jvm-opts ["-XX:-OmitStackTraceInFastThrow"] 
+  :dependencies [[org.clojure/clojure "1.9.0-RC1"]                 
                  [cljsjs/react "16.0.0-beta.5-1"]
                  [cljsjs/react-dom "16.0.0-beta.5-1"]
                  [cljsjs/create-react-class "15.6.0-1"]
