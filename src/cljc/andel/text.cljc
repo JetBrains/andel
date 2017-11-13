@@ -170,7 +170,7 @@
 
 (defn scan-to-line-start [loc n]
   (let [nth-eol-loc (tree/scan loc (by-line n))]
-    (if (or (tree/end? nth-eol-loc) (= n 0))
+    (if (or (tree/end? nth-eol-loc) (<= n 0))
       nth-eol-loc
       (let [o (node-offset nth-eol-loc)
             l (node-line nth-eol-loc)
@@ -179,7 +179,7 @@
                                (- n l))
             prev-line-end (tree/assoc-o-acc nth-eol-loc
                                             (array (+ o eol-idx) (dec n)))]
-         (-> prev-line-end            
+        (-> prev-line-end            
             (retain 1))))))
 
 (defn distance-to-EOL [loc]
