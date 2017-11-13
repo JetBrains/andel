@@ -87,7 +87,7 @@
 (defn node-offset
   "Returns offset of the current node ignoring overriding accumulator"
   [loc]
-  (metrics-offset (tree/loc-acc loc)))
+  (metrics-offset (tree/acc loc)))
 
 (defn metrics-line [^"[J" m]
   (some-> m (aget 1)))
@@ -100,15 +100,20 @@
 
 (defn offset [^ZipperLocation loc]
   (if (tree/end? loc)
-    (metrics-offset (tree/metrics (.-node loc)))
+    (metrics-offset (tree/metrics (tree/node loc)))
     (or (metrics-offset (.-o-acc loc))
         (metrics-offset (.-acc loc))
         0)))
 
 (defn line [^ZipperLocation loc]
   (if (tree/end? loc)
-    (metrics-line (tree/metrics (.-node loc)))
+    (metrics-line (tree/metrics (tree/node loc)))
     (or (metrics-line (.-o-acc loc)) (metrics-line (.-acc loc)) 0)))
+
+(defn node-line
+  "Returns offset of the current node ignoring overriding accumulator"
+  [loc]
+  (metrics-line (tree/acc loc)))
 
 (defn count-of [s c from to]
   (loop [res 0
@@ -144,7 +149,7 @@
     (if (tree/end? offset-loc)
       offset-loc
       (let [o (node-offset offset-loc)
-            l (line offset-loc)
+            l (node-line offset-loc)
             count-of-newlines (count-of (.-data ^Leaf (tree/node offset-loc)) \newline 0 (- i o))
             offset-loc (tree/assoc-o-acc offset-loc (array i (+ l count-of-newlines)))
             next-node (tree/next offset-loc)]
