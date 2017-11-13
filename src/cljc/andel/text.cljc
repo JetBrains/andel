@@ -94,6 +94,9 @@
 (defn by-offset [i]
   (fn [acc m] (<= i (metrics-offset (r-f acc m)))))
 
+(defn by-offset-exclusive [i]
+  (fn [acc m] (< i (metrics-offset (r-f acc m)))))
+
 (defn by-line [i]
   (fn [acc m] (<= i (metrics-line (r-f acc m)))))
 
@@ -276,7 +279,7 @@
    :text (.-data ^Leaf (tree/node loc))})
 
 (defn scan-by-offset-exclusive [loc i]
-  (tree/scan loc (fn [acc m] (< i (metrics-offset (r-f acc m))))))
+  (tree/scan loc (by-offset-exclusive i)))
 
 #?(:clj
 
