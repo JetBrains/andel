@@ -139,17 +139,15 @@
 
 (deftest type-and-delete-test
   (is (:result
-       (tc/quick-check 100
-                               (prop/for-all
-                                [bulk intervals-bulk-gen
-                                 ops (g/vector operation-gen)]
-                                (let [[tree model] (reduce (fn [[tree model] [[play real] args]]
-                                                             [(apply real tree args)
-                                                              (play model args)])
-                                                           [(bulk->tree bulk) bulk]
-                                                           ops)]
-                                  (= (set (tree->intervals tree))
-                                     (set model)))))
-       )
-
-      ))
+       (tc/quick-check
+        100
+        (prop/for-all
+         [bulk intervals-bulk-gen
+          ops (g/vector operation-gen)]
+         (let [[tree model] (reduce (fn [[tree model] [[play real] args]]
+                                      [(apply real tree args)
+                                       (play model args)])
+                                    [(bulk->tree bulk) bulk]
+                                    ops)]
+           (= (set (tree->intervals tree))
+              (set model))))))))

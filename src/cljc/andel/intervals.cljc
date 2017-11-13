@@ -1,6 +1,7 @@
 (ns andel.intervals
   (:require [andel.tree :as tree]
-            [andel.bloomfilter :as bloom])
+            [andel.bloomfilter :as bloom]
+            [andel.array-list :as al])
   (:import [andel.tree Leaf Node ZipperLocation ZipperOps]))
 
 (def plus-infinity
@@ -63,14 +64,16 @@
                   (tree/->Node (Data. 0 0 0 (bloom/create) nil nil nil) [])
                   (let [bloom (if (tree/node? (first children))
                                 (bloom/merge-many (into [] (map (fn [c] (.-bloom ^Data (tree/metrics c)))) children))
-                                (reduce (fn [f ^Leaf c] (bloom/add! f (.-id ^Attrs (.-attrs ^Data (.-data c))))) (bloom/create) children))
+                                (reduce (fn [f ^Leaf c]
+                                          (bloom/add! f (.-id ^Attrs (.-attrs ^Data (.-data c)))))
+                                        (bloom/create)
+                                        children))
                         ^Data data (reduce (fn [acc x] (reducing-fn acc (tree/metrics x))) (reducing-fn) children)]
                     (tree/->Node (Data. (.-offset data)
                                         (.-length data)
                                         (.-rightest data)
                                         bloom nil nil nil)
-                                 children)))
-)
+                                 children))))
    :leaf-overflown?  (constantly false)
    :split-thresh     32
    :leaf-underflown? (constantly false)})
@@ -227,7 +230,7 @@
                     (.-greedy-left? m)
                     (.-greedy-right? m)
                     (.-attrs m)))
-      (zipper itree)
+      (tree/transient (zipper itree))
       markers)))
 
 (defn remove-leaf [loc]
@@ -393,9 +396,9 @@
     (loop [bias bias
            i 0
            changed? false
-           res (tree/into-array-list [])]
+           res (al/into-array-list [])]
       (if (< i len)
-        (let [n (tree/al-get children i)
+        (let [n (al/get children i)
               data (.-data n)]
           (cond
             (deleted? (-> n (.-data) (.-attrs) (.-id)))
@@ -408,21 +411,21 @@
             (recur 0
                    (inc i)
                    true
-                   (tree/push! res (tree/make-leaf
-                                     (Data. (+ (.-offset data) bias)
-                                            (.-length data)
-                                            (.-rightest data)
-                                            (.-bloom data)
-                                            (.-greedy-left? data)
-                                            (.-greedy-right? data)
-                                            (.-attrs data))
-                                     ops)))
+                   (al/conj! res (tree/make-leaf
+                                  (Data. (+ (.-offset data) bias)
+                                         (.-length data)
+                                         (.-rightest data)
+                                         (.-bloom data)
+                                         (.-greedy-left? data)
+                                         (.-greedy-right? data)
+                                         (.-attrs data))
+                                  ops)))
 
             :else
             (recur bias
                    (inc i)
                    changed?
-                   (tree/push! res n))))
+                   (al/conj! res n))))
         [(tree/replace loc (make-node-fn res))
          bias]))))
 

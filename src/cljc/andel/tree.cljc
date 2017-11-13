@@ -91,7 +91,7 @@
     (assert (some? tree))
     (->zipper {:ops (ZipperOps. node?
                                 (fn [^Node x] (.-children x))
-                                (fn [children] (make-node-fn (al/->array-list children) ))
+                                (fn [children] (make-node-fn (al/->array-list children)))
                                 reducing-fn
                                 metrics-fn
                                 leaf-overflown?
@@ -103,6 +103,9 @@
                :transient? false
                :idx 0
                :root? true})))
+
+(defn transient [loc]
+  (z-merge loc {:transient true}))
 
 (defn mark-changed [loc]
   (z-merge loc {:changed? true}))
@@ -441,7 +444,7 @@
   [^ZipperLocation loc item]
   #_(assert (some? (.-l loc)) "Insert at top")
   (let [reducing-fn (.-reducing-fn ^ZipperOps (.-ops loc))]
-    (z-merge loc {:siblings ((if (mutable? loc) al/insert! al/insert) (.-siblings loc) (.-idx loc))
+    (z-merge loc {:siblings ((if (mutable? loc) al/insert! al/insert) (.-siblings loc) (.-idx loc) item)
                   :idx (inc (.-idx loc))
                   :changed? true
                   :acc (reducing-fn (.-acc loc)

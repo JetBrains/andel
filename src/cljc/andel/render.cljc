@@ -1,6 +1,7 @@
 (ns andel.render
   (:require [andel.text :as text]
             [andel.intervals :as intervals]
+            [andel.array-list :as al]
             [andel.tree :as tree]
             [andel.theme :as theme]
             [andel.utils :as utils])
@@ -159,11 +160,11 @@
 
 (def collect-to-array
   (fn
-    ([] (tree/into-array-list []))
+    ([] (al/into-array-list []))
     ([r a b]
      (doto r
-       (tree/push! a)
-       (tree/push! b)))
+       (al/conj! a)
+       (al/conj! b)))
     ([r] r)))
 
 (defn ^LineInfo build-line-info [{:keys [caret selection markers-zipper start-offset end-offset deleted-markers tokens text-zipper]}]
