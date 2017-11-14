@@ -87,7 +87,7 @@
 (defn node-offset
   "Returns offset of the current node ignoring overriding accumulator"
   [loc]
-  (metrics-offset (tree/loc-acc loc)))
+  (metrics-offset (tree/acc loc)))
 
 (defn metrics-line [^"[J" m]
   (some-> m (aget 1)))
@@ -109,6 +109,11 @@
   (if (tree/end? loc)
     (metrics-line (tree/metrics (tree/node loc)))
     (or (metrics-line (.-o-acc loc)) (metrics-line (.-acc loc)) 0)))
+
+(defn node-line
+  "Returns offset of the current node ignoring overriding accumulator"
+  [loc]
+  (metrics-line (tree/acc loc)))
 
 (defn count-of [s c from to]
   (loop [res 0
@@ -144,7 +149,7 @@
     (if (tree/end? offset-loc)
       offset-loc
       (let [o (node-offset offset-loc)
-            l (line offset-loc)
+            l (node-line offset-loc)
             count-of-newlines (count-of (.-data ^Leaf (tree/node offset-loc)) \newline 0 (- i o))
             offset-loc (tree/assoc-o-acc offset-loc (array i (+ l count-of-newlines)))
             next-node (tree/next offset-loc)]
@@ -163,20 +168,19 @@
         idx (nth-index (.-data ^Leaf (tree/node loc)) \newline (- line-number l))]
     (tree/assoc-o-acc loc (array (+ o idx) line-number))))
 
-(defn scan-to-EOL [loc]
-  (let [i (line loc)
-        loc-with-eol (tree/scan loc (by-line (inc i)))]
-    (if (tree/end? loc-with-eol)
-      loc-with-eol
-      (set-o-acc-to-nth-eol loc-with-eol (inc i)))))
-
-(defn scan-to-line-start [loc i]
-  (let [line-loc (tree/scan loc (by-line i))]
-    (if (tree/end? line-loc)
-      line-loc
-      (cond-> line-loc
-              (< 0 i) (-> (set-o-acc-to-nth-eol i)
-                          (retain 1))))))
+(defn scan-to-line-start [loc n]
+  (let [nth-eol-loc (tree/scan loc (by-line n))]
+    (if (or (tree/end? nth-eol-loc) (<= n 0))
+      nth-eol-loc
+      (let [o (node-offset nth-eol-loc)
+            l (node-line nth-eol-loc)
+            eol-idx (nth-index (.-data ^Leaf (tree/node nth-eol-loc))
+                               \newline
+                               (- n l))
+            prev-line-end (tree/assoc-o-acc nth-eol-loc
+                                            (array (+ o eol-idx) (dec n)))]
+        (-> prev-line-end            
+            (retain 1))))))
 
 (defn distance-to-EOL [loc]
   (let [next-loc (scan-to-line-start loc (inc (line loc)))
