@@ -15,14 +15,6 @@
             [clojure.pprint :as pp])
   #?(:cljs (:require-macros [andel.tree :refer [->zipper z-merge]])))
 
-#?(:clj
-   (do
-     (defmethod print-method andel.tree.ZipperLocation [o ^java.io.Writer w]
-       (.write w (str "[andel.tree.ZipperLocation@" (Integer/toHexString (hash o)) "]")))
-     
-     (defmethod pp/simple-dispatch andel.tree.ZipperLocation [o]
-       (pr (str "[andel.tree.ZipperLocation@" (Integer/toHexString (hash o)) "]")))))
-
 (defonce records
   (do
     (defrecord Node [metrics children])
@@ -41,6 +33,13 @@
     (defrecord ZipperLocation [ops siblings idx changed? transient? acc o-acc pzip end? root?])
     :done))
 
+#?(:clj
+   (do
+     (defmethod print-method andel.tree.ZipperLocation [o ^java.io.Writer w]
+       (.write w (str "[andel.tree.ZipperLocation@" (Integer/toHexString (hash o)) "]")))
+
+     (defmethod pp/simple-dispatch andel.tree.ZipperLocation [o]
+       (pr (str "[andel.tree.ZipperLocation@" (Integer/toHexString (hash o)) "]")))))
 
 #?(:clj
    (defmacro ->zipper [{:keys [ops siblings idx changed? transient? acc o-acc pzip end? root?]}]
