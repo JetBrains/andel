@@ -17,7 +17,7 @@
                                           :to (max a b)
                                           :greedy-left? g-l?
                                           :greedy-right? g-r?
-                                          :attrs nil}))
+                                          :attrs (map->Attrs {:id 0})}))
                           (g/tuple (g/large-integer* {:min 0 :max 10000})
                                    (g/large-integer* {:min 0 :max 10000})
                                    g/boolean
@@ -27,14 +27,14 @@
                                 (g/vector interval-gen 0 100)))
 
 (deftest bulk-insertion
-  (is (:result (tc/quick-check 100
+  (is (:result (tc/quick-check 1000
                                (prop/for-all [bulk intervals-bulk-gen]
                                              (let [itree (add-markers (make-interval-tree) bulk)]
                                                (= (tree->intervals itree)
                                                   bulk)))))))
 
 (deftest multiple-bulk-insertion
-  (is (:result (tc/quick-check 30
+  (is (:result (tc/quick-check 100
                                (prop/for-all [bulk-bulk (g/vector intervals-bulk-gen)]
                                              (let [itree (reduce add-markers
                                                                  (make-interval-tree)
@@ -82,7 +82,7 @@
 
 
 (deftest type-in-positive-test
-  (is (:result (tc/quick-check 100
+  (is (:result (tc/quick-check 1000
                                (prop/for-all [[bulk qs] bulk-offset-size-gen]
                                              (= (set (reduce play-type-in bulk qs))
                                                 (set (tree->intervals
@@ -126,10 +126,11 @@
                                                         (apply max 0))))))))
 
 (deftest query-test
-  (is (:result (tc/quick-check 100
+  (is (:result (tc/quick-check 1000
                                (prop/for-all [[bulk queries] bulk-and-queries-gen]
                                              (= (map play-query (repeat bulk) queries)
-                                                (map query-intervals (repeat (bulk->tree bulk)) queries)))))))
+                                                (map (fn [itree {:keys [from to]}]
+                                                       (query-intervals (zipper itree) from to)) (repeat (bulk->tree bulk)) queries)))))))
 
 (def operation-gen
   (g/tuple (g/one-of [(g/return [play-type-in type-in])
@@ -140,7 +141,7 @@
 (deftest type-and-delete-test
   (is (:result
        (tc/quick-check
-        100
+        1000
         (prop/for-all
          [bulk intervals-bulk-gen
           ops (g/vector operation-gen)]

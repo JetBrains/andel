@@ -6,7 +6,7 @@
             [andel.theme :as theme]
             [andel.utils :as utils])
   (:import [andel.intervals Marker Attrs]
-           [java.util TreeSet Comparator]))
+           #?(:clj  [java.util TreeSet Comparator])))
 
 (defn infinity? [x] (keyword? x))
 
@@ -87,20 +87,20 @@
         (let
           [pendings (make-pendings)
            *last-pos (atom 0)
-           make-class (fn [markers]
-                        (->> markers
-                             (map (fn [^Marker m]
-                                    (case type
-                                      :background (some-> m ^Attrs (.-attrs) (.-background))
-                                      :foreground (some-> m ^Attrs (.-attrs) (.-foreground)))))
-                             (clojure.string/join " ")))]
+           join-classes (fn [markers]
+                          (->> markers
+                               (map (fn [^Marker m]
+                                      (case type
+                                        :background (some-> m ^Attrs (.-attrs) (.-background))
+                                        :foreground (some-> m ^Attrs (.-attrs) (.-foreground)))))
+                               (clojure.string/join " ")))]
       (fn
         ([] (rf))
         ([res ^Marker m]
          (loop [res res]
            (let [^Marker p (next-pending pendings)
                  last-pos  @*last-pos
-                 new-class (make-class pendings)]
+                 new-class (join-classes pendings)]
              (if (or (nil? p) (< (.-from m) (.-to p)))
                (do
                  (add-pending! pendings m)
@@ -120,7 +120,7 @@
            (loop [res res]
              (let [^Marker p (next-pending pendings)
                    last-pos  @*last-pos
-                   new-class (make-class pendings)]
+                   new-class (join-classes pendings)]
                (if (some? p)
                  (do
                    (remove-pending! pendings p)
@@ -167,6 +167,28 @@
        (al/conj! b)))
     ([r] r)))
 
+(defn merge-tokens [lexer-markers]
+  (fn [rf]
+    (let [lexer-markers-count (count lexer-markers)
+          *i                  (atom 0)]
+      (fn
+        ([] (rf))
+        ([acc m]
+         (loop [i   @*i
+                acc acc]
+           (if (and (< i lexer-markers-count) (< (.-from (aget lexer-markers i)) (.-from m)))
+             (recur (inc i) (rf acc (aget lexer-markers i)))
+             (do
+               (reset! *i i)
+               (rf acc m)))))
+        ([acc]
+         (loop [i   @*i
+                acc acc]
+           (if (< i lexer-markers-count)
+             (recur (inc i)
+                    (rf acc (aget lexer-markers i)))
+             (rf acc))))))))
+
 (defn ^LineInfo build-line-info [{:keys [caret selection markers-zipper start-offset end-offset deleted-markers tokens text-zipper]}]
   (let [markup (intervals/xquery-intervals markers-zipper start-offset end-offset)
         text (text/text text-zipper (- end-offset start-offset))
@@ -189,7 +211,7 @@
      (comp
       (remove (fn [^Marker m] (contains? deleted-markers (.-id ^Attrs (.-attrs m)))))
       to-relative-offsets
-;      (merge-tokens (tokens->markers tokens))
+      (merge-tokens tokens)
       (multiplex (bg-xf collect-to-array)
                  (fg-xf collect-to-array)))
      (fn [acc [bg fg]]
@@ -232,8 +254,9 @@
      :bottom-line (+ top-line (int (/ h line-height)))
      :y-shift (double (- (* line-height (- (/ from-y-offset line-height) top-line))))}))
 
+
 (defn viewport-lines [state viewport-info]
-  (let [{{:keys [text lines markup hashes deleted-markers]} :document
+  (let [{{:keys [text lines markup hashes deleted-markers lexer]} :document
          {:keys [caret selection]} :editor} state
         {:keys [top-line bottom-line]} viewport-info
         caret-offset (get caret :offset)]
@@ -263,7 +286,7 @@
                     (f result {:text-zipper     text-zipper
                                :line-number     line-number
                                :markers-zipper  markers-zipper
-                               :tokens          (:tokens (get lines line-number))
+                               :tokens          (intervals/lexemes lexer start-offset end-offset)
                                :start-offset    start-offset
                                :selection       (line-selection selection start-offset end-offset)
                                :caret           (when (and (<= start-offset caret-offset) (<= caret-offset end-offset))

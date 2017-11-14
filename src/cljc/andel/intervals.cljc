@@ -8,23 +8,26 @@
   #?(:cljs 1000000000.0 #_js/Number.POSITIVE_INFINITY
      :clj Integer/MAX_VALUE #_100000 #_Double/POSITIVE_INFINITY))
 
-(defrecord Attrs [id background foreground layer])
+(defonce records
+  (do
+    (defrecord Attrs [id background foreground layer])
 
-(defrecord Data
-  [offset
-   length
-   rightest
-   bloom
-   greedy-left?
-   greedy-right?
-   ^Attrs attrs])
+    (defrecord Data
+        [offset
+         length
+         rightest
+         bloom
+         greedy-left?
+         greedy-right?
+         attrs])
 
-(defrecord Marker
-  [from
-   to
-   greedy-left?
-   greedy-right?
-   ^Attrs attrs])
+    (defrecord Marker
+        [from
+         to
+         greedy-left?
+         greedy-right?
+         attrs])
+    :defined))
 
 (defn reducing-fn
   ([] nil)
@@ -45,16 +48,15 @@
               nil
               nil nil nil)))))
 
-(defn marker-from [loc]
-  (assert (tree/leaf? loc))
-  (let [acc  (tree/loc-acc loc)
+(defn location-from [^ZipperLocation loc]
+  (let [^Data acc  (tree/loc-acc loc)
         node (tree/node loc)
-        ^Data acc' (reducing-fn acc (tree/metrics node))]
-    (+ (.-offset acc') (.-rightest acc'))))
+        ^Data metrics (tree/metrics node)]
+    (+ (or (some-> acc (.-rightest)) 0) (.-offset ^Data metrics))))
 
-(defn marker-to [loc]
-  (+ (marker-from loc)
-     (.-length ^Data (.-data ^Leaf (tree/node loc)))))
+(defn location-to [^ZipperLocation loc]
+  (+ (location-from loc)
+     (.-length ^Data (tree/metrics (tree/node loc)))))
 
 (def tree-config
   {:reducing-fn      reducing-fn
@@ -99,7 +101,7 @@
         ^Data metrics (tree/metrics node)
         ^Data data (.-data node)
         length (.-length metrics)
-        from (marker-from loc)]
+        from (location-from loc)]
     (Marker. (tree-basis->offset from)
              (tree-basis->offset (+ from length))
              (.-greedy-left? data)
@@ -113,7 +115,7 @@
         ^Data metrics (.-metrics node)
         ^Data data (.-data node)
         length (.-length metrics)
-        from (marker-from loc)]
+        from (location-from loc)]
     (Marker. from
              (+ from length)
              (.-greedy-left? data)
@@ -204,8 +206,8 @@
    (let [r-sibling-loc    (tree/scan loc (by-offset from))
          ^Data r-metrics  (-> r-sibling-loc tree/node (tree/metrics))
          r-offset         (.-offset r-metrics)
-         r-from           (marker-from r-sibling-loc)
-         r-to             (marker-to r-sibling-loc)
+         r-from           (location-from r-sibling-loc)
+         r-to             (location-to r-sibling-loc)
          len              (- to from)
          new-r-offset     (- r-from from)
          offset           (- r-offset new-r-offset)]
@@ -237,8 +239,8 @@
   (let [^Data data (.-data ^Leaf (tree/node loc))
         offset (.-offset data)
         length (.-length data)
-        from   (marker-from loc)
-        to     (marker-to loc)]
+        from   (location-from loc)
+        to     (location-to loc)]
     (-> loc
         tree/remove
         ((fn [loc]
@@ -269,8 +271,8 @@
     (let [new-loc (next-changed loc offset)]
       (if (tree/end? new-loc)
         [(tree/root new-loc) acc]
-        (let [from    (marker-from new-loc)
-              to      (marker-to new-loc)]
+        (let [from    (location-from new-loc)
+              to      (location-to new-loc)]
           (if (< offset from)
             [(tree/root (update-leaf-offset new-loc #(+ % size))) (persistent! acc)]
             (recur (remove-leaf new-loc) (conj! acc (loc->tree-marker new-loc)))))))))
@@ -329,8 +331,8 @@
       (let [new-loc (tree/scan loc changed?)]
         (if (tree/end? new-loc)
           [(tree/root new-loc) acc]
-          (let [from    (marker-from new-loc)
-                to      (marker-to new-loc)]
+          (let [from    (location-from new-loc)
+                to      (location-to new-loc)]
             (if (< (+ offset size) from)
               [(tree/root (update-leaf-offset new-loc #(- % size))) (persistent! acc)]
               (recur (remove-leaf new-loc) (conj! acc (loc->tree-marker new-loc))))))))))
@@ -367,23 +369,22 @@
                          (or (my-intersects? acc metrics)
                              (overscans? acc metrics)))]
     (tree/reducible
-     (fn [f init]
-       (loop [loc loc
-              s   init]
-         (cond
-           (or (tree/end? loc) (< to (marker-from loc)))
-           s
+      (fn [f init]
+        (loop [loc loc
+               s   init]
+          (cond
+            (or (tree/end? loc) (< to (location-from loc)))
+            s
 
-           (tree/leaf? (tree/node loc))
-           (recur (tree/scan (tree/next loc) stop?)
-             (f s (loc->Marker loc)))
+            (tree/leaf? (tree/node loc))
+            (recur (tree/scan (tree/next loc) stop?)
+                   (if (intersects? (location-from loc) (location-to loc)
+                                    from to)
+                     (f s (loc->Marker loc))
+                     s))
 
-           (intersects? (marker-from loc) (marker-to loc)
-                        from to)
-           (recur loc (f s (loc->Marker loc)))
-
-           :else
-           (recur (tree/scan loc stop?) s)))))))
+            :else
+            (recur (tree/scan loc stop?) s)))))))
 
 (defn query-intervals [loc from to]
   (into [] (xquery-intervals loc from to)))
@@ -436,8 +437,7 @@
   (reset! skip-count 0))
 
 (defn gc [itree deleted-markers]
-  (let [loc->id (fn [loc] (-> loc (tree/node) (.-data) (.-attrs) (.-id)))
-        deleted? #(contains? deleted-markers %)
+  (let [deleted? #(contains? deleted-markers %)
         deleted-bloom (reduce bloom/add! (bloom/create) deleted-markers)]
     (loop [loc (zipper itree)
            bias 0]
@@ -446,7 +446,7 @@
         (tree/root loc)
 
         (tree/branch? loc)
-        (let [bloom (-> loc (tree/node) (.-metrics) (.-bloom))]
+        (let [bloom (-> loc (tree/node) ^Data (tree/metrics) (.-bloom))]
           (if (or (bloom/intersects? bloom deleted-bloom)
                   (< 0 bias))
             (recur (tree/next-leaf loc) bias)
@@ -456,3 +456,7 @@
 
         :else (let [[loc' bias] (gc-leafs (tree/up loc) bias deleted?)]
                 (recur (tree/skip loc') bias))))))
+
+(defprotocol Lexer
+  (lexemes [this from to])
+  (update-text [this new-text offset removed added]))
