@@ -151,12 +151,15 @@
                  ([acc input] (f acc input)))
                coll)))
 
-(defrecord LineInfo
-  [text
-   caret
-   selection
-   foreground
-   background])
+(defonce records
+  (do
+    (defrecord LineInfo
+        [text
+         caret
+         selection
+         foreground
+         background])
+    :done))
 
 (def collect-to-array
   (fn
@@ -167,16 +170,16 @@
        (al/conj! b)))
     ([r] r)))
 
-(defn merge-tokens [lexer-markers]
+(defn merge-tokens [^"[Ljava.lang.Object;" lexer-markers]
   (fn [rf]
     (let [lexer-markers-count (count lexer-markers)
           *i                  (atom 0)]
       (fn
         ([] (rf))
-        ([acc m]
+        ([acc ^Marker m]
          (loop [i   @*i
                 acc acc]
-           (if (and (< i lexer-markers-count) (< (.-from (aget lexer-markers i)) (.-from m)))
+           (if (and (< i lexer-markers-count) (< (.-from ^Marker (aget lexer-markers i)) (.-from ^Marker m)))
              (recur (inc i) (rf acc (aget lexer-markers i)))
              (do
                (reset! *i i)
@@ -189,7 +192,7 @@
                     (rf acc (aget lexer-markers i)))
              (rf acc))))))))
 
-(defn ^LineInfo build-line-info [{:keys [caret selection markers-zipper start-offset end-offset deleted-markers tokens text-zipper]}]
+(defn ^LineInfo build-line-info [{:keys [caret lexer-state selection markers-zipper start-offset end-offset deleted-markers text-zipper]}]
   (let [markup (intervals/xquery-intervals markers-zipper start-offset end-offset)
         text (text/text text-zipper (- end-offset start-offset))
         text-length (count text)
@@ -205,8 +208,8 @@
                (shred-markup :background))
         fg-xf (comp
                (filter (fn [^Marker marker] (.-foreground ^Attrs (.-attrs marker))))
-               (shred-markup :foreground))]
-
+               (shred-markup :foreground))
+        tokens (intervals/lexemes lexer-state start-offset end-offset)]
     (transduce2
      (comp
       (remove (fn [^Marker m] (contains? deleted-markers (.-id ^Attrs (.-attrs m)))))
@@ -231,7 +234,7 @@
          (= (:selection old) (:selection new))
          (= (:caret old) (:caret new))
          (identical? (:deleted-markers old) (:deleted-markers new))
-         (identical? (:tokens old) (:tokens new)))))
+         (identical? (:lexer-state old) (:lexer-state new)))))
 
 (defn line-selection [[from to] line-start-offset line-end-offset]
   (cond (and (< from line-start-offset) (< line-start-offset to))
@@ -286,7 +289,7 @@
                     (f result {:text-zipper     text-zipper
                                :line-number     line-number
                                :markers-zipper  markers-zipper
-                               :tokens          (intervals/lexemes lexer start-offset end-offset)
+                               :lexer-state     lexer
                                :start-offset    start-offset
                                :selection       (line-selection selection start-offset end-offset)
                                :caret           (when (and (<= start-offset caret-offset) (<= caret-offset end-offset))

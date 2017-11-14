@@ -2,7 +2,7 @@
   (:require [andel.tree :as tree])
   (:require [andel.array-list :as al])
   #?(:clj (:import [andel.tree ZipperLocation Leaf]
-                   [java.lang CharSequence]))))))
+                   [java.lang CharSequence])))
 
 #?(:clj
    (do
