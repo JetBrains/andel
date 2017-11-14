@@ -100,14 +100,14 @@
 
 (defn offset [^ZipperLocation loc]
   (if (tree/end? loc)
-    (metrics-offset (tree/metrics (.-node loc)))
+    (metrics-offset (tree/metrics (tree/node loc)))
     (or (metrics-offset (.-o-acc loc))
         (metrics-offset (.-acc loc))
         0)))
 
 (defn line [^ZipperLocation loc]
   (if (tree/end? loc)
-    (metrics-line (tree/metrics (.-node loc)))
+    (metrics-line (tree/metrics (tree/node loc)))
     (or (metrics-line (.-o-acc loc)) (metrics-line (.-acc loc)) 0)))
 
 (defn count-of [s c from to]
