@@ -251,7 +251,7 @@
           rel-offset (- i chunk-offset)
           chunk-l (count (.-data ^Leaf (tree/node loc)))
           end (min chunk-l (+ rel-offset l))
-          next-loc  (if (and (= rel-offset 0) (= end chunk-l))
+          next-loc  (if (and (= rel-offset 0) (= end chunk-l) (not (tree/last-root-child? loc)))
                       (tree/remove (forget-acc loc))
                       (-> loc
                           (tree/edit (fn [node]

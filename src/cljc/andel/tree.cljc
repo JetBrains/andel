@@ -155,6 +155,10 @@
 (defn root? [^ZipperLocation loc]
   (.-root? loc))
 
+(defn last-root-child? [^ZipperLocation loc]
+  (and (= (count (.-siblings loc)) 1)
+       (.-root? ^ZipperLocation (.-pzip loc))))
+
 (defn log2 [i]
   #?(:clj (/ (java.lang.Math/log i) (java.lang.Math/log 2))
      :cljs (js/Math.log2 i))
@@ -387,7 +391,7 @@
 (defn insert-right
   "Inserts the item as the right sibling of the node at this loc, without moving"
   [^ZipperLocation loc item]
-  #_(assert (some? (.-r loc)) "Insert at top")
+  (assert (not (root? loc)) "Insert at top")
   (z-merge loc {:siblings ((if (mutable? loc) al/insert! al/insert)
                            (.-siblings loc) (inc (.-idx loc)) item)
                 :changed? true}))
@@ -451,7 +455,7 @@
 (defn insert-left
   "Inserts the item as the left sibling of the node at this loc, without moving"
   [^ZipperLocation loc item]
-  #_(assert (some? (.-l loc)) "Insert at top")
+  (assert (not (root? loc)) "Insert at top")
   (let [reducing-fn (.-reducing-fn ^ZipperOps (.-ops loc))]
     (z-merge loc {:siblings ((if (mutable? loc) al/insert! al/insert) (.-siblings loc) (.-idx loc) item)
                   :idx (inc (.-idx loc))
