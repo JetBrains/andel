@@ -11,8 +11,17 @@
 
 (ns andel.tree
   (:refer-clojure :exclude (replace remove next skip transient))
-  (:require [andel.array-list :as al])
+  (:require [andel.array-list :as al]
+            [clojure.pprint :as pp])
   #?(:cljs (:require-macros [andel.tree :refer [->zipper z-merge]])))
+
+#?(:clj
+   (do
+     (defmethod print-method andel.tree.ZipperLocation [o ^java.io.Writer w]
+       (.write w (str "[andel.tree.ZipperLocation@" (Integer/toHexString (hash o)) "]")))
+     
+     (defmethod pp/simple-dispatch andel.tree.ZipperLocation [o]
+       (pr (str "[andel.tree.ZipperLocation@" (Integer/toHexString (hash o)) "]")))))
 
 (defonce records
   (do
