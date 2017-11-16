@@ -257,6 +257,10 @@
      :bottom-line (+ top-line (int (/ h line-height)))
      :y-shift (double (- (* line-height (- (/ from-y-offset line-height) top-line))))}))
 
+(defn widget-pixels-position [{{:keys [metrics] :as viewport} :viewport
+                               {:keys [text]} :document :as state} {:keys [grid-position] :as widget}]
+  (let [[x y] (utils/grid-position->pixels grid-position viewport)]
+    [x (+ y (utils/line-height metrics))]))
 
 (defn viewport-lines [state viewport-info]
   (let [{{:keys [text lines markup hashes deleted-markers lexer]} :document
