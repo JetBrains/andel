@@ -9,7 +9,8 @@
   (let [initial-text ""]
     {:document {:text (text/make-text initial-text)
                 :markup (intervals/make-interval-tree)
-                :lexer (lexer-constructor language initial-text)
+                :lexer (when lexer-constructor
+                         (lexer-constructor language initial-text))
                 :lexer-broker (a/chan)
                 :modespec language
                 :timestamp 0
@@ -95,7 +96,8 @@
     (-> state
         (edit-at-offset offset #(text/insert % insertion))
         (update :document (fn [{:keys [text lexer] :as document}]
-                            (assoc document :lexer (intervals/update-text lexer (text/text->char-seq text) offset added-length 0))))
+                            (cond-> document
+                              (some? lexer) (assoc :lexer (intervals/update-text lexer (text/text->char-seq text) offset added-length 0)))))
         (update-in [:document :markup] intervals/type-in offset (count insertion))
         (cond->
           (<= offset sel-from) (update-in [:editor :selection 0] #(+ % added-length))

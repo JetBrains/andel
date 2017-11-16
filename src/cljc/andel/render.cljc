@@ -209,7 +209,9 @@
         fg-xf (comp
                (filter (fn [^Marker marker] (.-foreground ^Attrs (.-attrs marker))))
                (shred-markup :foreground))
-        tokens (intervals/lexemes lexer-state start-offset end-offset)]
+        tokens (if (some? lexer-state)
+                 (intervals/lexemes lexer-state start-offset end-offset)
+                 (object-array 0))]
     (transduce2
      (comp
       (remove (fn [^Marker m] (contains? deleted-markers (.-id ^Attrs (.-attrs m)))))
