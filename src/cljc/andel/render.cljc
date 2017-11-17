@@ -252,7 +252,7 @@
                       [w h] :view-size
                       [_ from-y-offset] :pos :as viewport}]
   (let [line-height (utils/line-height metrics)
-        top-line (int (/ from-y-offset line-height))]
+        top-line (int (/ (max 0 from-y-offset) line-height))]
     {:top-line top-line
      :bottom-line (+ top-line (int (/ h line-height)))
      :y-shift (double (- (* line-height (- (/ from-y-offset line-height) top-line))))}))
