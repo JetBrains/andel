@@ -22,6 +22,16 @@
     {:line abs-line
      :col abs-col}))
 
+(defn grid-position->pixels
+  "transforms absolute [line col] value into relative poisition in pixels"
+  [{:keys [line col]} {:keys [metrics pos] :as viewport}]
+  (let [line-height (line-height metrics)
+        font-width (:width metrics)
+        [_ top-px] pos
+        y  (- (* line line-height) top-px)
+        x (* col font-width)]
+    [x y]))
+
 (defn grid-pos->offset
   "transforms [line col] value into absolute offset value"
   [{:keys [line col]} text]
@@ -57,25 +67,12 @@
     {:line line
      :col col}))
 
-(defn line-col->pixels
-  "transforms absolute [line col] value into relative poisition in pixels"
-  [{:keys [line col]} start-line shift {:keys [height width] :as metrics}]
-  (let [rel-line (- line start-line)
-        pix-x (* col width)
-        pix-y (+ shift (/ height 2) (* line height))]
-    [pix-x pix-y]))
-
 (defn offset->pixels
   "transforms absolute offset value into relative poisition in pixels"
-  [offset start-line shift metrics text]
+  [offset {viewport :viewport {:keys [text]} :document :as state}]
    (-> offset
        (offset->line-col text)
-       (line-col->pixels start-line shift metrics)))
-
-(defn line-number
-  "transforms zipper pointer into line"
-  [loc]
-  (text/line loc))
+       (grid-position->pixels viewport)))
 
 (defn line->loc
   "transforms absolute line into zipper pointer"
@@ -90,6 +87,11 @@
   (let [line-loc (line->loc line text)
         line-offset (text/offset line-loc)]
     (text/scan-to-offset line-loc (+ line-offset col))))
+
+(defn line-number
+  "transforms zipper pointer into line"
+  [loc]
+  (text/line loc))
 
 (defn scan-to-next-line [loc]
   (text/scan-to-line-start loc (inc (line-number loc))))

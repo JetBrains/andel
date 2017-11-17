@@ -39,7 +39,15 @@
        (.write w (str "[andel.tree.ZipperLocation@" (Integer/toHexString (hash o)) "]")))
 
      (defmethod pp/simple-dispatch andel.tree.ZipperLocation [o]
-       (pr (str "[andel.tree.ZipperLocation@" (Integer/toHexString (hash o)) "]")))))
+       (pr (str "[andel.tree.ZipperLocation@" (Integer/toHexString (hash o)) "]")))
+
+     (defmethod print-method andel.tree.Node [o ^java.io.Writer w]
+       (.write w (str "[andel.tree.Node@" (Integer/toHexString (hash o)) "]")))
+
+     (defmethod pp/simple-dispatch andel.tree.Node [o]
+       (pr (str "[andel.tree.Node@" (Integer/toHexString (hash o)) "]")))
+
+     ))
 
 #?(:clj
    (defmacro ->zipper [{:keys [ops siblings idx changed? transient? acc o-acc pzip end? root?]}]

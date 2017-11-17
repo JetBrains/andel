@@ -209,7 +209,9 @@
         fg-xf (comp
                (filter (fn [^Marker marker] (.-foreground ^Attrs (.-attrs marker))))
                (shred-markup :foreground))
-        tokens (intervals/lexemes lexer-state start-offset end-offset)]
+        tokens (if (some? lexer-state)
+                 (intervals/lexemes lexer-state start-offset end-offset)
+                 (object-array 0))]
     (transduce2
      (comp
       (remove (fn [^Marker m] (contains? deleted-markers (.-id ^Attrs (.-attrs m)))))
@@ -257,6 +259,10 @@
      :bottom-line (+ top-line (int (/ h line-height)))
      :y-shift (double (- (* line-height (- (/ from-y-offset line-height) top-line))))}))
 
+(defn widget-pixels-position [{{:keys [metrics] :as viewport} :viewport
+                               {:keys [text]} :document :as state} {:keys [grid-position] :as widget}]
+  (let [[x y] (utils/grid-position->pixels grid-position viewport)]
+    [x (+ y (utils/line-height metrics))]))
 
 (defn viewport-lines [state viewport-info]
   (let [{{:keys [text lines markup hashes deleted-markers lexer]} :document

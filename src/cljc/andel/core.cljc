@@ -9,7 +9,8 @@
   (let [initial-text ""]
     {:document {:text (text/make-text initial-text)
                 :markup (intervals/make-interval-tree)
-                :lexer (lexer-constructor language initial-text)
+                :lexer (when lexer-constructor
+                         (lexer-constructor language initial-text))
                 :lexer-broker (a/chan)
                 :modespec language
                 :timestamp 0
@@ -17,7 +18,8 @@
                 :first-invalid 0
                 :deleted-markers #{}}
      :editor {:caret {:offset 0 :v-col 0}
-              :selection [0 0]}
+              :selection [0 0]
+              :widgets {}}
      :viewport {:pos [0 0]
                 :view-size [0 0]
                 :metrics nil
@@ -94,7 +96,8 @@
     (-> state
         (edit-at-offset offset #(text/insert % insertion))
         (update :document (fn [{:keys [text lexer] :as document}]
-                            (assoc document :lexer (intervals/update-text lexer (text/text->char-seq text) offset added-length 0))))
+                            (cond-> document
+                              (some? lexer) (assoc :lexer (intervals/update-text lexer (text/text->char-seq text) offset added-length 0)))))
         (update-in [:document :markup] intervals/type-in offset (count insertion))
         (cond->
           (<= offset sel-from) (update-in [:editor :selection 0] #(+ % added-length))
@@ -122,3 +125,18 @@
           (<= offset sel-to) (update-in [:editor :selection 1] #(max offset (- % length))))
         (update :log (fn [l]
                        (conj (or l []) [[:retain offset] [:delete old-text] [:retain (- text-length offset length)]]))))))
+
+(defn- next-widget-id [widgets]
+  (or (some->> widgets
+               keys
+               (apply max)
+               inc)
+      0))
+
+(defn add-widget [{{:keys [widgets]} :editor {:keys [text]} :document :as state} {:keys [element] :as widget} offset]
+  (let [widget-id (next-widget-id widgets)
+        widget (assoc widget :grid-position (utils/offset->line-col offset text))]
+    (assoc-in state [:editor :widgets widget-id] widget)))
+
+(defn remove-widget [state widget-id]
+  (update-in state [:editor :widgets] #(dissoc % widget-id)))
