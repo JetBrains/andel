@@ -133,12 +133,10 @@
                inc)
       0))
 
-(defn add-widget [{{:keys [widgets]} :editor {:keys [text]} :document :as state} {:keys [component] :as widget} offset]
+(defn add-widget [{{:keys [widgets]} :editor {:keys [text]} :document :as state} {:keys [element] :as widget} offset]
   (let [widget-id (next-widget-id widgets)
         widget (assoc widget :grid-position (utils/offset->line-col offset text))]
     (assoc-in state [:editor :widgets widget-id] widget)))
 
 (defn remove-widget [state widget-id]
   (update-in state [:editor :widgets] #(dissoc % widget-id)))
-
-(defmulti render-widget (fn [widget] (:type widget)))
