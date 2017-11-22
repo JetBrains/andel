@@ -153,9 +153,9 @@
     (if (tree/end? offset-loc)
       offset-loc
       (let [o (node-offset offset-loc)
-            l (node-line offset-loc)
-            count-of-newlines (count-of (.-data ^Leaf (tree/node offset-loc)) \newline 0 (- i o))
-            offset-loc (tree/assoc-o-acc offset-loc (array i (+ l count-of-newlines)))
+            s (subs (.-data ^Leaf (tree/node offset-loc)) 0 (- i o))
+            a (.-acc ^ZipperLocation offset-loc)
+            offset-loc (tree/assoc-o-acc offset-loc (r-f a (metrics s)))
             next-node (tree/next offset-loc)]
         (if (and (at-the-right-border? offset-loc)
                  (not (tree/end? next-node)))
@@ -165,7 +165,7 @@
 (defn retain [loc l]
   (scan-to-offset loc (+ (offset loc) l)))
 
-(defn- set-o-acc-to-nth-eol [loc line-number]
+#_(defn- set-o-acc-to-nth-eol [loc line-number]
   (let [loc (forget-acc loc)
         o (offset loc)
         l (line loc)
@@ -181,9 +181,10 @@
             eol-idx (nth-index (.-data ^Leaf (tree/node nth-eol-loc))
                                \newline
                                (- n l))
-            prev-line-end (tree/assoc-o-acc nth-eol-loc
-                                            (array (+ o eol-idx) (dec n)))]
-        (-> prev-line-end            
+            s (subs (.-data ^Leaf (tree/node nth-eol-loc)) 0 eol-idx)
+            a (.-acc ^ZipperLocation nth-eol-loc)
+            prev-line-end (tree/assoc-o-acc nth-eol-loc (r-f a (metrics s)))]
+        (-> prev-line-end
             (retain 1))))))
 
 (defn distance-to-EOL [loc]
