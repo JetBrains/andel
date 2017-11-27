@@ -4,7 +4,8 @@
             [andel.array-list :as al]
             [andel.tree :as tree]
             [andel.theme :as theme]
-            [andel.utils :as utils])
+            [andel.utils :as utils]
+            [andel.core])
   (:import [andel.intervals Marker Attrs]
            #?(:clj  [java.util TreeSet Comparator])))
 
