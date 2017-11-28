@@ -299,7 +299,7 @@
                                :lexer-state     lexer
                                :start-offset    start-offset
                                :selection       (line-selection selection start-offset end-offset)
-                               :caret           (when (and (<= start-offset caret-offset) (<= caret-offset end-offset))
+                               :caret           (when (and (-> state :viewport :focused?) (<= start-offset caret-offset) (<= caret-offset end-offset))
                                                   (- caret-offset start-offset))
                                :end-offset      end-offset
                                :deleted-markers deleted-markers})
