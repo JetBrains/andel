@@ -4,7 +4,8 @@
             [andel.array-list :as al]
             [andel.tree :as tree]
             [andel.theme :as theme]
-            [andel.utils :as utils])
+            [andel.utils :as utils]
+            [andel.core])
   (:import [andel.intervals Marker Attrs]
            #?(:clj  [java.util TreeSet Comparator])))
 
@@ -87,13 +88,25 @@
         (let
           [pendings (make-pendings)
            *last-pos (atom 0)
-           join-classes (fn [markers]
-                          (->> markers
-                               (map (fn [^Marker m]
-                                      (case type
-                                        :background (some-> m ^Attrs (.-attrs) (.-background))
-                                        :foreground (some-> m ^Attrs (.-attrs) (.-foreground)))))
-                               (clojure.string/join " ")))]
+           join-classes #?(:clj (fn [markers]
+                                  (transduce
+                                   (map (fn [^Marker m]
+                                          (case type
+                                            :background (some-> m ^Attrs (.-attrs) (.-background))
+                                            :foreground (some-> m ^Attrs (.-attrs) (.-foreground)))))
+                                   (completing
+                                    (fn [^java.lang.StringBuilder sb ^java.lang.String i]
+                                      (.append sb i))
+                                    str)
+                                   (java.lang.StringBuilder.)
+                                   markers))
+                           :cljs (fn [markers]
+                                   (->> markers
+                                        (map (fn [^Marker m]
+                                               (case type
+                                                 :background (some-> m ^Attrs (.-attrs) (.-background))
+                                                 :foreground (some-> m ^Attrs (.-attrs) (.-foreground)))))
+                                        (clojure.string/join " "))))]
       (fn
         ([] (rf))
         ([res ^Marker m]
@@ -250,13 +263,18 @@
            :infinity)]
         :else nil))
 
+(defn ceil [x]
+  #?(:clj (Math/ceil x)
+     :cljs (js/Math.ceil x)))
+
+;; both lines inclusive
 (defn viewport-info [{metrics :metrics
                       [w h] :view-size
                       [_ from-y-offset] :pos :as viewport}]
   (let [line-height (utils/line-height metrics)
         top-line (int (/ (max 0 from-y-offset) line-height))]
     {:top-line top-line
-     :bottom-line (+ top-line (int (/ h line-height)))
+     :bottom-line (+ top-line (ceil (/ h line-height)))
      :y-shift (double (- (* line-height (- (/ from-y-offset line-height) top-line))))}))
 
 (defn widget-pixels-position [{{:keys [metrics] :as viewport} :viewport
@@ -276,7 +294,7 @@
               line-number    top-line
               result         init
               result-empty?  true]
-         (if (and (or (>= line-number bottom-line) (tree/end? text-zipper))
+         (if (and (or (> line-number bottom-line) (tree/end? text-zipper))
                   (not result-empty?))
            result
            (let [start-offset          (text/offset text-zipper)
@@ -298,7 +316,7 @@
                                :lexer-state     lexer
                                :start-offset    start-offset
                                :selection       (line-selection selection start-offset end-offset)
-                               :caret           (when (and (<= start-offset caret-offset) (<= caret-offset end-offset))
+                               :caret           (when (and (-> state :viewport :focused?) (<= start-offset caret-offset) (<= caret-offset end-offset))
                                                   (- caret-offset start-offset))
                                :end-offset      end-offset
                                :deleted-markers deleted-markers})
