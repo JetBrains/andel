@@ -62,13 +62,19 @@
 
 ;; make line first in viewport
 (defn set-view-to-first-line [state line metrics]
-  (assoc-in state [:viewport :pos 1] (* line (utils/line-height metrics))))
+  (update state :viewport (fn [vp]
+                            (-> vp
+                                (dissoc :reason)
+                                (assoc-in [:pos 1] (* line (utils/line-height metrics)))))))
 
 ;; make line last in viewport
 (defn set-view-to-last-line [{:keys [viewport] :as state} line metrics]
   (let [[_ pos-px] (:pos viewport)
         [_ height] (:view-size viewport)]
-    (assoc-in state [:viewport :pos 1] (- (* (inc line) (utils/line-height metrics)) height))))
+    (update state :viewport (fn [vp]
+                              (-> vp
+                                  (dissoc :reason)
+                                  (assoc-in [:pos 1] (- (* (inc line) (utils/line-height metrics)) height)))))))
 
 (defn move-view-if-needed [{:keys [document editor viewport] :as state}]
   (let [{:keys [text]} document
