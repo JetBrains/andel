@@ -59,7 +59,10 @@
     [pos-in-lines pos-in-lines-end]))
 
 (defn set-view-to-line [state line metrics]
-  (assoc-in state [:viewport :pos 1] (* line (utils/line-height metrics))))
+  (update state :viewport (fn [vp]
+                            (-> vp
+                                (dissoc :reason)
+                                (assoc-in [:pos 1] (* line (utils/line-height metrics)))))))
 
 (defn move-view-if-needed [{:keys [document editor viewport] :as state}]
   (let [{:keys [text]} document

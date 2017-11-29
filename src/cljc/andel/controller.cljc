@@ -203,6 +203,7 @@
         ;allowed-y-offset (max 0 (- document-height (/ screen-height 2)))
         abs (fn [x] (max x (- x)))]
     (update state :viewport merge {:pos [x y]
+                                   :reason :scroll
                                    :view-size [width height]})
     #_(update-in state [:viewport :pos]
                (fn [[x y]]
