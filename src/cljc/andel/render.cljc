@@ -251,13 +251,18 @@
            :infinity)]
         :else nil))
 
+(defn ceil [x]
+  #?(:clj (Math/ceil x)
+     :cljs (js/Math.ceil x)))
+
+;; both lines inclusive
 (defn viewport-info [{metrics :metrics
                       [w h] :view-size
                       [_ from-y-offset] :pos :as viewport}]
   (let [line-height (utils/line-height metrics)
         top-line (int (/ (max 0 from-y-offset) line-height))]
     {:top-line top-line
-     :bottom-line (+ top-line (int (/ h line-height)))
+     :bottom-line (+ top-line (ceil (/ h line-height)))
      :y-shift (double (- (* line-height (- (/ from-y-offset line-height) top-line))))}))
 
 (defn widget-pixels-position [{{:keys [metrics] :as viewport} :viewport
@@ -277,7 +282,7 @@
               line-number    top-line
               result         init
               result-empty?  true]
-         (if (and (or (>= line-number bottom-line) (tree/end? text-zipper))
+         (if (and (or (> line-number bottom-line) (tree/end? text-zipper))
                   (not result-empty?))
            result
            (let [start-offset          (text/offset text-zipper)
