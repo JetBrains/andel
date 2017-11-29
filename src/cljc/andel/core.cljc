@@ -49,30 +49,38 @@
 (defn count-lines-in-view [viewport metrics]
   (let [{:keys [view-size]} viewport
         [_ view-size] view-size]
-    (Math/round (double (/ view-size (utils/line-height metrics))))))
+    (Math/round (/ (float view-size) (utils/line-height metrics)))))
 
+;; zero based first and last full visible lines
 (defn get-view-in-lines [viewport metrics]
-  (let [{:keys [pos]} viewport
+  (let [{:keys [pos view-size]} viewport
         [_ pos-px] pos
-        pos-in-lines (Math/round (double (/ pos-px (utils/line-height metrics))))
-        pos-in-lines-end (+ pos-in-lines (count-lines-in-view viewport metrics))]
-    [pos-in-lines pos-in-lines-end]))
+        [_ height] view-size
+        first-full-line (Math/ceil (/ (float pos-px) (utils/line-height metrics)))
+        last-full-line (dec (Math/floor (/ (float (+ pos-px height)) (utils/line-height metrics))))]
+    [first-full-line last-full-line]))
 
-(defn set-view-to-line [state line metrics]
+;; make line first in viewport
+(defn set-view-to-first-line [state line metrics]
   (assoc-in state [:viewport :pos 1] (* line (utils/line-height metrics))))
+
+;; make line last in viewport
+(defn set-view-to-last-line [{:keys [viewport] :as state} line metrics]
+  (let [[_ pos-px] (:pos viewport)
+        [_ height] (:view-size viewport)]
+    (assoc-in state [:viewport :pos 1] (- (* (inc line) (utils/line-height metrics)) height))))
 
 (defn move-view-if-needed [{:keys [document editor viewport] :as state}]
   (let [{:keys [text]} document
         {:keys [caret]} editor
         {:keys [metrics]} viewport
         caret-l (utils/offset->line (caret->offset caret) text)
-        [from-l to-l] (get-view-in-lines viewport metrics)
-        view-in-lines (- to-l from-l)]
+        [from-l to-l] (get-view-in-lines viewport metrics)]
     (cond (< caret-l from-l)
-          (set-view-to-line state (max 0 caret-l) metrics)
+          (set-view-to-first-line state caret-l metrics)
 
-          (< (dec to-l) caret-l)
-          (set-view-to-line state (- caret-l (max 0 (dec view-in-lines))) metrics)
+          (< to-l caret-l)
+          (set-view-to-last-line state caret-l metrics)
 
           :else state)))
 
