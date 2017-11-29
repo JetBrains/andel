@@ -88,13 +88,25 @@
         (let
           [pendings (make-pendings)
            *last-pos (atom 0)
-           join-classes (fn [markers]
-                          (->> markers
-                               (map (fn [^Marker m]
-                                      (case type
-                                        :background (some-> m ^Attrs (.-attrs) (.-background))
-                                        :foreground (some-> m ^Attrs (.-attrs) (.-foreground)))))
-                               (clojure.string/join " ")))]
+           join-classes #?(:clj (fn [markers]
+                                  (transduce
+                                   (map (fn [^Marker m]
+                                          (case type
+                                            :background (some-> m ^Attrs (.-attrs) (.-background))
+                                            :foreground (some-> m ^Attrs (.-attrs) (.-foreground)))))
+                                   (completing
+                                    (fn [^java.lang.StringBuilder sb ^java.lang.String i]
+                                      (.append sb i))
+                                    str)
+                                   (java.lang.StringBuilder.)
+                                   markers))
+                           :cljs (fn [markers]
+                                   (->> markers
+                                        (map (fn [^Marker m]
+                                               (case type
+                                                 :background (some-> m ^Attrs (.-attrs) (.-background))
+                                                 :foreground (some-> m ^Attrs (.-attrs) (.-foreground)))))
+                                        (clojure.string/join " "))))]
       (fn
         ([] (rf))
         ([res ^Marker m]
