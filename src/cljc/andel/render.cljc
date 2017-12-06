@@ -5,7 +5,9 @@
             [andel.tree :as tree]
             [andel.theme :as theme]
             [andel.utils :as utils]
-            [andel.core])
+            [andel.search :as search]
+            [andel.core]
+            [andel.controller :as controller])
   (:import [andel.intervals Marker Attrs]
            #?(:clj  [java.util TreeSet Comparator])))
 
@@ -56,7 +58,7 @@
      (TreeSet. ^Comparator (comparator (fn [^Marker a ^Marker b]
                                        (< (.-to a) (.-to b)))))))
 
-#?(:cljs 
+#?(:cljs
    (defn next-pending [pendings]
      (reduce (fn [c p] (if (or (nil? c) (< (.-to p) (.-to c))) p c)) nil pendings))
    :clj
@@ -65,7 +67,7 @@
        nil
        (.first pendings))))
 
-#?(:cljs 
+#?(:cljs
    (defn remove-pending! [arr p]
      (let [idx (.indexOf arr p)]
        (if (< -1 idx)
@@ -77,7 +79,7 @@
    (defn remove-pending! [^TreeSet pendings p]
      (.remove pendings p)))
 
-#?(:cljs 
+#?(:cljs
    (def add-pending! push!)
    :clj
    (defn add-pending! [^TreeSet pendings p]
@@ -284,7 +286,7 @@
 
 (defn viewport-lines [state viewport-info]
   (let [{{:keys [text lines markup hashes deleted-markers lexer]} :document
-         {:keys [caret selection]} :editor} state
+         {:keys [caret selection]} :editor} (controller/highlight-parens state)
         {:keys [top-line bottom-line]} viewport-info
         caret-offset (get caret :offset)]
     (tree/reducible

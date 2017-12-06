@@ -3,7 +3,8 @@
             [andel.utils :as utils]
             [andel.text :as text]
             [andel.intervals :as intervals]
-            [andel.core :as core]))
+            [andel.core :as core]
+            [andel.search :as search]))
 
 (defn selection-length [[left right :as selection]]
   (assert (<= left right) (str "Wrong selection positioning: " selection))
@@ -213,3 +214,26 @@
 
 (defn resize [state width height]
   (assoc-in state [:viewport :view-size] [width height]))
+
+(defn highlight-parens [{:keys [document] :as state}]
+  (let [caret-offset  (core/caret-offset state)
+        paren-offsets (search/find-parens (:text document) (constantly false) caret-offset)
+        old-paren-ids (:paren-ids document)]
+    (-> state
+        (core/delete-markers old-paren-ids)
+        ((fn [state]
+           (or (when-let [[p-from p-to] paren-offsets]
+                 (when (and p-from p-to)
+                   (-> state
+                       (core/insert-markers [(intervals/->Marker p-from
+                                                                 (inc p-from)
+                                                                 false
+                                                                 false
+                                                                 (intervals/->Attrs (str "paren-" p-from) "highlight-paren" "" :background))
+                                             (intervals/->Marker p-to
+                                                                 (inc p-to)
+                                                                 false
+                                                                 false
+                                                                 (intervals/->Attrs (str "paren-" p-to) "highlight-paren" "" :background))])
+                       (assoc-in [:document :paren-ids] [(str "paren-" p-from) (str "paren-" p-to)]))))
+               state))))))

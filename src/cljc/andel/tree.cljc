@@ -22,7 +22,6 @@
     (defrecord ZipperOps [branch?
                           children
                           make-node
-                          
                           reducing-fn
                           metrics-fn
                           leaf-overflown?
@@ -103,6 +102,30 @@
                            split-leaf
                            leaf-underflown?
                            merge-leafs] :as config}]
+  (let [make-node-fn (:make-node config)]
+    (assert (some? tree))
+    (->zipper {:ops (ZipperOps. node?
+                                (fn [^Node x] (.-children x))
+                                (fn [children] (make-node-fn (al/->array-list children)))
+                                reducing-fn
+                                metrics-fn
+                                leaf-overflown?
+                                split-thresh
+                                split-leaf
+                                leaf-underflown?
+                                merge-leafs)
+               :siblings (al/into-array-list [tree])
+               :transient? false
+               :idx 0
+               :root? true})))
+
+(defn zipper-reverse [tree {:keys [reducing-fn
+                                   metrics-fn
+                                   leaf-overflown?
+                                   split-thresh
+                                   split-leaf
+                                   leaf-underflown?
+                                   merge-leafs] :as config}]
   (let [make-node-fn (:make-node config)]
     (assert (some? tree))
     (->zipper {:ops (ZipperOps. node?
@@ -330,10 +353,34 @@
                    :root? true}))
       pzip)))
 
+(defn up-reverse [^ZipperLocation loc]
+  (let [node (node loc)
+        changed? (.-changed? loc)
+        pzip (.-pzip loc)
+        ^ZipperOps config (.-ops loc)
+        make-node-fn (.-make-node config)]
+    (if changed?
+      (if (some? pzip)
+        (let [children (.-siblings loc)]
+          (replace pzip (make-node-fn (balance-children children config))))
+        (->zipper {:ops config
+                   :transient? (.-transient? loc)
+                   :idx (dec (count children))
+                   :siblings (al/into-array-list [(shrink-tree (grow-tree (al/into-array-list [node]) config))])
+                   :root? true}))
+      pzip)))
+
 (defn right [^ZipperLocation loc]
   (when (< (.-idx loc) (dec (count (.-siblings loc))))
     (let [reducing-fn (.-reducing-fn ^ZipperOps (.-ops loc))]
       (z-merge loc {:idx (inc (.-idx loc))
+                    :acc (reducing-fn (acc loc) (metrics (node loc)))
+                    :o-acc nil}))))
+
+(defn left [^ZipperLocation loc]
+  (when (< 0 (.-idx loc))
+    (let [reducing-fn (.-reducing-fn ^ZipperOps (.-ops loc))]
+      (z-merge loc {:idx (dec (.-idx loc))
                     :acc (reducing-fn (acc loc) (metrics (node loc)))
                     :o-acc nil}))))
 
@@ -343,6 +390,17 @@
       (->zipper
        {:siblings (al/->array-list cs)
         :idx 0
+        :transient? (.-transient? loc)
+        :ops (.-ops loc)
+        :acc (.-acc loc)
+        :pzip loc}))))
+
+(defn down-reverse [^ZipperLocation loc]
+  (when (branch? loc)
+    (when-let [cs (children loc)]
+      (->zipper
+       {:siblings (al/->array-list cs)
+        :idx (dec (count cs))
         :transient? (.-transient? loc)
         :ops (.-ops loc)
         :acc (.-acc loc)
@@ -359,6 +417,16 @@
   (if (end? loc)
     (node loc)
     (let [p (up loc)]
+      (if (some? p)
+        (recur p)
+        (node loc)))))
+
+(defn root-reverse
+  "Modified version of clojure.zip/root to work with balancing version of up"
+  [^ZipperLocation loc]
+  (if (end? loc)
+    (node loc)
+    (let [p (up-reverse loc)]
       (if (some? p)
         (recur p)
         (node loc)))))
@@ -380,6 +448,23 @@
                     :idx 0
                     :end? true}))))))
 
+(defn next-reverse
+  "Modified version of clojure.zip/next to work with balancing version of up"
+  [^ZipperLocation loc]
+  (if (end? loc)
+    loc
+    (or
+     (and (branch? loc) (down-reverse loc))
+     (left loc)
+     (loop [^ZipperLocation p loc]
+       (if-let [u (up-reverse p)]
+         (or (left u) (recur u))
+         (->zipper {:ops (.-ops loc)
+                    :transient? (.-transient? loc)
+                    :siblings (al/into-array-list [(node p)])
+                    :idx 0
+                    :end? true}))))))
+
 (defn skip
   "Just like next but not going down"
   [^ZipperLocation loc]
@@ -390,6 +475,21 @@
      (loop [^ZipperLocation p loc]
        (if-let [u (up p)]
          (or (right u) (recur u))
+         (->zipper {:ops (.-ops loc)
+                    :idx 0
+                    :siblings (al/into-array-list [(node p)])
+                    :end? true}))))))
+
+(defn skip-reverse
+  "Just like next but not going down"
+  [^ZipperLocation loc]
+  (if (end? loc)
+    loc
+    (or
+     (left loc)
+     (loop [^ZipperLocation p loc]
+       (if-let [u (up-reverse p)]
+         (or (left u) (recur u))
          (->zipper {:ops (.-ops loc)
                     :idx 0
                     :siblings (al/into-array-list [(node p)])
@@ -458,6 +558,30 @@
           (recur (down next-loc) pred)
           next-loc)
         (recur (skip (up loc)) pred)))))
+
+(defn scan-reverse [^ZipperLocation loc pred]
+  (if (end? loc)
+    loc
+    (let [reducing-fn (.-reducing-fn ^ZipperOps (.-ops loc))
+          siblings (.-siblings loc)
+          next-loc (if (root? loc)
+                     loc
+                     (loop [idx (.-idx loc)
+                            a (or (.-acc loc) (reducing-fn))]
+                       (let [n (al/get siblings idx)]
+                         (let [m (metrics n)]
+                           (if (pred a m)
+                             (z-merge loc
+                                      {:acc a
+                                       :idx idx})
+                             (when (< 0 idx)
+                               (recur (dec idx)
+                                      (reducing-fn a m))))))))]
+      (if (some? next-loc)
+        (if (branch? next-loc)
+          (recur (down-reverse next-loc) pred)
+          next-loc)
+        (recur (skip-reverse (up-reverse loc)) pred)))))
 
 (defn insert-left
   "Inserts the item as the left sibling of the node at this loc, without moving"
