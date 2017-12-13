@@ -5,8 +5,6 @@
             [andel.tree :as tree]
             [andel.theme :as theme]
             [andel.utils :as utils]
-            [andel.search :as search]
-            [andel.core]
             [andel.controller :as controller])
   (:import [andel.intervals Marker Attrs]
            #?(:clj  [java.util TreeSet Comparator])))

@@ -4,7 +4,7 @@
             [andel.text :as text]
             [andel.intervals :as intervals]
             [andel.core :as core]
-            [andel.search :as search]))
+            [andel.parens :as parens]))
 
 (defn selection-length [[left right :as selection]]
   (assert (<= left right) (str "Wrong selection positioning: " selection))
@@ -221,7 +221,7 @@
 (defn highlight-parens [{:keys [document] :as state}]
   (let [caret-offset  (core/caret-offset state)
         lexer (:lexer document)
-        paren-offsets (search/find-parens (:text document)
+        paren-offsets (parens/find-parens (:text document)
                                           (if (some? lexer)
                                             #(intervals/is-brace-token? lexer %)
                                             (constantly true))
