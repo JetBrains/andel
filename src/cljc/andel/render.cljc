@@ -83,30 +83,28 @@
    (defn add-pending! [^TreeSet pendings p]
      (.add pendings p)))
 
+(defn join-strings [separator coll]
+  (transduce (interpose separator)
+             (completing
+              (fn [^java.lang.StringBuilder sb ^java.lang.String i]
+                (.append sb i))
+              str)
+             (java.lang.StringBuilder.)
+             coll))
+
 (defn shred-markup [type]
   (fn [rf]
         (let
           [pendings (make-pendings)
            *last-pos (atom 0)
-           join-classes #?(:clj (fn [markers]
-                                  (transduce
-                                   (map (fn [^Marker m]
-                                          (case type
-                                            :background (some-> m ^Attrs (.-attrs) (.-background))
-                                            :foreground (some-> m ^Attrs (.-attrs) (.-foreground)))))
-                                   (completing
-                                    (fn [^java.lang.StringBuilder sb ^java.lang.String i]
-                                      (.append sb i))
-                                    str)
-                                   (java.lang.StringBuilder.)
-                                   markers))
-                           :cljs (fn [markers]
-                                   (->> markers
-                                        (map (fn [^Marker m]
-                                               (case type
-                                                 :background (some-> m ^Attrs (.-attrs) (.-background))
-                                                 :foreground (some-> m ^Attrs (.-attrs) (.-foreground)))))
-                                        (clojure.string/join " "))))]
+           join-classes (fn [markers]
+                          (let [classes (eduction (map (fn [^Marker m]
+                                                         (case type
+                                                           :background (some-> m ^Attrs (.-attrs) (.-background))
+                                                           :foreground (some-> m ^Attrs (.-attrs) (.-foreground)))))
+                                                  markers)]
+                            #?(:clj (join-strings " " classes)
+                               :cljs (clojure.string/join " " classes))))]
       (fn
         ([] (rf))
         ([res ^Marker m]
@@ -138,7 +136,7 @@
                  (do
                    (remove-pending! pendings p)
                    (reset! *last-pos (.-to p))
-                   (if (identical? last-pos (.-to p))
+                   (if (= last-pos (.-to p))
                      (recur res)
                      (recur (rf res (- (.-to p) last-pos) new-class))))
                  res)))))))))
