@@ -215,25 +215,35 @@
 (defn resize [state width height]
   (assoc-in state [:viewport :view-size] [width height]))
 
+(let [a (atom 0)]
+  (def unique-paren-id #(swap! a inc)))
+
 (defn highlight-parens [{:keys [document] :as state}]
   (let [caret-offset  (core/caret-offset state)
-        paren-offsets (search/find-parens (:text document) (constantly false) caret-offset)
+        lexer (:lexer document)
+        paren-offsets (search/find-parens (:text document)
+                                          (if (some? lexer)
+                                            #(intervals/is-brace-token? lexer %)
+                                            (constantly true))
+                                          caret-offset)
         old-paren-ids (:paren-ids document)]
     (-> state
         (core/delete-markers old-paren-ids)
         ((fn [state]
            (or (when-let [[p-from p-to] paren-offsets]
                  (when (and p-from p-to)
-                   (-> state
-                       (core/insert-markers [(intervals/->Marker p-from
-                                                                 (inc p-from)
-                                                                 false
-                                                                 false
-                                                                 (intervals/->Attrs (str "paren-" p-from) "highlight-paren" "" :background))
-                                             (intervals/->Marker p-to
-                                                                 (inc p-to)
-                                                                 false
-                                                                 false
-                                                                 (intervals/->Attrs (str "paren-" p-to) "highlight-paren" "" :background))])
-                       (assoc-in [:document :paren-ids] [(str "paren-" p-from) (str "paren-" p-to)]))))
+                   (let [from-id (str "paren-" (unique-paren-id))
+                         to-id   (str "paren-" (unique-paren-id))]
+                     (-> state
+                         (core/insert-markers [(intervals/->Marker p-from
+                                                                   (inc p-from)
+                                                                   false
+                                                                   false
+                                                                   (intervals/->Attrs from-id "highlight-paren" "" :background))
+                                               (intervals/->Marker p-to
+                                                                   (inc p-to)
+                                                                   false
+                                                                   false
+                                                                   (intervals/->Attrs to-id "highlight-paren" "" :background))])
+                         (assoc-in [:document :paren-ids] [from-id to-id])))))
                state))))))

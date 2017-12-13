@@ -166,7 +166,7 @@
           offset-loc)))))
 
 (defn scan-to-offset-reverse [loc i]
-  (let [offset-loc (tree/scan-reverse loc (by-offset i))]
+  (let [offset-loc (tree/scan loc (by-offset i))]
     (if (tree/end? offset-loc)
       offset-loc
       (let [o (node-offset offset-loc)
@@ -174,7 +174,7 @@
             s (subs node-text (- (count node-text) (- i o)))
             a (.-acc ^ZipperLocation offset-loc)
             offset-loc (tree/assoc-o-acc offset-loc (r-f a (metrics s)))
-            next-node (tree/next-reverse offset-loc)]
+            next-node (tree/next offset-loc)]
         (if (and (at-the-right-border? offset-loc)
                  (not (tree/end? next-node)))
           next-node
@@ -238,7 +238,7 @@
     (if (tree/end? loc)
       (throw (ex-info "Length is out of bounds" {:l l}))
       (if (tree/branch? loc)
-        (recur (tree/down-reverse loc) l)
+        (recur (tree/down loc) l)
         (let [i (offset loc)
               text (.-data ^Leaf (tree/node loc))
               len (count text)
@@ -248,7 +248,7 @@
               s (clojure.string/reverse (subs text start end))
               s-len (count s)]
           (if (< s-len l)
-            (cons s (lazy-seq (lazy-text-reverse (tree/next-reverse (forget-acc loc)) (- l s-len))))
+            (cons s (lazy-seq (lazy-text-reverse (tree/next (forget-acc loc)) (- l s-len))))
             (list s)))))))
 
 (defn lines-count [t]
@@ -335,7 +335,7 @@
   (tree/scan loc (by-offset-exclusive i)))
 
 (defn scan-by-offset-exclusive-reverse [loc i]
-  (tree/scan-reverse loc (by-offset-exclusive i)))
+  (tree/scan loc (by-offset-exclusive i)))
 
 #?(:clj
     (deftype TextSequence [t ^{:volatile-mutable true} loc from to]

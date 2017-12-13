@@ -286,7 +286,7 @@
 
 (defn viewport-lines [state viewport-info]
   (let [{{:keys [text lines markup hashes deleted-markers lexer]} :document
-         {:keys [caret selection]} :editor} (controller/highlight-parens state)
+         {:keys [caret selection]} :editor} state
         {:keys [top-line bottom-line]} viewport-info
         caret-offset (get caret :offset)]
     (tree/reducible

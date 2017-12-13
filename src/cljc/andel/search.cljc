@@ -20,44 +20,46 @@
 
 (def opposite {\( \) \) \( \[ \] \] \[ \{ \} \} \{})
 
-(defn paren? [c] (or (closing? c) (opening? c)))
+(defn paren-symbol? [c] (or (closing? c) (opening? c)))
 
-(defn find-matching-paren-forward [text is-comment? offset]
+(defn find-matching-paren-forward [text paren-token? offset]
   (let [text-length (text/text-length text)
         char-seq    (text/text->char-seq text)
         paren       (.charAt char-seq offset)]
-    (when (paren? paren)
+    (when (and (paren-symbol? paren)
+               (paren-token? offset))
       (loop [offset (inc offset)
              s '()]
         (when (< offset text-length)
           (let [c (.charAt char-seq offset)]
             (cond
-              (is-comment? offset) (recur (inc offset) s)
+              (not (paren-token? offset)) (recur (inc offset) s)
               (opening? c) (recur (inc offset) (cons c s))
               (closing? c) (cond (= c (opposite (first s))) (recur (inc offset) (rest s))
                                  (= c (opposite paren))     offset
                                  :else (recur (inc offset) s))
               :else (recur (inc offset) s))))))))
 
-(defn find-matching-paren-backward [text is-comment? offset]
+(defn find-matching-paren-backward [text paren-token? offset]
   (let [text-length (text/text-length text)
         offset' (- (dec text-length) offset)
         char-seq    (text/text->reverse-char-seq text)
         paren       (.charAt char-seq offset')]
-    (when (paren? paren)
+    (when (and (paren-symbol? paren)
+               (paren-token? offset))
       (loop [offset' (inc offset')
              s '()]
         (when (< offset' text-length)
           (let [c (.charAt char-seq offset')]
             (cond
-              (is-comment? (- (dec text-length) offset')) (recur (inc offset') s)
+              (not (paren-token? (- (dec text-length) offset'))) (recur (inc offset') s)
               (closing? c) (recur (inc offset') (cons c s))
               (opening? c) (cond (= c (opposite (first s))) (recur (inc offset') (rest s))
                                  (= c (opposite paren))     (- (dec text-length) offset')
                                  :else (recur (inc offset') s))
               :else (recur (inc offset') s))))))))
 
-(defn find-closing-paren [text is-comment? offset]
+(defn find-closing-paren [text paren-token? offset]
   (let [text-length (text/text-length text)
         char-seq    (text/text->char-seq text)]
     (loop [offset offset
@@ -65,13 +67,13 @@
       (when (< offset text-length)
         (let [c (.charAt char-seq offset)]
           (cond
-            (is-comment? offset) (recur (inc offset) s)
+            (not (paren-token? offset)) (recur (inc offset) s)
             (opening? c) (recur (inc offset) (cons c s))
             (closing? c) (cond (= c (opposite (first s))) (recur (inc offset) (rest s))
                                :else offset)
             :else (recur (inc offset) s)))))))
 
-(defn find-opening-paren [text is-comment? offset]
+(defn find-opening-paren [text paren-token? offset]
   (let [text-length (text/text-length text)
         offset' (- (dec text-length) offset)
         char-seq    (text/text->reverse-char-seq text)]
@@ -80,14 +82,14 @@
       (when (< offset' text-length)
         (let [c (.charAt char-seq offset')]
           (cond
-            (is-comment? (- (dec text-length) offset')) (recur (inc offset') s)
+            (not (paren-token? (- (dec text-length) offset'))) (recur (inc offset') s)
             (closing? c) (recur (inc offset') (cons c s))
             (opening? c) (cond (= c (opposite (first s))) (recur (inc offset') (rest s))
                                :else (- (dec text-length) offset'))
             :else (recur (inc offset') s)))))))
 
 
-(defn find-parens [text is-comment? offset]
+(defn find-parens [text paren-token? offset]
   (let [len (text/text-length text)]
     (when (< 0 len)
       (let [prev-offset (max (dec offset) 0)
@@ -95,8 +97,8 @@
             c0 (-> text text/text->char-seq (.charAt prev-offset))
             c1 (-> text text/text->char-seq (.charAt offset))]
         (cond
-          (closing? c0)  [(find-matching-paren-backward text is-comment? prev-offset) prev-offset]
-          (opening? c1) [offset (find-matching-paren-forward text is-comment? offset)]
+          (closing? c0)  [(find-matching-paren-backward text paren-token? prev-offset) prev-offset]
+          (opening? c1) [offset (find-matching-paren-forward text paren-token? offset)]
           :else nil)))))
 
 
@@ -113,7 +115,7 @@
   (-> "..(....).."
       text/make-text
       (find-closing-paren-forward (constantly false) 3))
-
+a
   (-> "fun x(a, b) = { ... };"
       text/make-text
       (find-closing-paren-backward (constantly false) 16))

@@ -459,4 +459,7 @@
 
 (defprotocol Lexer
   (lexemes [this from to])
-  (update-text [this new-text offset removed added]))
+  (update-text [this new-text offset removed added])
+  (get-matching-brace-type [this offset])
+  (get-token-type-by-offset [this offset])
+  (is-brace-token? [this offset]))
