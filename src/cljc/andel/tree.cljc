@@ -19,10 +19,10 @@
   (do
     (defrecord Node [metrics children])
     (defrecord Leaf [metrics data])
-    (defrecord ZipperOps [branch?
+    (defrecord ZipperOps [direction
+                          branch?
                           children
                           make-node
-                          
                           reducing-fn
                           metrics-fn
                           leaf-overflown?
@@ -105,7 +105,33 @@
                            merge-leafs] :as config}]
   (let [make-node-fn (:make-node config)]
     (assert (some? tree))
-    (->zipper {:ops (ZipperOps. node?
+    (->zipper {:ops (ZipperOps. :forward
+                                node?
+                                (fn [^Node x] (.-children x))
+                                (fn [children] (make-node-fn (al/->array-list children)))
+                                reducing-fn
+                                metrics-fn
+                                leaf-overflown?
+                                split-thresh
+                                split-leaf
+                                leaf-underflown?
+                                merge-leafs)
+               :siblings (al/into-array-list [tree])
+               :transient? false
+               :idx 0
+               :root? true})))
+
+(defn zipper-reverse [tree {:keys [reducing-fn
+                                   metrics-fn
+                                   leaf-overflown?
+                                   split-thresh
+                                   split-leaf
+                                   leaf-underflown?
+                                   merge-leafs] :as config}]
+  (let [make-node-fn (:make-node config)]
+    (assert (some? tree))
+    (->zipper {:ops (ZipperOps. :backward
+                                node?
                                 (fn [^Node x] (.-children x))
                                 (fn [children] (make-node-fn (al/->array-list children)))
                                 reducing-fn
@@ -313,11 +339,17 @@
                            (.-siblings loc) (.-idx loc) node)
                 :changed? true}))
 
+(defn first-child-idx [children direction]
+  (if (= :forward direction)
+    0
+    (dec (count children))))
+
 (defn up [^ZipperLocation loc]
   (let [node (node loc)
         changed? (.-changed? loc)
         pzip (.-pzip loc)
         ^ZipperOps config (.-ops loc)
+        direction (.-direction config)
         make-node-fn (.-make-node config)]
     (if changed?
       (if (some? pzip)
@@ -325,28 +357,43 @@
           (replace pzip (make-node-fn (balance-children children config))))
         (->zipper {:ops config
                    :transient? (.-transient? loc)
-                   :idx 0
+                   :idx (first-child-idx children direction)
                    :siblings (al/into-array-list [(shrink-tree (grow-tree (al/into-array-list [node]) config))])
                    :root? true}))
       pzip)))
 
 (defn right [^ZipperLocation loc]
   (when (< (.-idx loc) (dec (count (.-siblings loc))))
-    (let [reducing-fn (.-reducing-fn ^ZipperOps (.-ops loc))]
+    (let [^ZipperOps config (.-ops loc)
+          reducing-fn (.-reducing-fn config)
+          direction (.-direction config)]
+      (assert (= direction :forward) "Can't move backward-zipper to the right")
       (z-merge loc {:idx (inc (.-idx loc))
+                    :acc (reducing-fn (acc loc) (metrics (node loc)))
+                    :o-acc nil}))))
+
+(defn left [^ZipperLocation loc]
+  (when (< 0 (.-idx loc))
+    (let [^ZipperOps config (.-ops loc)
+          reducing-fn (.-reducing-fn config)
+          direction (.-direction config)]
+      (assert (= direction :backward) "Can't move forward-zipper to the left")
+      (z-merge loc {:idx (dec (.-idx loc))
                     :acc (reducing-fn (acc loc) (metrics (node loc)))
                     :o-acc nil}))))
 
 (defn down [^ZipperLocation loc]
   (when (branch? loc)
-    (when-let [cs (children loc)]
-      (->zipper
-       {:siblings (al/->array-list cs)
-        :idx 0
-        :transient? (.-transient? loc)
-        :ops (.-ops loc)
-        :acc (.-acc loc)
-        :pzip loc}))))
+    (when-let [children (children loc)]
+      (let [^ZipperOps config (.-ops loc)
+            direction (.-direction config)]
+        (->zipper
+         {:siblings (al/->array-list children)
+          :idx (first-child-idx children direction)
+          :transient? (.-transient? loc)
+          :ops (.-ops loc)
+          :acc (.-acc loc)
+          :pzip loc})))))
 
 (defn end?
   "Returns true if loc represents the end of a depth-first walk"
@@ -366,34 +413,50 @@
 (defn next
   "Modified version of clojure.zip/next to work with balancing version of up"
   [^ZipperLocation loc]
-  (if (end? loc)
-    loc
-    (or
-     (and (branch? loc) (down loc))
-     (right loc)
-     (loop [^ZipperLocation p loc]
-       (if-let [u (up p)]
-         (or (right u) (recur u))
-         (->zipper {:ops (.-ops loc)
-                    :transient? (.-transient? loc)
-                    :siblings (al/into-array-list [(node p)])
-                    :idx 0
-                    :end? true}))))))
+  (let [^ZipperOps config (.-ops loc)
+        direction (.-direction config)
+        forward? (= direction :forward)]
+    (if (end? loc)
+      loc
+      (or
+       (and (branch? loc) (down loc))
+       (if forward?
+         (right loc)
+         (left loc))
+       (loop [^ZipperLocation p loc]
+         (if-let [u (up p)]
+           (or (if forward?
+                 (right u)
+                 (left u))
+               (recur u))
+           (->zipper {:ops config
+                      :transient? (.-transient? loc)
+                      :siblings (al/into-array-list [(node p)])
+                      :idx 0 ;; not sure
+                      :end? true})))))))
 
 (defn skip
   "Just like next but not going down"
   [^ZipperLocation loc]
-  (if (end? loc)
-    loc
-    (or
-     (right loc)
-     (loop [^ZipperLocation p loc]
-       (if-let [u (up p)]
-         (or (right u) (recur u))
-         (->zipper {:ops (.-ops loc)
-                    :idx 0
-                    :siblings (al/into-array-list [(node p)])
-                    :end? true}))))))
+  (let [^ZipperOps config (.-ops loc)
+        direction (.-direction config)
+        forward? (= direction :forward)]
+    (if (end? loc)
+      loc
+      (or
+       (if forward?
+         (right loc)
+         (left loc))
+       (loop [^ZipperLocation p loc]
+         (if-let [u (up p)]
+           (or (if forward?
+                 (right u)
+                 (left u))
+               (recur u))
+           (->zipper {:ops (.-ops loc)
+                      :idx 0
+                      :siblings (al/into-array-list [(node p)])
+                      :end? true})))))))
 
 (defn insert-right
   "Inserts the item as the right sibling of the node at this loc, without moving"
@@ -438,7 +501,10 @@
 (defn scan [^ZipperLocation loc pred]
   (if (end? loc)
     loc
-    (let [reducing-fn (.-reducing-fn ^ZipperOps (.-ops loc))
+    (let [^ZipperOps config (.-ops loc)
+          reducing-fn (.-reducing-fn config)
+          direction (.-direction config)
+          forward? (= direction :forward)
           siblings (.-siblings loc)
           next-loc (if (root? loc)
                      loc
@@ -450,9 +516,13 @@
                              (z-merge loc
                                       {:acc a
                                        :idx idx})
-                             (when (< idx (dec (count siblings)))
-                               (recur (inc idx)
-                                      (reducing-fn a m))))))))]
+                             (if forward?
+                               (when (< idx (dec (count siblings)))
+                                 (recur (inc idx)
+                                        (reducing-fn a m)))
+                               (when (< 0 idx)
+                                 (recur (dec idx)
+                                        (reducing-fn a m)))))))))]
       (if (some? next-loc)
         (if (branch? next-loc)
           (recur (down next-loc) pred)
