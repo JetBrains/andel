@@ -1,18 +1,8 @@
 (ns andel.parens
-  (:require [andel.text :as text]))
-
-#_(defn search-forward
-  ([document s] (search-forward document 0 s))
-  ([{:keys [text] :as document} offset s]
-   (let [regex       (re-pattern (str "^[" s "]*" s))
-         text-length (text/text-length text)
-         char-seq    (text/text->char-seq text)
-         sub-seq     (.subSequence char-seq offset text-length)]
-     (some-> (re-find regex sub-seq)
-;             count
-;             (- (.length s))
-;             (+ offset)
-             ))))
+  (:require [andel.text :as text]
+            [andel.core :as core]
+            [andel.intervals :as intervals]
+            [andel.controller :as controller]))
 
 (def closing? #{\) \} \]})
 
@@ -75,8 +65,8 @@
 
 (defn find-opening-paren [text paren-token? offset]
   (let [text-length (text/text-length text)
-        offset' (- (dec text-length) offset)
-        char-seq    (text/text->reverse-char-seq text)]
+        offset'  (- text-length offset)
+        char-seq (text/text->reverse-char-seq text)]
     (loop [offset' offset'
            s '()]
       (when (< offset' text-length)
@@ -88,7 +78,6 @@
                                :else (- (dec text-length) offset'))
             :else (recur (inc offset') s)))))))
 
-
 (defn find-parens [text paren-token? offset]
   (let [len (text/text-length text)]
     (when (< 0 len)
@@ -97,10 +86,41 @@
             c0 (-> text text/text->char-seq (.charAt prev-offset))
             c1 (-> text text/text->char-seq (.charAt offset))]
         (cond
-          (closing? c0)  [(find-matching-paren-backward text paren-token? prev-offset) prev-offset]
+          (closing? c0) [(find-matching-paren-backward text paren-token? prev-offset) prev-offset]
           (opening? c1) [offset (find-matching-paren-forward text paren-token? offset)]
-          :else nil)))))
+          :else         nil)))))
 
+(defn enclosing-parens [text paren-token? offset]
+  [(find-opening-paren text paren-token? offset) (find-closing-paren text paren-token? offset)])
+
+(def whitespace? #{\newline \space \tab})
+
+(defn count-matching [text offset pred]
+  (let [length (text/text-length text)
+        char-seq (text/text->char-seq text)
+        sub-seq (.subSequence char-seq offset length)]
+    (count (take-while pred sub-seq))))
+
+;; offset -> [offset, offset]
+(defn find-next-form [text paren-token? offset]
+  (let [char-seq (text/text->char-seq text)
+        form-start-offset (+ offset (count-matching text offset whitespace?))
+        form-start-char   (.charAt char-seq form-start-offset)]
+    (cond (paren-symbol? form-start-char) (find-parens text paren-token? form-start-offset)
+;          (= \" form-start-char) nil ;; fix string case
+          (= \; form-start-char) nil ;; fix comment case
+          :else [form-start-offset (+ form-start-offset (dec (count-matching text form-start-offset #(not (whitespace? %)))))])))
+
+(defn slurp-forward [{:keys [editor document] :as state}]
+  (let [{:keys [text lexer]} document
+        caret-offset (core/caret-offset state)
+        paren-token? #(intervals/is-brace-token? lexer %)
+        [_ cur-to] (enclosing-parens text paren-token? caret-offset) ;; check for not surrounded case
+        [_ next-to] (find-next-form text paren-token? (inc cur-to))
+        paren-str (core/text-at-offset state cur-to 1)]
+    (-> state
+        (core/delete-at-offset cur-to 1)
+        (core/insert-at-offset next-to paren-str))))
 
 (comment
 
