@@ -221,8 +221,9 @@
         fg-xf (comp
                (filter (fn [^Marker marker] (.-foreground ^Attrs (.-attrs marker))))
                (shred-markup :foreground))
-        widgets-xf (keep (fn [^Marker marker] (assoc (get widgets (.-id ^Attrs (.-attrs marker)))
-                                                     :ends-on-this-line? (<= (.-to marker) end-offset))))
+        widgets-xf (keep (fn [^Marker marker]
+                           (some-> (get widgets (.-id ^Attrs (.-attrs marker)))
+                                   (assoc :ends-on-this-line? (<= (.-to marker) end-offset)))))
         tokens (if (some? lexer-state)
                  (intervals/lexemes lexer-state start-offset end-offset)
                  (object-array 0))]
