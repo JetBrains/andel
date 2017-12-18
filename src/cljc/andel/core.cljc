@@ -130,8 +130,9 @@
         text-length (text/text-length text)]
     (-> state
         (edit-at-offset offset #(text/delete % length))
-        (update :document (fn [{:keys [text lexer] :as document}]
-                            (assoc document :lexer (intervals/update-text lexer (text/text->char-seq text) offset 0 length))))
+        (update :document (fn [{:keys [text] :as document}]
+                            (cond-> document (some? (:lexer document))
+                              (update :lexer intervals/update-text (text/text->char-seq text) offset 0 length))))
         (update-in [:document :markup] intervals/delete-range offset length)
         (cond->
           (<= offset sel-from) (update-in [:editor :selection 0] #(max offset (- % length)))
