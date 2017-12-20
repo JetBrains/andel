@@ -83,30 +83,29 @@
    (defn add-pending! [^TreeSet pendings p]
      (.add pendings p)))
 
+#?(:clj
+   (defn join-strings [separator coll]
+     (transduce (interpose separator)
+                (completing
+                 (fn [^java.lang.StringBuilder sb ^java.lang.String i]
+                   (.append sb i))
+                 str)
+                (java.lang.StringBuilder.)
+                coll))
+   :cljs (def join-strings clojure.string/join))
+
 (defn shred-markup [type]
   (fn [rf]
         (let
           [pendings (make-pendings)
            *last-pos (atom 0)
-           join-classes #?(:clj (fn [markers]
-                                  (transduce
-                                   (map (fn [^Marker m]
-                                          (case type
-                                            :background (some-> m ^Attrs (.-attrs) (.-background))
-                                            :foreground (some-> m ^Attrs (.-attrs) (.-foreground)))))
-                                   (completing
-                                    (fn [^java.lang.StringBuilder sb ^java.lang.String i]
-                                      (.append sb i))
-                                    str)
-                                   (java.lang.StringBuilder.)
-                                   markers))
-                           :cljs (fn [markers]
-                                   (->> markers
-                                        (map (fn [^Marker m]
-                                               (case type
-                                                 :background (some-> m ^Attrs (.-attrs) (.-background))
-                                                 :foreground (some-> m ^Attrs (.-attrs) (.-foreground)))))
-                                        (clojure.string/join " "))))]
+           join-classes (fn [markers]
+                          (->> markers
+                               (eduction (map (fn [^Marker m]
+                                                (case type
+                                                  :background (some-> m ^Attrs (.-attrs) (.-background))
+                                                  :foreground (some-> m ^Attrs (.-attrs) (.-foreground))))))
+                               (join-strings " ")))]
       (fn
         ([] (rf))
         ([res ^Marker m]
@@ -138,31 +137,28 @@
                  (do
                    (remove-pending! pendings p)
                    (reset! *last-pos (.-to p))
-                   (if (identical? last-pos (.-to p))
+                   (if (= last-pos (.-to p))
                      (recur res)
                      (recur (rf res (- (.-to p) last-pos) new-class))))
                  res)))))))))
 
-(defn multiplex [rf1 rf2]
-  (fn [rf]
-    (fn
-      ([] (transient [(rf1) (rf2)]))
-      ([result input]
-       (assoc! result
-               0 (rf1 (get result 0) input)
-               1 (rf2 (get result 1) input)))
-      ([result] (rf (rf) [(rf1 (get result 0)) (rf2 (get result 1))])))))
-
-(defn transduce2
-  ([xform f coll]
-   (let [r-f (xform f)]
-     (r-f (reduce r-f (r-f) coll))))
-  ([xform f init coll]
-   (transduce2 xform
-               (fn
-                 ([] init)
-                 ([acc input] (f acc input)))
-               coll)))
+(defn multiplex [& rfs]
+  (let [rfs (into [] rfs)]
+    (fn [r-f]
+      (let [states (into [] (map (fn [f] (volatile! (f)))) rfs)]
+        (fn
+          ([] (r-f))
+          ([r i]
+           (dotimes [idx (count rfs)]
+             (let [s (nth states idx)
+                   rf (nth rfs idx)]
+               (vswap! s rf i)))
+           r)
+          ([r] (r-f (r-f r (into []
+                                 (map-indexed (fn [idx rf]
+                                                (let [s (nth states idx)]
+                                                  (rf (deref s)))))
+                                 rfs)))))))))
 
 (defonce records
   (do
@@ -171,12 +167,15 @@
          caret
          selection
          foreground
-         background])
+         background
+         widgets])
     :done))
 
 (def collect-to-array
   (fn
     ([] (al/into-array-list []))
+    ([r a]
+     (doto r (al/conj! a)))
     ([r a b]
      (doto r
        (al/conj! a)
@@ -205,35 +204,44 @@
                     (rf acc (aget lexer-markers i)))
              (rf acc))))))))
 
-(defn ^LineInfo build-line-info [{:keys [caret lexer-state selection markers-zipper start-offset end-offset deleted-markers text-zipper]}]
+(defn ^LineInfo build-line-info [{:keys [caret lexer-state selection markers-zipper start-offset end-offset deleted-markers text-zipper]} widgets]
   (let [markup (intervals/xquery-intervals markers-zipper start-offset end-offset)
         text (text/text text-zipper (- end-offset start-offset))
         text-length (count text)
         to-relative-offsets (map
-                              (fn [^Marker marker]
-                                (intervals/->Marker (min text-length (max 0 (- (.-from marker) start-offset)))
-                                                    (min text-length (max 0 (- (.-to marker) start-offset)))
-                                                    false
-                                                    false
-                                                    (.-attrs marker))))
+                             (fn [^Marker marker]
+                               (intervals/->Marker (min text-length (max 0 (- (.-from marker) start-offset)))
+                                                   (min text-length (max 0 (- (.-to marker) start-offset)))
+                                                   false
+                                                   false
+                                                   (.-attrs marker))))
         bg-xf (comp
                (filter (fn [^Marker marker] (.-background ^Attrs (.-attrs marker))))
                (shred-markup :background))
         fg-xf (comp
                (filter (fn [^Marker marker] (.-foreground ^Attrs (.-attrs marker))))
                (shred-markup :foreground))
+        widgets-xf (keep (fn [^Marker marker]
+                           (some-> (get widgets (.-id ^Attrs (.-attrs marker)))
+                                   (assoc :ends-on-this-line? (<= (.-to marker) end-offset)))))
         tokens (if (some? lexer-state)
                  (intervals/lexemes lexer-state start-offset end-offset)
                  (object-array 0))]
-    (transduce2
+    (transduce
      (comp
       (remove (fn [^Marker m] (contains? deleted-markers (.-id ^Attrs (.-attrs m)))))
-      to-relative-offsets
-      (merge-tokens tokens)
-      (multiplex (bg-xf collect-to-array)
-                 (fg-xf collect-to-array)))
-     (fn [acc [bg fg]]
-       (LineInfo. text caret selection fg bg))
+      (multiplex (widgets-xf collect-to-array)
+                 ((comp to-relative-offsets
+                         (merge-tokens tokens)
+                         (multiplex (bg-xf collect-to-array)
+                                    (fg-xf collect-to-array)))
+                  (fn
+                    ([] nil)
+                    ([r] r)
+                    ([r i] i)))))
+     (completing
+      (fn [acc [widgets [bg fg]]]
+        (LineInfo. text caret selection fg bg widgets)))
      nil
      markup)))
 

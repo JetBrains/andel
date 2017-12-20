@@ -430,12 +430,6 @@
         [(tree/replace loc (make-node-fn res))
          bias]))))
 
-(defonce skip-count (atom 0))
-
-(defn ^:export log! []
-  (prn @skip-count)
-  (reset! skip-count 0))
-
 (defn gc [itree deleted-markers]
   (let [deleted? #(contains? deleted-markers %)
         deleted-bloom (reduce bloom/add! (bloom/create) deleted-markers)]
@@ -450,9 +444,7 @@
           (if (or (bloom/intersects? bloom deleted-bloom)
                   (< 0 bias))
             (recur (tree/next-leaf loc) bias)
-            (do
-              (swap! skip-count inc)
-              (recur (tree/skip loc) bias))))
+            (recur (tree/skip loc) bias)))
 
         :else (let [[loc' bias] (gc-leafs (tree/up loc) bias deleted?)]
                 (recur (tree/skip loc') bias))))))

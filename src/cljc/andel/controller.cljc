@@ -1,6 +1,5 @@
 (ns andel.controller
-  (:require [clojure.string :as cstring]
-            [andel.utils :as utils]
+  (:require [andel.utils :as utils]
             [andel.text :as text]
             [andel.intervals :as intervals]
             [andel.core :as core]
@@ -96,7 +95,7 @@
 (defn get-line-ident [text line]
   (let [loc (text/scan-to-line-start (text/zipper text) line)
         line-text (text/text loc (text/distance-to-EOL loc))
-        trimmed (cstring/triml line-text)
+        trimmed (clojure.string/triml line-text)
         ident-size (- (count line-text) (count trimmed))]
     (subs line-text 0 ident-size)))
 
@@ -145,8 +144,8 @@
     (set-caret-at-line-begining state (get-caret-line caret text) selection?)))
 
 (defn end [{{:keys [caret]} :editor
-             {:keys [text]} :document
-             :as state} selection?]
+            {:keys [text]} :document
+            :as state} selection?]
   (let [carret-line (get-caret-line caret text)]
     (set-caret-at-line-end state (get-caret-line caret text) selection?)))
 
@@ -189,7 +188,7 @@
         caret-offset' (core/caret->offset caret')
         selection' (if selection?
                      (update-selection selection caret caret')
-                     [caret-offset' caret-offset']) ]
+                     [caret-offset' caret-offset'])]
     (-> state
         (assoc-in [:editor :caret] caret')
         (assoc-in [:editor :selection] selection')
