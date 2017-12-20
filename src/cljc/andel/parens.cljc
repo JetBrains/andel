@@ -31,22 +31,21 @@
 
 (defn find-matching-paren-backward [text paren-token? offset]
   (let [text-length (text/text-length text)
-        offset' (- (dec text-length) offset)
-        char-seq    (text/text->reverse-char-seq text)
-        paren       (.charAt char-seq offset')]
+        char-seq    (text/text->char-seq text)
+        paren       (.charAt char-seq offset)]
     (when (and (paren-symbol? paren)
                (paren-token? offset))
-      (loop [offset' (inc offset')
+      (loop [offset (dec offset)
              s '()]
-        (when (< offset' text-length)
-          (let [c (.charAt char-seq offset')]
+        (when (< 0 offset)
+          (let [c (.charAt char-seq offset)]
             (cond
-              (not (paren-token? (- (dec text-length) offset'))) (recur (inc offset') s)
-              (closing? c) (recur (inc offset') (cons c s))
-              (opening? c) (cond (= c (opposite (first s))) (recur (inc offset') (rest s))
-                                 (= c (opposite paren))     (- (dec text-length) offset')
-                                 :else (recur (inc offset') s))
-              :else (recur (inc offset') s))))))))
+              (not (paren-token? offset)) (recur (dec offset) s)
+              (closing? c) (recur (dec offset) (cons c s))
+              (opening? c) (cond (= c (opposite (first s))) (recur (dec offset) (rest s))
+                                 (= c (opposite paren))     offset
+                                 :else (recur (dec offset) s))
+              :else (recur (dec offset) s))))))))
 
 (defn find-closing-paren [text paren-token? offset]
   (let [text-length (text/text-length text)
@@ -64,18 +63,17 @@
 
 (defn find-opening-paren [text paren-token? offset]
   (let [text-length (text/text-length text)
-        offset'  (- text-length offset)
-        char-seq (text/text->reverse-char-seq text)]
-    (loop [offset' offset'
+        char-seq (text/text->char-seq text)]
+    (loop [offset offset
            s '()]
-      (when (< offset' text-length)
-        (let [c (.charAt char-seq offset')]
+      (when (< 0 offset)
+        (let [c (.charAt char-seq offset)]
           (cond
-            (not (paren-token? (- (dec text-length) offset'))) (recur (inc offset') s)
-            (closing? c) (recur (inc offset') (cons c s))
-            (opening? c) (cond (= c (opposite (first s))) (recur (inc offset') (rest s))
-                               :else (- (dec text-length) offset'))
-            :else (recur (inc offset') s)))))))
+            (not (paren-token? offset)) (recur (dec offset) s)
+            (closing? c) (recur (dec offset) (cons c s))
+            (opening? c) (cond (= c (opposite (first s))) (recur (dec offset) (rest s))
+                               :else offset)
+            :else (recur (dec offset) s)))))))
 
 (defn find-parens [text paren-token? offset]
   (let [len (text/text-length text)]
@@ -108,7 +106,7 @@
     (cond (paren-symbol? form-start-char) (find-parens text paren-token? form-start-offset)
 ;          (= \" form-start-char) nil ;; fix string case
           (= \; form-start-char) nil ;; fix comment case
-          :else [form-start-offset (+ form-start-offset (dec (count-matching text form-start-offset #(not (whitespace? %)))))])))
+          :else [form-start-offset (+ form-start-offset (dec (count-matching text form-start-offset (complement whitespace?))))])))
 
 (defn slurp-forward [{:keys [editor document] :as state}]
   (let [{:keys [text lexer]} document
@@ -120,6 +118,43 @@
     (-> state
         (core/delete-at-offset cur-to 1)
         (core/insert-at-offset next-to paren-str))))
+
+(comment
+
+  (defn count-matching-reverse [text offset pred]
+    (let [_ (prn "off" offset)
+          length (text/text-length text)
+          char-seq (text/text->reverse-char-seq text)
+          sub-seq (.subSequence char-seq (- length offset) length)]
+      (prn "sub-seq" (reverse (str sub-seq)))
+      (prn "count" (count (take-while pred sub-seq)))
+      (inc (count (take-while pred sub-seq)))))
+
+  (defn find-prev-form [text paren-token? offset]
+    (let [char-seq (text/text->char-seq text)
+          delta (count-matching-reverse text offset whitespace?)
+          _ (prn delta)
+          form-start-offset (- offset delta)
+          form-start-char   (.charAt char-seq form-start-offset)]
+      (cond (paren-symbol? form-start-char) (find-parens text paren-token? form-start-offset)
+                                        ;          (= \" form-start-char) nil ;; fix string case
+            (= \; form-start-char) nil ;; fix comment case
+            :else [form-start-offset (+ form-start-offset (dec (count-matching-reverse text form-start-offset (complement whitespace?))))])))
+
+  (defn slurp-backward [{:keys [editor document] :as state}]
+    (let [{:keys [text lexer]} document
+          caret-offset (core/caret-offset state)
+          paren-token? #(intervals/is-brace-token? lexer %)
+          [cur-from cur-to] (enclosing-parens text paren-token? caret-offset) ;; check for not surrounded case
+          [prev-from prev-to] (find-prev-form text paren-token? cur-from)
+          paren-str (core/text-at-offset state (dec cur-from) 1)]
+      (prn "cur" cur-from cur-to)
+      (prn "prev" prev-from prev-to)
+      (-> state
+          (core/delete-at-offset (dec cur-from) 1)
+          (core/insert-at-offset prev-from paren-str)))))
+
+
 
 (comment
 

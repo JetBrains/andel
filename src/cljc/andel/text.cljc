@@ -80,9 +80,6 @@
 (defn zipper [tree]
   (tree/zipper tree tree-config))
 
-(defn zipper-reverse [tree]
-  (tree/zipper-reverse tree tree-config))
-
 (def root tree/root)
 
 (defn metrics-offset [^"[J" m]
@@ -165,33 +162,8 @@
           next-node
           offset-loc)))))
 
-(defn scan-to-offset-reverse [loc i]
-  (let [offset-loc (tree/scan loc (by-offset i))]
-    (if (tree/end? offset-loc)
-      offset-loc
-      (let [o (node-offset offset-loc)
-            node-text (.-data ^Leaf (tree/node offset-loc))
-            s (subs node-text (- (count node-text) (- i o)))
-            a (.-acc ^ZipperLocation offset-loc)
-            offset-loc (tree/assoc-o-acc offset-loc (r-f a (metrics s)))
-            next-node (tree/next offset-loc)]
-        (if (and (at-the-right-border? offset-loc)
-                 (not (tree/end? next-node)))
-          next-node
-          offset-loc)))))
-
 (defn retain [loc l]
   (scan-to-offset loc (+ (offset loc) l)))
-
-(defn retain-reverse [loc l]
-  (scan-to-offset-reverse loc (+ (offset loc) l)))
-
-#_(defn- set-o-acc-to-nth-eol [loc line-number]
-  (let [loc (forget-acc loc)
-        o (offset loc)
-        l (line loc)
-        idx (nth-index (.-data ^Leaf (tree/node loc)) \newline (- line-number l))]
-    (tree/assoc-o-acc loc (array (+ o idx) line-number))))
 
 (defn scan-to-line-start [loc n]
   (let [nth-eol-loc (tree/scan loc (by-line n))]
@@ -233,24 +205,6 @@
             (cons s (lazy-seq (lazy-text (tree/next (forget-acc loc)) (- l s-len))))
             (list s)))))))
 
-(defn lazy-text-reverse [loc l]
-  (when (< 0 l)
-    (if (tree/end? loc)
-      (throw (ex-info "Length is out of bounds" {:l l}))
-      (if (tree/branch? loc)
-        (recur (tree/down loc) l)
-        (let [i (offset loc)
-              text (.-data ^Leaf (tree/node loc))
-              len (count text)
-              base-offset (metrics-offset (tree/loc-acc loc))
-              end (- len (- i base-offset))
-              start (max 0 (- end l))
-              s (clojure.string/reverse (subs text start end))
-              s-len (count s)]
-          (if (< s-len l)
-            (cons s (lazy-seq (lazy-text-reverse (tree/next (forget-acc loc)) (- l s-len))))
-            (list s)))))))
-
 (defn lines-count [t]
   (or (some-> t
               (tree/metrics)
@@ -267,13 +221,6 @@
 (defn text [loc l]
   (loop [s ""
          lt (lazy-text loc l)]
-    (if-let [f (first lt)]
-      (recur (str s f) (rest lt))
-      s)))
-
-(defn text-reverse [loc l]
-  (loop [s ""
-         lt (lazy-text-reverse loc l)]
     (if-let [f (first lt)]
       (recur (str s f) (rest lt))
       s)))
@@ -334,9 +281,6 @@
 (defn scan-by-offset-exclusive [loc i]
   (tree/scan loc (by-offset-exclusive i)))
 
-(defn scan-by-offset-exclusive-reverse [loc i]
-  (tree/scan loc (by-offset-exclusive i)))
-
 #?(:clj
     (deftype TextSequence [t ^{:volatile-mutable true} loc from to]
       CharSequence
@@ -372,79 +316,3 @@
 #?(:clj
     (defn ^CharSequence text->char-seq [t]
       (TextSequence. t (scan-by-offset-exclusive (zipper t) 0) 0 (text-length t))))
-
-#?(:clj
-    (deftype ReverseTextSequence [t ^{:volatile-mutable true} loc from to]
-      CharSequence
-      (^int length [this]
-            (- to from))
-      (^char charAt [this ^int index]
-             (assert (< index (- to from)) "Index out of range")
-             (let [^int absolute-index (+ index from)
-                   {:keys [^int base ^String text]} (leaf->text loc)]
-               (cond
-                 (< absolute-index base)
-                 (let [new-loc (scan-by-offset-exclusive-reverse (zipper t) absolute-index)
-                       {:keys [^int base ^String text]} (leaf->text new-loc)]
-                   (set! loc new-loc)
-                   (.charAt text (- (dec (.length text)) (- absolute-index base))))
-
-                 (< absolute-index (+ base (count text)))
-                 (.charAt text  (- (dec (.length text)) (- absolute-index base)))
-
-                 (<= (+ base (count text)) absolute-index)
-                 (let [new-loc (scan-by-offset-exclusive-reverse loc absolute-index)
-                       {:keys [base ^String text]} (leaf->text new-loc)]
-                   (set! loc new-loc)
-                   (.charAt text (-  (dec (.length text)) (- absolute-index base))))
-
-                 :else (assert "No way"))))
-      (^CharSequence subSequence [this ^int from' ^int to']
-                     (assert (< from' (- to from)) "From index out of range")
-                     (assert (<= to' (- to from)) "To index out of range")
-       (ReverseTextSequence. t (scan-by-offset-exclusive-reverse (zipper-reverse t) 0) (+ from from') (+ from to')))
-      (^String toString [this] (text-reverse (scan-to-offset-reverse (zipper-reverse t) from) (- to from)))))
-
-
-
-#?(:clj
-   (defn ^CharSequence text->reverse-char-seq [t]
-     (ReverseTextSequence. t (scan-by-offset-exclusive-reverse (zipper-reverse t) 0) 0 (text-length t))))
-
-
-(defn search-regex-forward [text offset regexp]
-  (some-> (re-find regexp (-> text text->char-seq (.subSequence offset (text-length text))))
-          count
-          dec))
-
-(defn search-regex-backward [text offset regexp]
-  (let [length (text-length text)]
-    (some-> (re-find regexp (-> text text->reverse-char-seq (.subSequence (- length offset) length)))
-            count
-            dec)))
-
-(comment
-
-  (-> "(aaaaaaaaaaaa) "
-      make-text
-      (search-regex-forward 0 #".*\)"))
-
-  (-> "(aaaaaaaaaaaa) "
-            make-text
-      (search-regex-backward 14 #".*\("))
-
-  (-> "(def foo [] (bar baz))"
-      make-text
-      (search-regex-forward 14 #"[^\)]*\)"))
-
-  (def closing #{\) \} \]})
-
-  (def opening #{\( \{ \[})
-
-  (def oppsistes {\( \)
-                  })
-
-  (defn find-matching-paren [text offset]
-    )
-
-  )

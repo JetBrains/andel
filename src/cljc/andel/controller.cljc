@@ -160,13 +160,21 @@
         word-end (count (take-while (complement whitespace?) (.subSequence text-seq (+ offset word-begin) text-len)))]
     (+ word-begin word-end)))
 
+;; temporary
+(defn subseq [s from to]
+  (sequence
+    (comp
+      (drop from)
+      (take (- to from)))
+    s))
+
 (defn prev-word-delta [state]
   (let [text (-> state :document :text)
         text-len (text/text-length text)
         offset (core/caret-offset state)
-        text-seq (text/text->reverse-char-seq text)
-        word-begin (count (take-while whitespace? (.subSequence text-seq (- text-len offset) text-len)))
-        word-end (count (take-while (complement whitespace?) (.subSequence text-seq (+ (- text-len offset) word-begin) text-len)))]
+        text-seq (reverse (text/text->char-seq text))
+        word-begin (count (take-while whitespace? (subseq text-seq (- text-len offset) text-len)))
+        word-end (count (take-while (complement whitespace?) (subseq text-seq (+ (- text-len offset) word-begin) text-len)))]
     (- (+ word-begin word-end))))
 
 (defn move-caret [{:keys [document editor] :as state} dir selection?]
