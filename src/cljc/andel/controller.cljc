@@ -149,23 +149,25 @@
   (let [carret-line (get-caret-line caret text)]
     (set-caret-at-line-end state (get-caret-line caret text) selection?)))
 
+(def whitespace? #{\newline \space \tab})
+
 (defn next-word-delta [state]
   (let [text (-> state :document :text)
-        caret-offset (core/caret-offset state)
-        {caret-line :line caret-col :col} (utils/offset->line-col caret-offset text)
-        line-text (text/line-text text caret-line)]
-    (max (some-> (re-find #"^.+?\b" (subs line-text caret-col))
-                          count)
-                  1)))
+        offset (core/caret-offset state)
+        text-seq (text/text->char-seq text)
+        text-len (text/text-length text)
+        word-begin (count (take-while whitespace? (.subSequence text-seq offset text-len)))
+        word-end (count (take-while (complement whitespace?) (.subSequence text-seq (+ offset word-begin) text-len)))]
+    (+ word-begin word-end)))
 
 (defn prev-word-delta [state]
   (let [text (-> state :document :text)
-        caret-offset (core/caret-offset state)
-        {caret-line :line caret-col :col} (utils/offset->line-col caret-offset text)
-        line-text (text/line-text text caret-line)]
-    (min (- (some-> (second (re-find #".*(\b.+)$" (subs line-text 0 caret-col)))
-                    count))
-        -1)))
+        text-len (text/text-length text)
+        offset (core/caret-offset state)
+        text-seq (text/text->reverse-char-seq text)
+        word-begin (count (take-while whitespace? (.subSequence text-seq (- text-len offset) text-len)))
+        word-end (count (take-while (complement whitespace?) (.subSequence text-seq (+ (- text-len offset) word-begin) text-len)))]
+    (- (+ word-begin word-end))))
 
 (defn move-caret [{:keys [document editor] :as state} dir selection?]
   (let [{:keys [caret selection]} editor

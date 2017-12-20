@@ -1,8 +1,7 @@
 (ns andel.parens
   (:require [andel.text :as text]
             [andel.core :as core]
-            [andel.intervals :as intervals]
-            [andel.controller :as controller]))
+            [andel.intervals :as intervals]))
 
 (def closing? #{\) \} \]})
 
