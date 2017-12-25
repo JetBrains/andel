@@ -1,6 +1,7 @@
 (ns andel.parens
   (:require [andel.text :as text]
             [andel.core :as core]
+            [andel.cursor :as cursor]
             [andel.intervals :as intervals]))
 
 (def closing? #{\) \} \]})
@@ -12,22 +13,19 @@
 (defn paren-symbol? [c] (or (closing? c) (opening? c)))
 
 (defn find-matching-paren-forward [text paren-token? offset]
-  (let [text-length (text/text-length text)
-        char-seq    (text/text->char-seq text)
-        paren       (.charAt char-seq offset)]
+  (let [cursor (cursor/make-cursor text offset)
+        paren  (cursor/get-char cursor)]
     (when (and (paren-symbol? paren)
                (paren-token? offset))
-      (loop [offset (inc offset)
-             s '()]
-        (when (< offset text-length)
-          (let [c (.charAt char-seq offset)]
-            (cond
-              (not (paren-token? offset)) (recur (inc offset) s)
-              (opening? c) (recur (inc offset) (cons c s))
-              (closing? c) (cond (= c (opposite (first s))) (recur (inc offset) (rest s))
-                                 (= c (opposite paren))     offset
-                                 :else (recur (inc offset) s))
-              :else (recur (inc offset) s))))))))
+      (loop [s '()]
+        (when-let [c (.next! cursor)]
+          (cond
+            (not (paren-token? offset)) (recur s)
+            (opening? c) (recur (cons c s))
+            (closing? c) (cond (= c (opposite (first s))) (recur (rest s))
+                               (= c (opposite paren))     (cursor/offset cursor)
+                               :else (recur s))
+            :else (recur s)))))))
 
 (defn find-matching-paren-backward [text paren-token? offset]
   (let [text-length (text/text-length text)
