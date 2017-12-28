@@ -15,21 +15,34 @@
   (assert (tree/leaf? loc)
           "calling get-char-from-loc on non-leaf")
   (let [^Leaf leaf (tree/node loc)]
-    (.charAt (.-data leaf) offset)))
+    (.charAt ^String (.-data leaf) offset)))
 
-;; warning: breaks zipper accumulator
-(defn- left [^ZipperLocation loc]
+(defn- left
+  "warning: breaks zipper accumulator"
+  [^ZipperLocation loc]
   (when (< 0 (.-idx loc))
     (tree/z-merge loc {:idx (dec (.-idx loc))
                        :acc nil
                        :o-acc nil})))
 
-;; warning: breaks zipper accumulator
-(defn- prev-loc [^ZipperLocation loc]
+(defn- down [^ZipperLocation loc]
+  (when (tree/branch? loc)
+    (when-let [cs (tree/children loc)]
+      (tree/->zipper
+       {:siblings (al/->array-list cs)
+        :idx (dec (count cs))
+        :transient? (.-transient? loc)
+        :ops (.-ops loc)
+        :acc (.-acc loc)
+        :pzip loc}))))
+
+(defn- prev-loc
+  "warning: breaks zipper accumulator"
+  [^ZipperLocation loc]
   (if (tree/end? loc)
     loc
     (or
-     (and (tree/branch? loc) (tree/down loc))
+     (and (tree/branch? loc) (down loc))
      (left loc)
      (loop [^ZipperLocation p loc]
        (if-let [u (tree/up p)]
@@ -40,69 +53,22 @@
                          :idx 0
                          :end? true}))))))
 
-;; warning: breaks zipper accumulator
-(defn- prev-leaf [loc]
+(defn- prev-leaf
+  "warning: breaks zipper accumulator"
+  [loc]
   (let [loc (prev-loc loc)]
     (if (or (tree/leaf? (tree/node loc))
             (tree/end? loc))
       loc
       (recur loc))))
 
-(defprotocol MutableCursor
-  (next! ^char [this])
-  (prev! ^char [this])
-  (getZipper [this])
-  (getNodeOffset [this])
-  (getInnerOffset [this])
-  (getLeafLength [this]))
-
-(deftype Cursor [^{:volatile-mutable true} zipper
-                 ^{:volatile-mutable true} node-offset
-                 text-length
-                 ^{:volatile-mutable true} inner-offset
-                 ^{:volatile-mutable true} leaf-length]
-  MutableCursor
-  (next! ^char [this]
-   (cond
-     (< (inc inner-offset) leaf-length)
-     (do (set! inner-offset (inc inner-offset))
-         (get-char-from-loc zipper inner-offset))
-
-     (< (inc (+ node-offset inner-offset)) text-length)
-     (let [next-leaf (tree/next-leaf zipper)]
-       (set! zipper       next-leaf)
-       (set! node-offset  (+ node-offset leaf-length))
-       (set! inner-offset 0)
-       (set! leaf-length  (get-leaf-length next-leaf))
-       (get-char-from-loc zipper inner-offset))
-
-     :else (char 0)))
-
-  (prev! ^char [this]
-   (cond
-     (< 0 inner-offset)
-     (do (set! inner-offset (dec inner-offset))
-         (get-char-from-loc zipper inner-offset))
-
-     (< 0 (+ node-offset inner-offset))
-     (let [prev-leaf    (prev-leaf zipper)
-           leaf-length' (get-leaf-length prev-leaf)]
-       (set! zipper       prev-leaf)
-       (set! node-offset  (- node-offset leaf-length'))
-       (set! inner-offset (dec leaf-length'))
-       (set! leaf-length  leaf-length')
-       (get-char-from-loc zipper inner-offset))
-
-     :else (char 0)))
-
-  (getZipper [_] zipper)
-  (getNodeOffset [_] node-offset)
-  (getInnerOffset [_] inner-offset)
-  (getLeafLength [_] leaf-length))
+(defrecord Cursor [zipper node-offset text-length inner-offset leaf-length])
 
 #?(:clj
-   (defmacro ->cursor [{:keys [zipper node-offset text-length inner-offset leaf-length]}]
-     `(->Cursor ~zipper ~node-offset ~text-length ~inner-offset ~leaf-length)))
+   (defmacro ->cursor [{:keys [zipper node-offset
+                               text-length inner-offset leaf-length]}]
+     `(->Cursor ~zipper ~node-offset
+                ~text-length ~inner-offset ~leaf-length)))
 
 (defn make-cursor [text offset]
   (let [zipper      (-> text text/zipper (text/scan-to-offset offset))
@@ -117,16 +83,16 @@
 
 (defn get-char [^Cursor cursor]
   (when cursor
-    (let [zipper       (.getZipper cursor)
-          inner-offset (.getInnerOffset cursor)]
+    (let [zipper       (.-zipper cursor)
+          inner-offset (.-inner-offset cursor)]
       (get-char-from-loc zipper inner-offset))))
 
 (defn next [^Cursor cursor]
-  (let [zipper       (.getZipper cursor)
-        node-offset  (.getNodeOffset cursor)
+  (let [zipper       (.-zipper cursor)
+        node-offset  (.-node-offset cursor)
         text-length  (.-text-length cursor)
-        inner-offset (.getInnerOffset cursor)
-        leaf-length  (.getLeafLength cursor)]
+        inner-offset (.-inner-offset cursor)
+        leaf-length  (.-leaf-length cursor)]
     (cond
       (< (inc inner-offset) leaf-length)
       (->cursor
@@ -148,11 +114,11 @@
       :else nil)))
 
 (defn prev [^Cursor cursor]
-  (let [zipper       (.getZipper cursor)
-        node-offset  (.getNodeOffset cursor)
+  (let [zipper       (.-zipper cursor)
+        node-offset  (.-node-offset cursor)
         text-length  (.-text-length cursor)
-        inner-offset (.getInnerOffset cursor)
-        leaf-length  (.getLeafLength cursor)]
+        inner-offset (.-inner-offset cursor)
+        leaf-length  (.-leaf-length cursor)]
     (cond
       (< 0 inner-offset)
       (->cursor
@@ -175,18 +141,151 @@
       :else nil)))
 
 (defn offset [^Cursor cursor]
-  (let [node-offset  (.getNodeOffset cursor)
-        inner-offset (.getInnerOffset cursor)]
+  (let [node-offset  (.-node-offset cursor)
+        inner-offset (.-inner-offset cursor)]
     (+ node-offset inner-offset)))
+
+#?(:clj
+   (defmacro ->trainsient-cursor [{:keys [zipper node-offset
+                                          text-length inner-offset
+                                          leaf-length]}]
+     `(->TransientCursor ~zipper ~node-offset
+                         ~text-length ~inner-offset
+                         ~leaf-length)))
+
+(defprotocol MutableCursor
+  (next! ^MutableCursor [this])
+  (prev! ^MutableCursor [this])
+  (isExhausted [this])
+  (getChar [this])
+  (getZipper [this])
+  (getOffset [this])
+  (getNodeOffset [this])
+  (getInnerOffset [this])
+  (getLeafLength [this]))
+
+(deftype TransientCursor [^{:volatile-mutable true} zipper
+                          ^{:volatile-mutable true} node-offset
+                          text-length
+                          ^{:volatile-mutable true} inner-offset
+                          ^{:volatile-mutable true} leaf-length
+                          ^{:volatile-mutable true} exhausted?]
+  MutableCursor
+  (next! ^TransientCursor [this]
+    (cond
+      (< (inc inner-offset) leaf-length)
+      (do (when exhausted?
+            (set! exhausted? false))
+          (set! inner-offset (inc inner-offset))
+          this)
+
+      (< (inc (+ node-offset inner-offset)) text-length)
+      (let [next-leaf (tree/next-leaf zipper)]
+        (when exhausted?
+          (set! exhausted? false))
+        (set! zipper       next-leaf)
+        (set! node-offset  (+ node-offset leaf-length))
+        (set! inner-offset 0)
+        (set! leaf-length  (get-leaf-length next-leaf))
+        this)
+
+      :else (do (set! exhausted? true)
+                this)))
+
+  (prev! ^TransientCursor [this]
+    (cond
+      (< 0 inner-offset)
+      (do (when exhausted?
+            (set! exhausted? false))
+          (set! inner-offset (dec inner-offset))
+          this)
+
+      (< 0 (+ node-offset inner-offset))
+      (let [prev-leaf    (prev-leaf zipper)
+            leaf-length' (get-leaf-length prev-leaf)]
+        (when exhausted?
+          (set! exhausted? false))
+        (set! zipper       prev-leaf)
+        (set! node-offset  (- node-offset leaf-length'))
+        (set! inner-offset (dec leaf-length'))
+        (set! leaf-length  leaf-length')
+        this)
+
+      :else (do (set! exhausted? true)
+                this)))
+
+  (isExhausted [_] exhausted?)
+  (getZipper [_] zipper)
+  (getOffset [_] (+ node-offset inner-offset))
+  (getNodeOffset [_] node-offset)
+  (getInnerOffset [_] inner-offset)
+  (getLeafLength [_] leaf-length)
+  (getChar [_] (get-char-from-loc zipper inner-offset)))
+
+#?(:clj
+   (defmacro ->transient-cursor [{:keys [zipper node-offset text-length
+                                         inner-offset leaf-length exhausted]}]
+     `(->TransientCursor ~zipper ~node-offset ~text-length
+                         ~inner-offset ~leaf-length ~exhausted)))
+
+(defn transient [^Cursor cursor]
+  (->transient-cursor
+   {:zipper       (.-zipper cursor)
+    :node-offset  (.-node-offset cursor)
+    :text-length  (.-text-length cursor)
+    :inner-offset (.-inner-offset cursor)
+    :leaf-length  (.-leaf-length cursor)
+    :exhausted? false}))
+
+(defn persistent! [^TransientCursor cursor]
+  (->cursor
+   {:zipper       (.getZipper cursor)
+    :node-offset  (.getNodeOffset cursor)
+    :text-length  (.text-length cursor)
+    :inner-offset (.getInnerOffset cursor)
+    :leaf-length  (.getLeafLength cursor)}))
+
+
+;;;;;;;;;;;;;;;;;;;;;; util ;;;;;;;;;;;;;;;;;;;;;
+
+
+(defn move-while [^Cursor cursor pred direction]
+  (when-let [advance (case direction
+                       :forward  #(.next! ^TransientCursor %)
+                       :backward #(.prev! ^TransientCursor %)
+                       nil)]
+    (let [t-cursor ^TransientCursor (transient cursor)]
+      (loop []
+        (if (and (pred  (.getChar t-cursor))
+                 (not (.isExhausted ^TransientCursor (advance t-cursor))))
+          (recur)
+          (persistent! t-cursor))))))
+
+(defn distance [^Cursor cursor ^Cursor cursor']
+  (Math/abs ^Integer (- (offset cursor') (offset cursor))))
+
+(defn count-matching [cursor pred direction]
+  (distance cursor (move-while cursor pred direction)))
+
+
 
 (comment
 
   (def my-cursor (-> "01234567890"
                      text/make-text
-                     (make-cursor 0)))
+                     (make-cursor 4)))
 
-  (.next! my-cursor)
+  (def my-transient-cursor (transient my-cursor))
 
-  (.-text-length my-cursor)
+  (.getChar my-transient-cursor)
+  (.next! my-transient-cursor)
+
+  (def my-persistent-cursor (persistent! my-transient-cursor))
+
+  (get-char my-persistent-cursor)
+
+  (count-matching my-cursor (fn [c] (< (Character/digit c 10) 20)) :forward)
+
+  (set!)
 
   )
