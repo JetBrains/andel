@@ -5,37 +5,27 @@
             [andel.intervals :as intervals]))
 
 
-(defn make-editor-state [language lexer-constructor]
-  (let [initial-text ""]
-    {:document {:text (text/make-text initial-text)
-                :markup (intervals/make-interval-tree)
-                :lexer (when lexer-constructor
-                         (lexer-constructor language initial-text))
-                :lexer-broker (a/chan)
-                :modespec language
-                :timestamp 0
-                :lines []
-                :first-invalid 0
-                :deleted-markers #{}}
-     :editor {:caret {:offset 0 :v-col 0}
-              :selection [0 0]
-              :widgets {}}
-     :viewport {:pos [0 0]
-                :view-size [0 0]
-                :metrics nil
-                :focused? false}}))
+(defn make-editor-state [lexer]
+  {:document {:text (text/make-text "")
+              :markup (intervals/make-interval-tree)
+              :lexer lexer
+              :deleted-markers #{}}
+   :editor {:caret {:offset 0 :v-col 0}
+            :selection [0 0]
+            :widgets {}}
+   :viewport {:pos [0 0]
+              :view-size [0 0]
+              :metrics nil
+              :focused? false}})
 
 (defn- edit-at-offset
   [{:keys [document] :as state} offset f]
   (let [edit-point (-> (:text document)
                        (text/zipper)
                        (text/scan-to-offset offset))]
-    (-> state
-        (assoc-in [:document :text] (-> edit-point
-                                         (f)
-                                         (text/root)))
-        (update-in [:document :timestamp] inc)
-        (update-in [:document :first-invalid] min (utils/line-number edit-point)))))
+    (assoc-in state [:document :text] (-> edit-point
+                                          (f)
+                                          (text/root)))))
 
 (defn caret-offset [state]
   (get-in state [:editor :caret :offset]))
