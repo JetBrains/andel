@@ -260,15 +260,19 @@
          (identical? (:lexer-state old) (:lexer-state new)))))
 
 (defn line-selection [[from to] line-start-offset line-end-offset]
-  (cond (and (< from line-start-offset) (< line-start-offset to))
+  (cond (= from to) nil
+        
+        (and (< from line-start-offset) (< line-start-offset to))
         (if (< line-end-offset to)
           [0 :infinity]
           [0 (- to line-start-offset)])
+        
         (and (<= line-start-offset from) (<= from line-end-offset))
         [(- from line-start-offset)
          (if (<= to line-end-offset)
            (- to line-start-offset)
            :infinity)]
+        
         :else nil))
 
 (defn ceil [x]
@@ -288,7 +292,7 @@
 (defn widget-pixels-position [{{:keys [metrics] :as viewport} :viewport
                                {:keys [text]} :document :as state} widget]
   (let [[x y] (utils/offset->pixels (andel.core/caret-offset state) state)]
-    [x (+ y (utils/line-height metrics))]))
+    [x y]))
 
 (defn viewport-lines [state viewport-info]
   (let [{{:keys [text lines markup hashes deleted-markers lexer]} :document
