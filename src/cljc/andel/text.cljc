@@ -423,28 +423,3 @@
             count
             dec)))
 
-(comment
-
-  (-> "(aaaaaaaaaaaa) "
-      make-text
-      (search-regex-forward 0 #".*\)"))
-
-  (-> "(aaaaaaaaaaaa) "
-            make-text
-      (search-regex-backward 14 #".*\("))
-
-  (-> "(def foo [] (bar baz))"
-      make-text
-      (search-regex-forward 14 #"[^\)]*\)"))
-
-  (def closing #{\) \} \]})
-
-  (def opening #{\( \{ \[})
-
-  (def oppsistes {\( \)
-                  })
-
-  (defn find-matching-paren [text offset]
-    )
-
-  )
