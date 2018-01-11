@@ -173,7 +173,7 @@
         from-snd   (max from1 from2)
         len1       (- to1 from1)
         len2       (- to2 from2)]
-    (if (or (identical? len1 0) (identical? len2 0))
+    (if (or (= len1 0) (= len2 0))
       false
       (< from-snd to-fst))))
 

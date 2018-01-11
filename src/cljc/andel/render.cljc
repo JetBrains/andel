@@ -31,13 +31,12 @@
                        (str (* (- to from) width) "px"))})
 
 (defn active-line-style [metrics]
-  {:height           (str (inc (utils/line-height metrics)) "px")
+  {:height           (str (utils/line-height metrics) "px")
    :width            "100%"
    :background-color (:bg-05 theme/zenburn)
    :position         :absolute
    :left             0
-   :top              0
-   :z-index          "-1"})
+   :top              0})
 
 (defn caret-style [col {:keys [width] :as metrics}]
   {:width            "1px"
@@ -46,7 +45,7 @@
    :background-color "white"
    :position         :absolute
    :left             (str (* col width) "px")
-   :height           (str (inc (utils/line-height metrics)) "px")})
+   :height           (str (utils/line-height metrics) "px")})
 
 #?(:cljs
    (defn make-pendings []

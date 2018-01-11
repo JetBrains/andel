@@ -82,8 +82,9 @@
   (let [carret-offset (core/caret->offset caret)
         {:keys [line col]} (utils/offset->line-col carret-offset text)
         to-line (+ line delta-line)
-        new-v-col (max v-col col)
-        new-col (min (utils/line-length to-line text) new-v-col)]
+        line-len (utils/line-length to-line text)
+        new-v-col (if (some? v-col)  (max v-col col) col)
+        new-col (min line-len new-v-col)]
     {:offset (utils/grid-pos->offset {:line to-line :col new-col} text)
      :v-col new-v-col}))
 

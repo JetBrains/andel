@@ -78,7 +78,8 @@
                                   (assoc-in [:pos 1] (- (* (inc line) (utils/line-height metrics)) height)))))))
 
 (defn move-view-if-needed [{:keys [document editor viewport] :as state}]
-  (let [{:keys [text]} document
+  state
+  #_(let [{:keys [text]} document
         {:keys [caret]} editor
         {:keys [metrics]} viewport
         caret-l (utils/offset->line (caret->offset caret) text)
