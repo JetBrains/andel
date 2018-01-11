@@ -84,12 +84,12 @@
           (defn node? [x]
             (instance? Node x))
 
-          (defn leaf? [x] (not (node? x))))
+          (defn leaf? [x] (instance? Leaf x)))
    :cljs (do
            (defn ^boolean node? [x]
              (instance? Node x))
 
-           (defn ^boolean leaf? [x] (not (node? x)))))
+           (defn ^boolean leaf? [x] (instance? Leaf x))))
 
 (defn metrics [x]
   (if (node? x)
