@@ -5,10 +5,10 @@
             [andel.intervals :as intervals]))
 
 
-(defn make-editor-state [language]
+(defn make-editor-state [language color-scheme]
   {:document {:text (text/make-text "")
               :markup (intervals/make-interval-tree)
-              :lexer (andel.intervals/create-lexer language "")
+              :lexer (andel.intervals/create-lexer language "" color-scheme)
               :deleted-markers #{}}
    :editor {:caret {:offset 0 :v-col 0}
             :selection [0 0]
