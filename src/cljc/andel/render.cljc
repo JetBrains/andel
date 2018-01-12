@@ -279,10 +279,10 @@
                       [w h] :view-size
                       [_ from-y-offset] :pos :as viewport}]
   (let [line-height (utils/line-height metrics)
-        top-line (int (/ (max 0 from-y-offset) line-height))]
+        top-line (int (/ (double (max 0 from-y-offset)) line-height))]
     {:top-line top-line
-     :bottom-line (+ top-line (ceil (/ h line-height)))
-     :y-shift (double (- (* line-height (- (/ from-y-offset line-height) top-line))))}))
+     :bottom-line (+ top-line (ceil (/ (double h) line-height)))
+     :y-shift (double (- (* line-height (- (/ (double from-y-offset) line-height) top-line))))}))
 
 (defn widget-pixels-position [{{:keys [metrics] :as viewport} :viewport
                                {:keys [text]} :document :as state} widget]
