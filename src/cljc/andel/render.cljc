@@ -259,15 +259,19 @@
          (identical? (:lexer-state old) (:lexer-state new)))))
 
 (defn line-selection [[from to] line-start-offset line-end-offset]
-  (cond (and (< from line-start-offset) (< line-start-offset to))
+  (cond (= from to) nil
+        
+        (and (< from line-start-offset) (< line-start-offset to))
         (if (< line-end-offset to)
           [0 :infinity]
           [0 (- to line-start-offset)])
+        
         (and (<= line-start-offset from) (<= from line-end-offset))
         [(- from line-start-offset)
          (if (<= to line-end-offset)
            (- to line-start-offset)
            :infinity)]
+        
         :else nil))
 
 (defn ceil [x]
@@ -281,8 +285,7 @@
   (let [line-height (utils/line-height metrics)
         top-line (int (/ (double (max 0 from-y-offset)) line-height))]
     {:top-line top-line
-     :bottom-line (+ top-line (ceil (/ (double h) line-height)))
-     :y-shift (double (- (* line-height (- (/ (double from-y-offset) line-height) top-line))))}))
+     :bottom-line (+ top-line (ceil (/ (double h) line-height)))}))
 
 (defn viewport-lines [state viewport-info]
   (let [{{:keys [text lines markup hashes deleted-markers lexer]} :document

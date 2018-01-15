@@ -455,3 +455,6 @@
   (get-matching-brace-type [this offset])
   (get-token-type-by-offset [this offset])
   (is-brace-token? [this offset]))
+
+(defmulti create-lexer (constantly :idea))
+(defmethod create-lexer :default [& args] nil)
