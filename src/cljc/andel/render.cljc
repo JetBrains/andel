@@ -284,11 +284,6 @@
      :bottom-line (+ top-line (ceil (/ (double h) line-height)))
      :y-shift (double (- (* line-height (- (/ (double from-y-offset) line-height) top-line))))}))
 
-(defn widget-pixels-position [{{:keys [metrics] :as viewport} :viewport
-                               {:keys [text]} :document :as state} widget]
-  (let [[x y] (utils/offset->pixels (andel.core/caret-offset state) state)]
-    [x (+ y (utils/line-height metrics))]))
-
 (defn viewport-lines [state viewport-info]
   (let [{{:keys [text lines markup hashes deleted-markers lexer]} :document
          {:keys [caret selection]} :editor} state

@@ -6,31 +6,14 @@
   (+ height spacing))
 
 (defn pixels->grid-position
-  "transforms relative position in pixels into absolute [line col] value
+  "transforms absolute position in pixels into absolute [line col] value
    CAUTION! col might be bigger, than length of line."
-  [[pix-x pix-y] {:keys [metrics pos] :as viewport}]
-  (let [[_ top-px] pos
-        line-height (line-height metrics)
-        font-width (:width metrics)
-        top-line (int (/ top-px line-height))
-        y-shift (- (* line-height (- (/ top-px line-height) top-line)))
-        x pix-x
-        y (- (- pix-y y-shift) (/ line-height 2))
-        rel-line (Math/round (double (/ y line-height)))
-        abs-line (+ top-line rel-line)
-        abs-col (Math/round (double (/ x font-width)))]
-    {:line abs-line
-     :col abs-col}))
-
-(defn grid-position->pixels
-  "transforms absolute [line col] value into relative poisition in pixels"
-  [{:keys [line col]} {:keys [metrics pos] :as viewport}]
+  [[x y] metrics]
   (let [line-height (line-height metrics)
         font-width (:width metrics)
-        [_ top-px] pos
-        y  (- (* line line-height) top-px)
-        x (* col font-width)]
-    [x y]))
+        line (int (Math/floor (/ (double y) line-height)))
+        col (int (Math/floor (/ (double x) font-width)))]
+    {:line line :col col}))
 
 (defn grid-pos->offset
   "transforms [line col] value into absolute offset value"
@@ -66,13 +49,6 @@
         col (- offset line-offset)]
     {:line line
      :col col}))
-
-(defn offset->pixels
-  "transforms absolute offset value into relative poisition in pixels"
-  [offset {viewport :viewport {:keys [text]} :document :as state}]
-   (-> offset
-       (offset->line-col text)
-       (grid-position->pixels viewport)))
 
 (defn line->loc
   "transforms absolute line into zipper pointer"
