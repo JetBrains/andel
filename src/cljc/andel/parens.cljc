@@ -123,8 +123,8 @@
         form-start-offset (+ offset (cursor/distance cursor form-start-cursor))
         form-start-char   (cursor/get-char form-start-cursor)]
     (cond (paren-symbol? form-start-char) (find-matching-paren-forward text paren-token? form-start-offset)
-;         (= \" form-start-char) nil ;; fix string case
-          (= \; form-start-char) nil ;; fix comment case
+          (= \" form-start-char) [form-start-char (+ form-start-offset 1 (cursor/count-matching (cursor/next form-start-cursor) #(not= \" %) :forward))]
+          (= \; form-start-char) [form-start-char (+ form-start-offset 1 (cursor/count-matching (cursor/next form-start-cursor) #(not= \newline %) :forward))]
           :else [form-start-offset (+ form-start-offset (dec (cursor/count-matching form-start-cursor symbol? :forward)))])))
 
 (defn find-prev-form [text paren-token? offset]
@@ -133,8 +133,7 @@
         form-end-offset (- offset (cursor/distance cursor form-end-cursor))
         form-end-char   (cursor/get-char form-end-cursor)]
     (cond (paren-symbol? form-end-char) (find-matching-paren-backward text paren-token? form-end-offset)
-;         (= \" form-start-char) nil ;; fix string case
-          (= \; form-end-char) nil ;; fix comment case
+          (= \" form-end-char) [(- form-end-offset 1 (cursor/count-matching (cursor/prev form-end-cursor) #(not= \" %) :backward)) form-end-offset]
           :else [(- form-end-offset (dec (cursor/count-matching form-end-cursor symbol? :backward))) form-end-offset])))
 
 (defn slurp-forward [{:keys [editor document] :as state}]
