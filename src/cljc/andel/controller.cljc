@@ -2,8 +2,7 @@
   (:require [andel.utils :as utils]
             [andel.text :as text]
             [andel.intervals :as intervals]
-            [andel.core :as core]
-            [andel.parens :as parens]))
+            [andel.core :as core]))
 
 (defn selection-length [[left right :as selection]]
   (assert (<= left right) (str "Wrong selection positioning: " selection))
@@ -223,36 +222,3 @@
 
 (defn resize [state width height]
   (assoc-in state [:viewport :view-size] [width height]))
-
-(let [a (atom 0)]
-  (def unique-paren-id #(swap! a inc)))
-
-(defn highlight-parens [{:keys [document] :as state}]
-  (let [caret-offset  (core/caret-offset state)
-        lexer (:lexer document)
-        paren-offsets (parens/find-parens-pair (:text document)
-                                          (if (some? lexer)
-                                            #(intervals/is-brace-token? lexer %)
-                                            (constantly true))
-                                          caret-offset)
-        old-paren-ids (:paren-ids document)]
-    (-> state
-        (core/delete-markers old-paren-ids)
-        ((fn [state]
-           (or (when-let [[p-from p-to] paren-offsets]
-                 (when (and p-from p-to)
-                   (let [from-id (str "paren-" (unique-paren-id))
-                         to-id   (str "paren-" (unique-paren-id))]
-                     (-> state
-                         (core/insert-markers [(intervals/->Marker p-from
-                                                                   (inc p-from)
-                                                                   false
-                                                                   false
-                                                                   (intervals/->Attrs from-id "highlight-paren" "" :background))
-                                               (intervals/->Marker p-to
-                                                                   (inc p-to)
-                                                                   false
-                                                                   false
-                                                                   (intervals/->Attrs to-id "highlight-paren" "" :background))])
-                         (assoc-in [:document :paren-ids] [from-id to-id])))))
-               state))))))

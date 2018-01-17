@@ -2,6 +2,7 @@
   (:require [andel.text :as text]
             [andel.core :as core]
             [andel.cursor :as cursor]
+            [andel.controller :as controller]
             [andel.intervals :as intervals])
   #?(:clj (:import [andel.cursor Cursor TransientCursor])))
 
@@ -72,6 +73,40 @@
           (closing? c0) (find-matching-paren-backward text paren-token? prev-offset)
           (opening? c1) (find-matching-paren-forward text paren-token? offset)
           :else         nil)))))
+
+(let [a (atom 0)]
+  (def unique-paren-id #(swap! a inc)))
+
+(defn highlight-parens [{:keys [document] :as state}]
+  (let [caret-offset  (core/caret-offset state)
+        lexer (:lexer document)
+        paren-offsets (find-parens-pair (:text document)
+                                          (if (some? lexer)
+                                            #(intervals/is-brace-token? lexer %)
+                                            (constantly true))
+                                          caret-offset)
+        old-paren-ids (:paren-ids document)]
+    (-> state
+        (core/delete-markers old-paren-ids)
+        ((fn [state]
+           (or (when-let [[p-from p-to] paren-offsets]
+                 (when (and p-from p-to)
+                   (let [from-id (str "paren-" (unique-paren-id))
+                         to-id   (str "paren-" (unique-paren-id))]
+                     (-> state
+                         (core/insert-markers [(intervals/->Marker p-from
+                                                                   (inc p-from)
+                                                                   false
+                                                                   false
+                                                                   (intervals/->Attrs from-id "highlight-paren" "" :background))
+                                               (intervals/->Marker p-to
+                                                                   (inc p-to)
+                                                                   false
+                                                                   false
+                                                                   (intervals/->Attrs to-id "highlight-paren" "" :background))])
+                         (assoc-in [:document :paren-ids] [from-id to-id])))))
+               state))))))
+
 
 (defn enclosing-parens [text paren-token? offset]
   [(find-opening-paren text paren-token? offset) (find-closing-paren text paren-token? (dec offset))])
@@ -148,3 +183,75 @@
     (-> state
         (core/delete-at-offset cur-to 1)
         (core/insert-at-offset (or prev-to-inc (inc cur-from)) paren-str))))
+
+(defn splice-left [{:keys [editor document] :as state}]
+  (let [{:keys [text lexer]} document
+        caret-offset (core/caret-offset state)
+        paren-token? #(intervals/is-brace-token? lexer %)
+        [cur-from cur-to] (enclosing-parens text paren-token? caret-offset)]
+    (-> state
+        (core/delete-at-offset cur-to 1)
+        (core/delete-at-offset cur-from (- caret-offset cur-from)))))
+
+(defn paredit-delete [{:keys [document] :as state}]
+  (let [{:keys [text lexer]} document
+        [sel-from sel-to] (core/selection state)
+        paren-token? #(intervals/is-brace-token? lexer %)
+        caret-offset (core/caret-offset state)
+        cursor (cursor/make-cursor text caret-offset)
+        character (cursor/get-char cursor)]
+    (if (or (not (paren-token? caret-offset))
+            (< 0 (- sel-to sel-from)))
+      (controller/delete state)
+      (cond
+        (closing? character)
+        (let [[from-offset _] (find-matching-paren-backward text paren-token? caret-offset)]
+          (if (< 1 (- caret-offset from-offset))
+            state
+            (core/delete-at-offset state from-offset 2)))
+
+        (opening? character)
+        (let [[_ to-offset] (find-matching-paren-forward text paren-token? caret-offset)]
+          (if (< 1 (- to-offset caret-offset))
+            state
+            (core/delete-at-offset state caret-offset 2)))))))
+
+(defn paredit-backspace [{:keys [document] :as state}]
+  (let [{:keys [text lexer]} document
+        [sel-from sel-to] (core/selection state)
+        paren-token? #(intervals/is-brace-token? lexer %)
+        caret-offset (core/caret-offset state)
+        deletion-offset (dec caret-offset)
+        cursor (cursor/make-cursor text deletion-offset)
+        character (cursor/get-char cursor)]
+    (if (or (not (paren-token? deletion-offset))
+            (< 0 (- sel-to sel-from))
+            (< deletion-offset 0))
+      (controller/backspace state)
+      (cond
+        (closing? character)
+        (let [[from-offset _] (find-matching-paren-backward text paren-token? deletion-offset)]
+          (if (< 1 (- deletion-offset from-offset))
+            (controller/move-caret state :left false)
+            (core/delete-at-offset state from-offset 2)))
+
+        (opening? character)
+        (let [[_ to-offset] (find-matching-paren-forward text paren-token? deletion-offset)]
+          (if (< 1 (- to-offset deletion-offset))
+            (controller/move-caret state :left false)
+            (core/delete-at-offset state deletion-offset 2)))))))
+
+(defn paredit-open-round [state]
+  (-> state
+      (controller/type-in "()")
+      (controller/move-caret :left false)))
+
+(defn paredit-open-square [state]
+  (-> state
+      (controller/type-in "[]")
+      (controller/move-caret :left false)))
+
+(defn paredit-open-curly [state]
+  (-> state
+      (controller/type-in "{}")
+      (controller/move-caret :left false)))
