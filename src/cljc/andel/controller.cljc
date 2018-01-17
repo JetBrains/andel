@@ -230,7 +230,7 @@
 (defn highlight-parens [{:keys [document] :as state}]
   (let [caret-offset  (core/caret-offset state)
         lexer (:lexer document)
-        paren-offsets (parens/find-parens (:text document)
+        paren-offsets (parens/find-parens-pair (:text document)
                                           (if (some? lexer)
                                             #(intervals/is-brace-token? lexer %)
                                             (constantly true))
