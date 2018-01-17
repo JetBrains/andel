@@ -40,9 +40,7 @@
 
 (defn caret-style [col {:keys [width] :as metrics}]
   {:width            "1px"
-   :animation        "blinker 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite"
    :top              0
-   :background-color "white"
    :position         :absolute
    :left             (str (* col width) "px")
    :height           (str (utils/line-height metrics) "px")})
@@ -256,7 +254,8 @@
          (= (:selection old) (:selection new))
          (= (:caret old) (:caret new))
          (identical? (:deleted-markers old) (:deleted-markers new))
-         (identical? (:lexer-state old) (:lexer-state new)))))
+         (identical? (:lexer-state old) (:lexer-state new))
+         (= (:caret-decorator old) (:caret-decorator new)))))
 
 (defn line-selection [[from to] line-start-offset line-end-offset]
   (cond (= from to) nil
@@ -311,7 +310,9 @@
                  markers-zipper        (tree/scan markers-zipper
                                                   (fn [acc metrics]
                                                     (or (intersects? acc metrics)
-                                                        (overscans? acc metrics))))]
+                                                        (overscans? acc metrics))))
+                 caret-here? (and (:focused? state)
+                                  (<= start-offset caret-offset) (<= caret-offset end-offset))]
              (recur next-line-text-zipper
                     markers-zipper
                     (inc line-number)
@@ -321,8 +322,9 @@
                                :lexer-state     lexer
                                :start-offset    start-offset
                                :selection       (line-selection selection start-offset end-offset)
-                               :caret           (when (and (-> state :viewport :focused?) (<= start-offset caret-offset) (<= caret-offset end-offset))
+                               :caret           (when caret-here?
                                                   (- caret-offset start-offset))
+                               :caret-decorator (when caret-here? (:caret-decorator state))
                                :end-offset      end-offset
                                :deleted-markers deleted-markers})
                     false))))))))
