@@ -183,7 +183,16 @@
         (core/delete-at-offset cur-to 1)
         (core/insert-at-offset (or prev-to-inc (inc cur-from)) paren-str))))
 
-(defn splice-left [{:keys [editor document] :as state}]
+(defn paredit-splice [{:keys [editor document] :as state}]
+  (let [{:keys [text lexer]} document
+        caret-offset (core/caret-offset state)
+        paren-token? #(intervals/is-brace-token? lexer %)
+        [cur-from cur-to] (enclosing-parens text paren-token? caret-offset)]
+    (-> state
+        (core/delete-at-offset cur-to 1)
+        (core/delete-at-offset cur-from 1))))
+
+(defn paredit-splice-kill-left [{:keys [editor document] :as state}]
   (let [{:keys [text lexer]} document
         caret-offset (core/caret-offset state)
         paren-token? #(intervals/is-brace-token? lexer %)
@@ -192,13 +201,21 @@
         (core/delete-at-offset cur-to 1)
         (core/delete-at-offset cur-from (- caret-offset cur-from)))))
 
+(defn paredit-splice-kill-right [{:keys [editor document] :as state}]
+  (let [{:keys [text lexer]} document
+        caret-offset (core/caret-offset state)
+        paren-token? #(intervals/is-brace-token? lexer %)
+        [cur-from cur-to] (enclosing-parens text paren-token? caret-offset)]
+    (-> state
+        (core/delete-at-offset caret-offset (inc (- cur-to caret-offset)))
+        (core/delete-at-offset cur-from 1))))
+
 (defn paredit-delete [{:keys [document] :as state}]
   (let [{:keys [text lexer]} document
         [sel-from sel-to] (core/selection state)
         paren-token? #(intervals/is-brace-token? lexer %)
         caret-offset (core/caret-offset state)
-        cursor (cursor/make-cursor text caret-offset)
-        character (cursor/get-char cursor)]
+        character (first (core/text-at-offset state caret-offset 1))]
     (if (or (not (paren-token? caret-offset))
             (< 0 (- sel-to sel-from)))
       (controller/delete state)
@@ -221,8 +238,7 @@
         paren-token? #(intervals/is-brace-token? lexer %)
         caret-offset (core/caret-offset state)
         deletion-offset (dec caret-offset)
-        cursor (cursor/make-cursor text deletion-offset)
-        character (cursor/get-char cursor)]
+        character (first (core/text-at-offset state deletion-offset 1))]
     (if (or (not (paren-token? deletion-offset))
             (< 0 (- sel-to sel-from))
             (< deletion-offset 0))
@@ -254,3 +270,30 @@
   (-> state
       (controller/type-in "{}")
       (controller/move-caret :left false)))
+
+;; temporary
+(defn- set-caret-and-drop-selection [state offset]
+  (-> state
+      (assoc-in [:editor :caret :offset] offset)
+      (assoc-in [:editor :v-col] 0)
+      (assoc-in [:editor :selection] [offset offset])))
+
+(defn navigate-next-form [{:keys [document] :as state}]
+    (let [{:keys [text lexer]} document
+        paren-token? #(intervals/is-brace-token? lexer %)
+        caret-offset (core/caret-offset state)
+        [_ next-to] (find-next-form text paren-token? caret-offset)
+        [_ cur-to] (enclosing-parens text paren-token? caret-offset)]
+    (cond (some? next-to) (set-caret-and-drop-selection state (inc next-to))
+          (some? cur-to) (set-caret-and-drop-selection state (inc cur-to))
+          :else state)))
+
+(defn navigate-prev-form [{:keys [document] :as state}]
+  (let [{:keys [text lexer]} document
+        paren-token? #(intervals/is-brace-token? lexer %)
+        caret-offset (core/caret-offset state)
+        [prev-from _] (find-prev-form text paren-token? (max 0 (dec caret-offset)))
+        [cur-from _] (enclosing-parens text paren-token? caret-offset)]
+    (cond (some? prev-from) (set-caret-and-drop-selection state prev-from)
+          (some? cur-from) (set-caret-and-drop-selection state cur-from)
+          :else state)))
