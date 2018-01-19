@@ -73,13 +73,17 @@
 (defn make-cursor [text offset]
   (let [zipper      (-> text text/zipper (text/scan-to-offset offset))
         node-offset (text/node-offset zipper)
-        offset      (text/offset zipper)]
+        offset      (text/offset zipper)
+        text-length (text/text-length text)]
+    (assert (and (<= 0 offset)
+                 (< offset text-length))
+            "OUT OF BOUNDS")
     (->cursor
-     {:zipper zipper
-      :node-offset  node-offset
-      :text-length  (text/text-length text)
-      :inner-offset (- offset node-offset)
-      :leaf-length  (get-leaf-length zipper)})))
+       {:zipper zipper
+        :node-offset  node-offset
+        :text-length  text-length
+        :inner-offset (- offset node-offset)
+        :leaf-length  (get-leaf-length zipper)})))
 
 (defn get-char [^Cursor cursor]
   (when cursor
