@@ -1,6 +1,7 @@
 (ns andel.paredit
   (:require [andel.parens :refer :all]
             [andel.core :as core]
+            [andel.cursor :as cursor]
             [andel.intervals :as intervals]
             [andel.controller :as controller])
   #?(:clj (:import [andel.cursor Cursor TransientCursor])))
@@ -211,10 +212,71 @@
           (recur (dec prev-from)))))))
 
 (defn navigate-prev-form-up [{:keys [document] :as state}]
-    (let [{:keys [text lexer]} document
+  (let [{:keys [text lexer]} document
         paren-token? #(intervals/is-brace-token? lexer %)
         caret-offset (core/caret-offset state)
         [cur-from _] (enclosing-parens text paren-token? caret-offset)]
     (if (some? cur-from)
       (set-caret-and-drop-selection state cur-from)
       state)))
+
+(defn navigate-line-start [{:keys [document] :as state}]
+  (let [{:keys [text lexer]} document
+        caret-offset (dec (core/caret-offset state))
+        cursor (cursor/make-cursor text caret-offset)
+        line-start-cursor (cursor/next (cursor/move-while cursor #(not= \newline %) :backward))
+        text-start-cursor (cursor/move-while line-start-cursor #(or (= % \space)
+                                                                    (= % \tab)) :forward)
+        line-start-offset (cursor/offset line-start-cursor)
+        text-start-offset (cursor/offset text-start-cursor)]
+    (if (and (<= line-start-offset caret-offset)
+             (< caret-offset text-start-offset))
+      (set-caret-and-drop-selection state line-start-offset)
+      (set-caret-and-drop-selection state text-start-offset))))
+
+(defn- last-command-kill? [editor]
+  false)
+
+(defn- push-kill-ring [editor killed-text]
+  (if (last-command-kill? editor)
+    ;; fix 0 -> first
+    (update-in editor [:kill-ring 0] #(str % killed-text))
+    (update-in editor [:kill-ring] #(conj % killed-text))))
+
+(defn- pop-kill-ring [editor]
+  (let [killed-text (first (:kill-ring editor))
+        editor' (update editor :kill-ring pop)]
+    [killed-text editor']))
+
+(defn- peek-kill-ring [editor]
+  (first (:kill-ring editor)))
+
+(defn yank [{:keys [document editor] :as state}]
+  (let [yanked-text (peek-kill-ring editor)
+        caret-offset (core/caret-offset state)]
+    (if (some? yanked-text)
+      (core/insert-at-offset state caret-offset yanked-text)
+      state)))
+
+(defn yank-and-pop [{:keys [document editor] :as state}]
+  (let [[yanked-text editor'] (pop-kill-ring editor)
+        caret-offset (core/caret-offset state)]
+    (if (some? yanked-text)
+      (-> state
+          (assoc :editor editor')
+          (core/insert-at-offset caret-offset yanked-text))
+      state)))
+
+;; doesn't work like emacs one
+(defn kill [{:keys [document editor] :as state}]
+  (let [{:keys [text lexer]} document
+        caret-offset (core/caret-offset state)
+        cursor (cursor/make-cursor text caret-offset)
+        line-end-delta (cursor/count-matching cursor #(not= \newline %) :forward)
+        paren-token? #(intervals/is-brace-token? lexer %)
+        [_ cur-to] (enclosing-parens text paren-token? caret-offset)
+        kill-len (min (inc line-end-delta) (- cur-to caret-offset))
+        killed-text (core/text-at-offset state caret-offset kill-len)]
+    (-> state
+        (core/delete-at-offset caret-offset kill-len)
+        (update :editor #(push-kill-ring % killed-text)))))
