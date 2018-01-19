@@ -238,18 +238,18 @@
   false)
 
 (defn- push-kill-ring [editor killed-text]
-  (if (last-command-kill? editor)
-    ;; fix 0 -> first
-    (update-in editor [:kill-ring 0] #(str % killed-text))
-    (update-in editor [:kill-ring] #(conj % killed-text))))
+  (let [kill-ring-last (dec (count (:kill-ring editor)))]
+    (if (last-command-kill? editor)
+      (update-in editor [:kill-ring kill-ring-last] #(str % killed-text))
+      (update-in editor [:kill-ring] #(conj % killed-text)))))
 
 (defn- pop-kill-ring [editor]
-  (let [killed-text (first (:kill-ring editor))
+  (let [killed-text (peek (:kill-ring editor))
         editor' (update editor :kill-ring pop)]
     [killed-text editor']))
 
 (defn- peek-kill-ring [editor]
-  (first (:kill-ring editor)))
+  (peek (:kill-ring editor)))
 
 (defn yank [{:keys [document editor] :as state}]
   (let [yanked-text (peek-kill-ring editor)
@@ -267,16 +267,15 @@
           (core/insert-at-offset caret-offset yanked-text))
       state)))
 
-;; doesn't work like emacs one
-(defn kill [{:keys [document editor] :as state}]
+(defn kill-form [{:keys [document editor] :as state}]
   (let [{:keys [text lexer]} document
         caret-offset (core/caret-offset state)
-        cursor (cursor/make-cursor text caret-offset)
-        line-end-delta (cursor/count-matching cursor #(not= \newline %) :forward)
         paren-token? #(intervals/is-brace-token? lexer %)
-        [_ cur-to] (enclosing-parens text paren-token? caret-offset)
-        kill-len (min (inc line-end-delta) (- cur-to caret-offset))
-        killed-text (core/text-at-offset state caret-offset kill-len)]
-    (-> state
-        (core/delete-at-offset caret-offset kill-len)
-        (update :editor #(push-kill-ring % killed-text)))))
+        [next-from next-to] (find-next-form text paren-token? caret-offset)]
+    (if (some? (and next-from next-to))
+      (let [kill-len (inc (- next-to caret-offset))
+            killed-text (core/text-at-offset state caret-offset kill-len)]
+        (-> state
+            (core/delete-at-offset caret-offset kill-len)
+            (update :editor #(push-kill-ring % killed-text))))
+      state)))
