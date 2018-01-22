@@ -7,6 +7,12 @@
             [andel.controller :as controller])
   #?(:clj (:import [andel.cursor Cursor TransientCursor])))
 
+(defn- set-caret-and-drop-selection [state offset]
+  (-> state
+      (assoc-in [:editor :caret :offset] offset)
+      (assoc-in [:editor :v-col] 0)
+      (assoc-in [:editor :selection] [offset offset])))
+
 (defn paren-token? [text lexer]
   (fn [offset]
     (if (some? lexer)
@@ -155,13 +161,6 @@
       (controller/type-in "{}")
       (controller/move-caret :left false)))
 
-;; temporary
-(defn- set-caret-and-drop-selection [state offset]
-  (-> state
-      (assoc-in [:editor :caret :offset] offset)
-      (assoc-in [:editor :v-col] 0)
-      (assoc-in [:editor :selection] [offset offset])))
-
 (defn navigate-next-form [{:keys [document] :as state}]
   (let [{:keys [text lexer]} document
         paren-token? (paren-token? text lexer)
@@ -237,16 +236,23 @@
       (set-caret-and-drop-selection state cur-from)
       state)))
 
+(defn- move-cursor-at-line-start [cursor]
+  (let [[cursor' end?] (cursor/move-while cursor #(not= % \newline) :backward)]
+    (if end?
+      cursor'
+      (cursor/next cursor'))))
+
 (defn navigate-line-start [{:keys [document] :as state}]
   (let [{:keys [text lexer]} document
-        caret-offset (dec (core/caret-offset state))
+        caret-offset (max 0 (dec (core/caret-offset state)))
         cursor (cursor/make-cursor text caret-offset)
-        line-start-cursor (cursor/next (cursor/move-while cursor #(not= \newline %) :backward))
-        text-start-cursor (cursor/move-while line-start-cursor #(or (= % \space)
-                                                                    (= % \tab)) :forward)
+        line-start-cursor (move-cursor-at-line-start cursor)
+        text-start-cursor (first (cursor/move-while line-start-cursor
+                                                    #(or (= % \space)
+                                                         (= % \tab)) :forward))
         line-start-offset (cursor/offset line-start-cursor)
         text-start-offset (cursor/offset text-start-cursor)]
-    (if (and (<= line-start-offset caret-offset)
+    (if (and (< line-start-offset caret-offset)
              (< caret-offset text-start-offset))
       (set-caret-and-drop-selection state line-start-offset)
       (set-caret-and-drop-selection state text-start-offset))))

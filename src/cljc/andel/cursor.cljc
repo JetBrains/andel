@@ -254,22 +254,25 @@
 
 
 (defn move-while [^Cursor cursor pred direction]
-  (when-let [advance (case direction
+  (let [advance (case direction
                        :forward  #(.next! ^TransientCursor %)
-                       :backward #(.prev! ^TransientCursor %)
-                       nil)]
-    (let [t-cursor ^TransientCursor (transient cursor)]
-      (loop []
-        (if (and (pred  (.getChar t-cursor))
-                 (not (.isExhausted ^TransientCursor (advance t-cursor))))
-          (recur)
-          (persistent! t-cursor))))))
+                       :backward #(.prev! ^TransientCursor %))
+        t-cursor ^TransientCursor (transient cursor)]
+    (loop []
+      (cond (not (pred (.getChar t-cursor)))
+            [(persistent! t-cursor) false]
+
+            (.isExhausted ^TransientCursor (advance t-cursor))
+            [(persistent! t-cursor) true]
+
+            :else
+            (recur)))))
 
 (defn distance [^Cursor cursor ^Cursor cursor']
   (Math/abs ^Integer (- (offset cursor') (offset cursor))))
 
 (defn count-matching [cursor pred direction]
-  (distance cursor (move-while cursor pred direction)))
+  (distance cursor (first (move-while cursor pred direction))))
 
 
 

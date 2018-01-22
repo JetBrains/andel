@@ -127,20 +127,28 @@
 (defn find-next-form [text paren-token? offset]
   (when (< offset (text/text-length text))
     (let [cursor (cursor/make-cursor text offset)
-          form-start-cursor (cursor/move-while cursor whitespace? :forward)
+          form-start-cursor (first (cursor/move-while cursor whitespace? :forward))
           form-start-offset (+ offset (cursor/distance cursor form-start-cursor))
           form-start-char   (cursor/get-char form-start-cursor)]
       (cond (paren-symbol? form-start-char) (find-matching-paren-forward text paren-token? form-start-offset)
             (= \" form-start-char) [form-start-char (+ form-start-offset 1 (cursor/count-matching (cursor/next form-start-cursor) #(not= \" %) :forward))]
             (= \; form-start-char) [form-start-char (+ form-start-offset 1 (cursor/count-matching (cursor/next form-start-cursor) #(not= \newline %) :forward))]
-            :else [form-start-offset (+ form-start-offset (dec (cursor/count-matching form-start-cursor symbol? :forward)))]))))
+            :else (let [[form-end-cursor end?] (cursor/move-while form-start-cursor symbol? :forward)
+                        form-end-offset (if end?
+                                          (cursor/offset form-end-cursor)
+                                          (dec (cursor/offset form-end-cursor)))]
+                    [form-start-offset form-end-offset])))))
 
 (defn find-prev-form [text paren-token? offset]
   (when (<= 0 offset)
     (let [cursor          (cursor/make-cursor text offset)
-          form-end-cursor (cursor/move-while cursor whitespace? :backward)
+          form-end-cursor (first (cursor/move-while cursor whitespace? :backward))
           form-end-offset (- offset (cursor/distance cursor form-end-cursor))
           form-end-char   (cursor/get-char form-end-cursor)]
       (cond (paren-symbol? form-end-char) (find-matching-paren-backward text paren-token? form-end-offset)
             (= \" form-end-char) [(- form-end-offset 1 (cursor/count-matching (cursor/prev form-end-cursor) #(not= \" %) :backward)) form-end-offset]
-            :else [(- form-end-offset (dec (cursor/count-matching form-end-cursor symbol? :backward))) form-end-offset]))))
+            :else (let [[form-start-cursor end?] (cursor/move-while form-end-cursor symbol? :backward)
+                        form-start-offset (if end?
+                                            (cursor/offset form-start-cursor)
+                                            (inc (cursor/offset form-start-cursor)))]
+                    [form-start-offset form-end-offset])))))
