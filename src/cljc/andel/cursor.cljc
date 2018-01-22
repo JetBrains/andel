@@ -224,7 +224,7 @@
   (getNodeOffset [_] node-offset)
   (getInnerOffset [_] inner-offset)
   (getLeafLength [_] leaf-length)
-  (getChar [_] (get-char-from-loc zipper inner-offset)))
+  (getChar [_] (when (not exhausted?) (get-char-from-loc zipper inner-offset))))
 
 #?(:clj
    (defmacro ->transient-cursor [{:keys [zipper node-offset text-length
