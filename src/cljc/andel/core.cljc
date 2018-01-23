@@ -105,87 +105,79 @@
       (move-view-if-needed)))
 
 (defn document-insert-at-offset [{:andel/keys [text markup lexer] :as state} offset insertion]
-  (if (:writable? (:document state))
-    (let [text-length (text/text-length text)
-          text' (-> text
-                    (text/zipper)
-                    (text/scan-to-offset offset)
-                    (text/insert insertion)
-                    (text/root))
-          added-length (count insertion)]
-      (-> state
-          (assoc :andel/text text')
-          (update :andel/markup intervals/type-in offset added-length)
-          (update :andel/lexer intervals/update-text (text/text->char-seq text') offset added-length 0)
-          (update :andel/log (fn [l]
-                               (conj (or l []) [[:retain offset] [:insert insertion] [:retain (- text-length offset)]])))))
-    state))
+  (let [text-length (text/text-length text)
+        text' (-> text
+                  (text/zipper)
+                  (text/scan-to-offset offset)
+                  (text/insert insertion)
+                  (text/root))
+        added-length (count insertion)]
+    (-> state
+        (assoc :andel/text text')
+        (update :andel/markup intervals/type-in offset added-length)
+        (update :andel/lexer intervals/update-text (text/text->char-seq text') offset added-length 0)
+        (update :andel/log (fn [l]
+                             (conj (or l []) [[:retain offset] [:insert insertion] [:retain (- text-length offset)]]))))))
 
 (defn insert-at-offset [state offset insertion]
-  (if (:writable? (:document state))
-    (let [[sel-from sel-to] (selection state)
-          added-length (count insertion)
-          caret-offset (caret-offset state)
-          text-length (-> state :document :text text/text-length)]
-      (-> state
-          (edit-at-offset offset #(text/insert % insertion))
-          (update :document (fn [{:keys [text lexer] :as document}]
-                              (cond-> document
-                                (some? lexer) (assoc :lexer (intervals/update-text lexer (text/text->char-seq text) offset added-length 0)))))
-          (update-in [:document :markup] intervals/type-in offset (count insertion))
-          (cond->
-              (<= offset sel-from) (update-in [:editor :selection 0] #(+ % added-length))
-              (<= offset caret-offset) (update-in [:editor :caret :offset] #(+ % added-length))
-              (<= offset sel-to) (update-in [:editor :selection 1] #(+ % added-length)))
-          (update :log (fn [l]
-                         (conj (or l []) [[:retain offset] [:insert insertion] [:retain (- text-length offset)]])))))
-    state))
+  (let [[sel-from sel-to] (selection state)
+        added-length (count insertion)
+        caret-offset (caret-offset state)
+        text-length (-> state :document :text text/text-length)]
+    (-> state
+        (edit-at-offset offset #(text/insert % insertion))
+        (update :document (fn [{:keys [text lexer] :as document}]
+                            (cond-> document
+                              (some? lexer) (assoc :lexer (intervals/update-text lexer (text/text->char-seq text) offset added-length 0)))))
+        (update-in [:document :markup] intervals/type-in offset (count insertion))
+        (cond->
+            (<= offset sel-from) (update-in [:editor :selection 0] #(+ % added-length))
+            (<= offset caret-offset) (update-in [:editor :caret :offset] #(+ % added-length))
+            (<= offset sel-to) (update-in [:editor :selection 1] #(+ % added-length)))
+        (update :log (fn [l]
+                       (conj (or l []) [[:retain offset] [:insert insertion] [:retain (- text-length offset)]]))))))
 
 
 (defn document-delete-at-offset [{:andel/keys [text markup lexer] :as state} offset length]
-  (if (:writable? (:document state))
-    (let [text-length (text/text-length text)
-          text-to-remove (-> (text/zipper text)
-                             (text/scan-to-offset offset)
-                             (text/text length))
-          text' (-> text
-                    (text/zipper)
-                    (text/scan-to-offset offset)
-                    (text/delete length)
-                    (text/root))]
-      (-> state
-          (assoc :andel/text text')
-          (update :andel/markup intervals/delete-range offset length)
-          (update :andel/lexer intervals/update-text (text/text->char-seq text') offset 0 length)
-          (update :andel/log (fn [l]
-                               (conj (or l []) [[:retain offset] [:delete text-to-remove] [:retain (- text-length offset length)]])))))
-    state))
+  (let [text-length (text/text-length text)
+        text-to-remove (-> (text/zipper text)
+                           (text/scan-to-offset offset)
+                           (text/text length))
+        text' (-> text
+                  (text/zipper)
+                  (text/scan-to-offset offset)
+                  (text/delete length)
+                  (text/root))]
+    (-> state
+        (assoc :andel/text text')
+        (update :andel/markup intervals/delete-range offset length)
+        (update :andel/lexer intervals/update-text (text/text->char-seq text') offset 0 length)
+        (update :andel/log (fn [l]
+                             (conj (or l []) [[:retain offset] [:delete text-to-remove] [:retain (- text-length offset length)]]))))))
 
 (defn shift-caret [caret offset added-length]
   (if (<= offset caret) (max offset (+ caret added-length)) caret))
 
 (defn delete-at-offset [state offset length]
-  (if (:writable? (:document state))
-    (let [[sel-from sel-to] (selection state)
-          caret-offset (caret-offset state)
-          text (-> state :document :text)
-          old-text (-> (text/zipper text)
-                       (text/scan-to-offset offset)
-                       (text/text length))
-          text-length (text/text-length text)]
-      (-> state
-          (edit-at-offset offset #(text/delete % length))
-          (update :document (fn [{:keys [text] :as document}]
-                              (cond-> document (some? (:lexer document))
-                                      (update :lexer intervals/update-text (text/text->char-seq text) offset 0 length))))
-          (update-in [:document :markup] intervals/delete-range offset length)
-          (cond->
-              (<= offset sel-from) (update-in [:editor :selection 0] #(max offset (- % length)))
-              (<= offset caret-offset) (update-in [:editor :caret :offset] #(max offset (- % length)))
-              (<= offset sel-to) (update-in [:editor :selection 1] #(max offset (- % length))))
-          (update :log (fn [l]
-                         (conj (or l []) [[:retain offset] [:delete old-text] [:retain (- text-length offset length)]])))))
-    state))
+  (let [[sel-from sel-to] (selection state)
+        caret-offset (caret-offset state)
+        text (-> state :document :text)
+        old-text (-> (text/zipper text)
+                     (text/scan-to-offset offset)
+                     (text/text length))
+        text-length (text/text-length text)]
+    (-> state
+        (edit-at-offset offset #(text/delete % length))
+        (update :document (fn [{:keys [text] :as document}]
+                            (cond-> document (some? (:lexer document))
+                                    (update :lexer intervals/update-text (text/text->char-seq text) offset 0 length))))
+        (update-in [:document :markup] intervals/delete-range offset length)
+        (cond->
+            (<= offset sel-from) (update-in [:editor :selection 0] #(max offset (- % length)))
+            (<= offset caret-offset) (update-in [:editor :caret :offset] #(max offset (- % length)))
+            (<= offset sel-to) (update-in [:editor :selection 1] #(max offset (- % length))))
+        (update :log (fn [l]
+                       (conj (or l []) [[:retain offset] [:delete old-text] [:retain (- text-length offset length)]]))))))
 
 (defn- next-widget-id [widgets]
   (or (some->> widgets
