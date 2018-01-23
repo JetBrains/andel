@@ -308,7 +308,7 @@
 
                  :else (assert "No way"))))
       (^CharSequence subSequence [this ^int from' ^int to']
-                     (assert (< from' (- to from)) "From index out of range")
+                     (assert (<= from' (- to from)) "From index out of range")
                      (assert (<= to' (- to from)) "To index out of range")
                      (TextSequence. t (scan-by-offset-exclusive (zipper t) 0) (+ from from') (+ from to')))
       (^String toString [this] (text (scan-to-offset (zipper t) from) (- to from)))))
