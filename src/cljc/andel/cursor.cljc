@@ -5,14 +5,14 @@
   #?(:clj (:import [andel.tree ZipperLocation Leaf])))
 
 (defn- get-leaf-length [^ZipperLocation loc]
-  (assert (tree/leaf? loc)
+  (assert (tree/leaf? (tree/node loc))
           "calling leaf-length on non-leaf")
   (let [^Leaf leaf (tree/node loc)
         ^String s  (.-data leaf)]
     (.length s)))
 
 (defn- get-char-from-loc [^ZipperLocation loc offset]
-  (assert (tree/leaf? loc)
+  (assert (tree/leaf? (tree/node loc))
           "calling get-char-from-loc on non-leaf")
   (let [^Leaf leaf (tree/node loc)]
     (.charAt ^String (.-data leaf) offset)))

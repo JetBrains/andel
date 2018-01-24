@@ -20,7 +20,7 @@
                         (get-in s [:document :text]))))})
 
 (defn mock-andel-state [{:keys [caret-offset test-string]}]
-  (-> (core/make-editor-state nil)
+  (-> (core/make-editor-state nil nil)
       (assoc-in [:document :text] (text/make-text test-string))
       (assoc-in [:editor :caret :offset] caret-offset)))
 
@@ -30,7 +30,6 @@
                         mock-andel-state
                         ~op
                         andel-state->offset-and-string
-                        log
                         offset-and-string->test-string)]
      (is (= res-str1# ~str2))))
 
