@@ -23,7 +23,9 @@
               :deleted-markers #{}}
    :editor {:caret {:offset 0 :v-col 0}
             :selection [0 0]
-            :widgets {}}
+            :widgets {}
+            :kill-ring []
+            :prev-kill-state nil}
    :viewport {:pos [0 0]
               :view-size [0 0]
               :metrics nil
@@ -178,6 +180,10 @@
             (<= offset sel-to) (update-in [:editor :selection 1] #(max offset (- % length))))
         (update :log (fn [l]
                        (conj (or l []) [[:retain offset] [:delete old-text] [:retain (- text-length offset length)]]))))))
+
+(defn text-at-offset [{{:keys [text] :as document} :document :as state} offset length]
+  (let [char-seq (text/text->char-seq text)]
+    (.subSequence char-seq offset (+ offset length))))
 
 (defn- next-widget-id [widgets]
   (or (some->> widgets
