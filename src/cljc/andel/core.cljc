@@ -6,7 +6,7 @@
             [clojure.spec.alpha :as s]
             [andel.tree :as tree]))
 
-(s/def :andel/tree tree/node)
+(s/def :andel/tree tree/node?)
 (s/def :andel/text :andel/tree)
 (s/def :andel/markup :andel/tree)
 (s/def :andel/lexer any?)
