@@ -2,8 +2,7 @@
   (:require [andel.utils :as utils]
             [andel.text :as text]
             [andel.intervals :as intervals]
-            [andel.core :as core]
-            [andel.parens :as parens]))
+            [andel.core :as core]))
 
 (defn selection-length [[left right :as selection]]
   (assert (<= left right) (str "Wrong selection positioning: " selection))
@@ -150,23 +149,33 @@
   (let [carret-line (get-caret-line caret text)]
     (set-caret-at-line-end state (get-caret-line caret text) selection?)))
 
+(def whitespace? #{\newline \space \tab})
+
 (defn next-word-delta [state]
   (let [text (-> state :document :text)
-        caret-offset (core/caret-offset state)
-        {caret-line :line caret-col :col} (utils/offset->line-col caret-offset text)
-        line-text (text/line-text text caret-line)]
-    (max (some-> (re-find #"^.+?\b" (subs line-text caret-col))
-                          count)
-                  1)))
+        offset (core/caret-offset state)
+        text-seq (text/text->char-seq text)
+        text-len (text/text-length text)
+        word-begin (count (take-while whitespace? (.subSequence text-seq offset text-len)))
+        word-end (count (take-while (complement whitespace?) (.subSequence text-seq (+ offset word-begin) text-len)))]
+    (+ word-begin word-end)))
+
+;; temporary
+(defn subseq [s from to]
+  (sequence
+    (comp
+      (drop from)
+      (take (- to from)))
+    s))
 
 (defn prev-word-delta [state]
   (let [text (-> state :document :text)
-        caret-offset (core/caret-offset state)
-        {caret-line :line caret-col :col} (utils/offset->line-col caret-offset text)
-        line-text (text/line-text text caret-line)]
-    (min (- (some-> (second (re-find #".*(\b.+)$" (subs line-text 0 caret-col)))
-                    count))
-        -1)))
+        text-len (text/text-length text)
+        offset (core/caret-offset state)
+        text-seq (reverse (text/text->char-seq text))
+        word-begin (count (take-while whitespace? (subseq text-seq (- text-len offset) text-len)))
+        word-end (count (take-while (complement whitespace?) (subseq text-seq (+ (- text-len offset) word-begin) text-len)))]
+    (- (+ word-begin word-end))))
 
 (defn move-caret [{:keys [document editor] :as state} dir selection?]
   (let [{:keys [caret selection]} editor
@@ -214,36 +223,3 @@
 
 (defn resize [state width height]
   (assoc-in state [:viewport :view-size] [width height]))
-
-(let [a (atom 0)]
-  (def unique-paren-id #(swap! a inc)))
-
-(defn highlight-parens [{:keys [document] :as state}]
-  (let [caret-offset  (core/caret-offset state)
-        lexer (:lexer document)
-        paren-offsets (parens/find-parens (:text document)
-                                          (if (some? lexer)
-                                            #(intervals/is-brace-token? lexer %)
-                                            (constantly true))
-                                          caret-offset)
-        old-paren-ids (:paren-ids document)]
-    (-> state
-        (core/delete-markers old-paren-ids)
-        ((fn [state]
-           (or (when-let [[p-from p-to] paren-offsets]
-                 (when (and p-from p-to)
-                   (let [from-id (str "paren-" (unique-paren-id))
-                         to-id   (str "paren-" (unique-paren-id))]
-                     (-> state
-                         (core/insert-markers [(intervals/->Marker p-from
-                                                                   (inc p-from)
-                                                                   false
-                                                                   false
-                                                                   (intervals/->Attrs from-id "highlight-paren" "" :background))
-                                               (intervals/->Marker p-to
-                                                                   (inc p-to)
-                                                                   false
-                                                                   false
-                                                                   (intervals/->Attrs to-id "highlight-paren" "" :background))])
-                         (assoc-in [:document :paren-ids] [from-id to-id])))))
-               state))))))
