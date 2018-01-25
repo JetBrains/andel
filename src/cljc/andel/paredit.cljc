@@ -111,16 +111,18 @@
       (controller/delete state)
       (cond
         (closing? character)
-        (let [[from-offset _] (find-matching-paren-backward text paren-token? caret-offset)]
+        (if-let [[from-offset _] (find-matching-paren-backward text paren-token? caret-offset)]
           (if (< 1 (- caret-offset from-offset))
             state
-            (core/delete-at-offset state from-offset 2)))
+            (core/delete-at-offset state from-offset 2))
+          (controller/delete state))
 
         (opening? character)
-        (let [[_ to-offset] (find-matching-paren-forward text paren-token? caret-offset)]
+        (if-let [[_ to-offset] (find-matching-paren-forward text paren-token? caret-offset)]
           (if (< 1 (- to-offset caret-offset))
             state
-            (core/delete-at-offset state caret-offset 2)))))))
+            (core/delete-at-offset state caret-offset 2))
+          (controller/delete state))))))
 
 (defn backspace [{:keys [document] :as state}]
   (let [{:keys [text lexer]} document
@@ -128,23 +130,25 @@
         paren-token? (paren-token? text lexer)
         caret-offset (core/caret-offset state)
         deletion-offset (dec caret-offset)
-        character (first (core/text-at-offset state deletion-offset 1))]
-    (if (or (not (paren-token? deletion-offset))
+        character (when (< 0 deletion-offset) (first (core/text-at-offset state deletion-offset 1)))]
+    (if (or (< deletion-offset 0)
             (< 0 (- sel-to sel-from))
-            (< deletion-offset 0))
+            (not (paren-token? deletion-offset)))
       (controller/backspace state)
       (cond
         (closing? character)
-        (let [[from-offset _] (find-matching-paren-backward text paren-token? deletion-offset)]
+        (if-let [[from-offset _] (find-matching-paren-backward text paren-token? deletion-offset)]
           (if (< 1 (- deletion-offset from-offset))
             (controller/move-caret state :left false)
-            (core/delete-at-offset state from-offset 2)))
+            (core/delete-at-offset state from-offset 2))
+          (controller/backspace state))
 
         (opening? character)
-        (let [[_ to-offset] (find-matching-paren-forward text paren-token? deletion-offset)]
+        (if-let [[_ to-offset] (find-matching-paren-forward text paren-token? deletion-offset)]
           (if (< 1 (- to-offset deletion-offset))
             (controller/move-caret state :left false)
-            (core/delete-at-offset state deletion-offset 2)))))))
+            (core/delete-at-offset state deletion-offset 2))
+          (controller/backspace state))))))
 
 (defn open-round [state]
   (-> state
