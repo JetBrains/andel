@@ -1,6 +1,7 @@
 (ns andel.controller
   (:require [andel.utils :as utils]
             [andel.text :as text]
+            [andel.cursor :as cursor]
             [andel.intervals :as intervals]
             [andel.core :as core]))
 
@@ -153,29 +154,27 @@
 
 (defn next-word-delta [state]
   (let [text (-> state :document :text)
-        offset (core/caret-offset state)
-        text-seq (text/text->char-seq text)
         text-len (text/text-length text)
-        word-begin (count (take-while whitespace? (.subSequence text-seq offset text-len)))
-        word-end (count (take-while (complement whitespace?) (.subSequence text-seq (+ offset word-begin) text-len)))]
-    (+ word-begin word-end)))
-
-;; temporary
-(defn subseq [s from to]
-  (sequence
-    (comp
-      (drop from)
-      (take (- to from)))
-    s))
+        caret-offset (core/caret-offset state)]
+    (if (< caret-offset text-len)
+      (let [cursor (cursor/make-cursor text caret-offset)
+            word-begin-cursor (first (cursor/move-while cursor whitespace? :forward))
+            [word-end-cursor end-of-text?] (cursor/move-while word-begin-cursor (complement whitespace?) :forward)
+            delta (cursor/distance cursor word-end-cursor)]
+        (cond-> delta end-of-text? inc))
+      0)))
 
 (defn prev-word-delta [state]
   (let [text (-> state :document :text)
         text-len (text/text-length text)
-        offset (core/caret-offset state)
-        text-seq (reverse (text/text->char-seq text))
-        word-begin (count (take-while whitespace? (subseq text-seq (- text-len offset) text-len)))
-        word-end (count (take-while (complement whitespace?) (subseq text-seq (+ (- text-len offset) word-begin) text-len)))]
-    (- (+ word-begin word-end))))
+        caret-offset (core/caret-offset state)]
+    (if (< 0 caret-offset)
+      (let [cursor (cursor/prev (cursor/make-cursor text caret-offset))
+            word-end-cursor (first (cursor/move-while cursor whitespace? :backward))
+            [word-begin-cursor start-of-text?] (cursor/move-while word-end-cursor (complement whitespace?) :backward)
+            delta (- (cursor/distance cursor word-begin-cursor))]
+        (cond-> delta start-of-text? dec))
+      0)))
 
 (defn move-caret [{:keys [document editor] :as state} dir selection?]
   (let [{:keys [caret selection]} editor

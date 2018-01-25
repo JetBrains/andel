@@ -1,4 +1,5 @@
 (ns andel.cursor
+  (:refer-clojure :exclude (next transient persistent!))
   (:require [andel.tree :as tree]
             [andel.text :as text]
             [andel.array-list :as al])
@@ -268,8 +269,8 @@
             :else
             (recur)))))
 
-(defn distance [^Cursor cursor ^Cursor cursor']
-  (Math/abs ^Integer (- (offset cursor') (offset cursor))))
+(defn distance [^Cursor from ^Cursor to]
+  (Math/abs ^Integer (- (offset to) (offset from))))
 
 (defn count-matching [cursor pred direction]
   (distance cursor (first (move-while cursor pred direction))))
