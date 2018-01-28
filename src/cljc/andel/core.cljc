@@ -181,7 +181,7 @@
         (update :log (fn [l]
                        (conj (or l []) [[:retain offset] [:delete old-text] [:retain (- text-length offset length)]]))))))
 
-(defn text-at-offset [{{:keys [text] :as document} :document :as state} offset length]
+(defn text-at-offset [text offset length]
   (let [char-seq (text/text->char-seq text)]
     (.subSequence char-seq offset (+ offset length))))
 

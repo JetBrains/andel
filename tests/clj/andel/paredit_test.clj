@@ -13,11 +13,11 @@
   (str (subs test-string 0 caret-offset) \| (subs test-string caret-offset)))
 
 (defn andel-state->offset-and-string [s]
-  {:caret-offset (core/caret-offset s)
-   :test-string  (str
-                  (core/text-at-offset
-                   s 0 (text/text-length
-                        (get-in s [:document :text]))))})
+  (let [text (get-in s [:document :text])]
+    {:caret-offset (core/caret-offset s)
+     :test-string  (str
+                    (core/text-at-offset
+                     text 0 (text/text-length text)))}))
 
 (defn mock-andel-state [{:keys [caret-offset test-string]}]
   (-> (core/make-editor-state nil nil)

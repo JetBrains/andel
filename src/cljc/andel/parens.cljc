@@ -152,3 +152,9 @@
                                             (cursor/offset form-start-cursor)
                                             (inc (cursor/offset form-start-cursor)))]
                     [form-start-offset form-end-offset])))))
+
+(defn paren-token? [text lexer]
+  (fn [offset]
+    (if (some? lexer)
+      (intervals/is-brace-token? lexer offset)
+      (paren? (-> text text/text->char-seq (nth offset))))))
