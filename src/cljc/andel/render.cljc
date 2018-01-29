@@ -253,6 +253,7 @@
                                (intervals/by-offset end-offset))
          (= (:selection old) (:selection new))
          (= (:caret old) (:caret new))
+         (= (:focused? old) (:focused? new))
          (identical? (:deleted-markers old) (:deleted-markers new))
          (identical? (:lexer-state old) (:lexer-state new))
          (= (:caret-decorator old) (:caret-decorator new)))))
@@ -311,8 +312,7 @@
                                                   (fn [acc metrics]
                                                     (or (intersects? acc metrics)
                                                         (overscans? acc metrics))))
-                 caret-here? (and (:focused? state)
-                                  (<= start-offset caret-offset) (<= caret-offset end-offset))]
+                 caret-here? (and (<= start-offset caret-offset) (<= caret-offset end-offset))]
              (recur next-line-text-zipper
                     markers-zipper
                     (inc line-number)
@@ -322,6 +322,7 @@
                                :lexer-state     lexer
                                :start-offset    start-offset
                                :selection       (line-selection selection start-offset end-offset)
+                               :focused?        (:focused? state)
                                :caret           (when caret-here?
                                                   (- caret-offset start-offset))
                                :caret-decorator (when caret-here? (:caret-decorator state))
