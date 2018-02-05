@@ -119,4 +119,19 @@
   (paredit-test navigate-line-start "  |aaa" "|  aaa")
   (paredit-test navigate-line-start "|  aaa" "  |aaa"))
 
+(deftest backspace-test
+  (paredit-test backspace "|" "|")
+  (paredit-test backspace "a|" "|")
+  (paredit-test backspace "()|" "|")
+  (paredit-test backspace "(|)" "|")
+  (paredit-test backspace "(aaa)|" "(aaa|)")
+  (paredit-test backspace "(aaa|)" "(aa|)"))
+
+(deftest delete-test
+  (paredit-test delete "|" "|")
+  (paredit-test delete "|a" "|")
+  (paredit-test delete "|()" "|")
+  (paredit-test delete "|(aaa)" "|(aaa)")
+  (paredit-test delete "(|aaa)" "(|aa)"))
+
 (comment (run-tests))

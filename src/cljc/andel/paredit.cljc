@@ -99,8 +99,10 @@
         [sel-from sel-to] (core/selection state)
         paren-token? (paren-token? text lexer)
         caret-offset (core/caret-offset state)
-        character (first (core/text-at-offset text caret-offset 1))]
-    (if (or (not (paren-token? caret-offset))
+        max-offset (text/text-length text)
+        character (when (< caret-offset max-offset) (first (core/text-at-offset text caret-offset 1)))]
+    (if (or (<= max-offset caret-offset)
+            (not (paren-token? caret-offset))
             (< 0 (- sel-to sel-from)))
       (controller/delete state)
       (cond
@@ -124,7 +126,7 @@
         paren-token? (paren-token? text lexer)
         caret-offset (core/caret-offset state)
         deletion-offset (dec caret-offset)
-        character (when (< 0 deletion-offset) (first (core/text-at-offset text deletion-offset 1)))]
+        character (when (<= 0 deletion-offset) (first (core/text-at-offset text deletion-offset 1)))]
     (if (or (< deletion-offset 0)
             (< 0 (- sel-to sel-from))
             (not (paren-token? deletion-offset)))
