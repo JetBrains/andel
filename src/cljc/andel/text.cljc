@@ -156,7 +156,7 @@
             s (subs (.-data ^Leaf (tree/node offset-loc)) 0 (- i o))
             a (.-acc ^ZipperLocation offset-loc)
             offset-loc (tree/assoc-o-acc offset-loc (r-f a (metrics s)))
-            next-node (tree/next offset-loc)]
+            next-node (tree/next-leaf offset-loc)]
         (if (and (at-the-right-border? offset-loc)
                  (not (tree/end? next-node)))
           next-node
