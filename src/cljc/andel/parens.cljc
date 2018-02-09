@@ -16,6 +16,12 @@
 
 (defn paren-symbol? [c] (or (closing? c) (opening? c)))
 
+(defn paren-token? [text lexer]
+  (fn [offset]
+    (if (some? lexer)
+      (intervals/is-brace-token? lexer offset)
+      (paren? (-> text text/text->char-seq (nth offset))))))
+
 (defn- find-matching-paren [text paren-token? offset should-push? should-pop? advance]
   (when (and (<= 0 offset)
              (< offset (text/text-length text)))
@@ -79,17 +85,17 @@
           :else         nil)))))
 
 (let [a (atom 0)]
-  (def unique-paren-id #(swap! a inc)))
+  (defonce unique-paren-id #(swap! a inc)))
 
-(defn highlight-parens [{:keys [document] :as state}]
+(defn highlight-parens [{:keys [editor document] :as state}]
   (let [caret-offset  (core/caret-offset state)
         lexer (:lexer document)
-        paren-offsets (find-parens-pair (:text document)
-                                          (if (some? lexer)
-                                            #(intervals/is-brace-token? lexer %)
-                                            (constantly true))
-                                          caret-offset)
-        old-paren-ids (:paren-ids document)]
+        text (:text document)
+        paren-token? (paren-token? text lexer)
+        paren-offsets (find-parens-pair text
+                                        paren-token?
+                                        caret-offset)
+        old-paren-ids (:paren-ids editor)]
     (-> state
         (core/delete-markers old-paren-ids)
         ((fn [state]
@@ -108,7 +114,7 @@
                                                                    false
                                                                    false
                                                                    (intervals/->Attrs to-id "highlight-paren" "" :background))])
-                         (assoc-in [:document :paren-ids] [from-id to-id])))))
+                         (assoc-in [:editor :paren-ids] [from-id to-id])))))
                state))))))
 
 
@@ -152,9 +158,3 @@
                                             (cursor/offset form-start-cursor)
                                             (inc (cursor/offset form-start-cursor)))]
                     [form-start-offset form-end-offset])))))
-
-(defn paren-token? [text lexer]
-  (fn [offset]
-    (if (some? lexer)
-      (intervals/is-brace-token? lexer offset)
-      (paren? (-> text text/text->char-seq (nth offset))))))
