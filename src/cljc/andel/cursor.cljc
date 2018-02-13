@@ -250,9 +250,19 @@
     :inner-offset (.getInnerOffset cursor)
     :leaf-length  (.getLeafLength cursor)}))
 
+(def make-transient-cursor
+  (comp transient make-cursor))
 
 ;;;;;;;;;;;;;;;;;;;;;; util ;;;;;;;;;;;;;;;;;;;;;
 
+(defn set-to-offset! [^TransientCursor t-cursor offset]
+  (cond (= offset (.getOffset t-cursor)) (do (prn "eq")
+                                           t-cursor)
+        (< offset (.getOffset t-cursor)) (while (< offset (.getOffset t-cursor))
+                                           (prev! t-cursor))
+        (> offset (.getOffset t-cursor)) (while (> offset (.getOffset t-cursor))
+                                           (next! t-cursor)))
+  t-cursor)
 
 (defn move-while [^Cursor cursor pred direction]
   (let [advance (case direction
@@ -284,6 +294,10 @@
                      (make-cursor 4)))
 
   (def my-transient-cursor (transient my-cursor))
+
+  (.getOffset my-transient-cursor)
+
+  (set-to-offset! my-transient-cursor 9)
 
   (.getChar my-transient-cursor)
   (.next! my-transient-cursor)
