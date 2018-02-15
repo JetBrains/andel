@@ -7,7 +7,7 @@
             [andel.utils :as utils]
             [andel.controller :as controller])
   (:import [andel.intervals Marker Attrs]
-           #?(:clj  [java.util TreeSet Comparator])))
+           #?(:clj  [java.util PriorityQueue Comparator])))
 
 (defn infinity? [x] (keyword? x))
 
@@ -50,17 +50,17 @@
      (array))
    :clj
    (defn make-pendings []
-     (TreeSet. ^Comparator (comparator (fn [^Marker a ^Marker b]
-                                       (< (.-to a) (.-to b)))))))
+     (PriorityQueue. 10 ^Comparator (comparator (fn [^Marker a ^Marker b]
+                                                  (< (.-to a) (.-to b)))))))
 
 #?(:cljs
    (defn next-pending [pendings]
      (reduce (fn [c p] (if (or (nil? c) (< (.-to p) (.-to c))) p c)) nil pendings))
    :clj
-   (defn next-pending [^TreeSet pendings]
+   (defn next-pending [^PriorityQueue pendings]
      (if (.isEmpty pendings)
        nil
-       (.first pendings))))
+       (.peek pendings))))
 
 #?(:cljs
    (defn remove-pending! [arr p]
@@ -71,13 +71,13 @@
            arr)
          arr)))
    :clj
-   (defn remove-pending! [^TreeSet pendings p]
+   (defn remove-pending! [^PriorityQueue pendings p]
      (.remove pendings p)))
 
 #?(:cljs
    (def add-pending! push!)
    :clj
-   (defn add-pending! [^TreeSet pendings p]
+   (defn add-pending! [^PriorityQueue pendings p]
      (.add pendings p)))
 
 #?(:clj
@@ -229,9 +229,9 @@
       (remove (fn [^Marker m] (contains? deleted-markers (.-id ^Attrs (.-attrs m)))))
       (multiplex (widgets-xf collect-to-array)
                  ((comp to-relative-offsets
-                         (merge-tokens tokens)
-                         (multiplex (bg-xf collect-to-array)
-                                    (fg-xf collect-to-array)))
+                        (merge-tokens tokens)
+                        (multiplex (bg-xf collect-to-array)
+                                   (fg-xf collect-to-array)))
                   (fn
                     ([] nil)
                     ([r] r)
@@ -260,18 +260,18 @@
 
 (defn line-selection [[from to] line-start-offset line-end-offset]
   (cond (= from to) nil
-        
+
         (and (< from line-start-offset) (< line-start-offset to))
         (if (< line-end-offset to)
           [0 :infinity]
           [0 (- to line-start-offset)])
-        
+
         (and (<= line-start-offset from) (<= from line-end-offset))
         [(- from line-start-offset)
          (if (<= to line-end-offset)
            (- to line-start-offset)
            :infinity)]
-        
+
         :else nil))
 
 (defn ceil [x]
