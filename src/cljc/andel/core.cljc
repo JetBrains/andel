@@ -15,6 +15,7 @@
                                      :andel/markup
                                      :andel/lexer
                                      :andel/deleted-markers]))
+(s/def :andel/widgets (s/map-of nat-int? map?))
 
 (defn make-editor-state [language color-scheme]
   {:document {:text (text/make-text "")
@@ -116,8 +117,8 @@
         added-length (count insertion)]
     (-> state
         (assoc :andel/text text')
-        (update :andel/markup intervals/type-in offset added-length)
-        (update :andel/lexer intervals/update-text (text/text->char-seq text') offset added-length 0)
+        (cond-> markup (update :andel/markup intervals/type-in offset added-length))
+        (cond-> lexer (update :andel/lexer intervals/update-text (text/text->char-seq text') offset added-length 0))
         (update :andel/log (fn [l]
                              (conj (or l []) [[:retain offset] [:insert insertion] [:retain (- text-length offset)]]))))))
 
@@ -152,8 +153,8 @@
                   (text/root))]
     (-> state
         (assoc :andel/text text')
-        (update :andel/markup intervals/delete-range offset length)
-        (update :andel/lexer intervals/update-text (text/text->char-seq text') offset 0 length)
+        (cond-> markup (update :andel/markup intervals/delete-range offset length))
+        (cond-> lexer (update :andel/lexer intervals/update-text (text/text->char-seq text') offset 0 length))
         (update :andel/log (fn [l]
                              (conj (or l []) [[:retain offset] [:delete text-to-remove] [:retain (- text-length offset length)]]))))))
 
@@ -198,3 +199,14 @@
 
 (defn remove-widget [state widget-id]
   (update-in state [:editor :widgets] #(dissoc % widget-id)))
+
+(defn play-operation [andel-document operation]
+  (loop [i 0
+         [[type x] & rest] operation
+         andel-document andel-document]
+    (if (some? type)
+      (case type
+        :insert (recur (+ i (count x)) rest (document-insert-at-offset andel-document i x))
+        :retain (recur (+ i x) rest andel-document)
+        :delete (recur i rest (document-delete-at-offset andel-document i (count x))))
+      andel-document)))
