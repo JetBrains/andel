@@ -225,6 +225,10 @@
       (recur (str s f) (rest lt))
       s)))
 
+(defn as-string [text-tree]
+  (text (zipper text-tree)
+             (text-length text-tree)))
+
 (defn insert [loc s]
   (if (tree/branch? loc)
     (recur (tree/down loc) s)
