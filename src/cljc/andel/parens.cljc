@@ -96,24 +96,26 @@
                                         paren-token?
                                         caret-offset)
         old-paren-ids (:paren-ids editor)]
-    (core/delete-markers! state old-paren-ids)
-    (or (when-let [[p-from p-to] paren-offsets]
-          (when (and p-from p-to)
-            (let [from-id (str "paren-" (unique-paren-id))
-                  to-id   (str "paren-" (unique-paren-id))]
-              (-> state
-                  (core/insert-markers [(intervals/->Marker p-from
-                                                            (inc p-from)
-                                                            false
-                                                            false
-                                                            (intervals/->Attrs from-id "highlight-paren" "" :background))
-                                        (intervals/->Marker p-to
-                                                            (inc p-to)
-                                                            false
-                                                            false
-                                                            (intervals/->Attrs to-id "highlight-paren" "" :background))])
-                  (assoc-in [:editor :paren-ids] [from-id to-id])))))
-        state)))
+    (-> state
+        (core/delete-markers old-paren-ids)
+        ((fn [state]
+           (or (when-let [[p-from p-to] paren-offsets]
+                 (when (and p-from p-to)
+                   (let [from-id (str "paren-" (unique-paren-id))
+                         to-id   (str "paren-" (unique-paren-id))]
+                     (-> state
+                         (core/insert-markers [(intervals/->Marker p-from
+                                                                   (inc p-from)
+                                                                   false
+                                                                   false
+                                                                   (intervals/->Attrs from-id "highlight-paren" "" :background))
+                                               (intervals/->Marker p-to
+                                                                   (inc p-to)
+                                                                   false
+                                                                   false
+                                                                   (intervals/->Attrs to-id "highlight-paren" "" :background))])
+                         (assoc-in [:editor :paren-ids] [from-id to-id])))))
+               state))))))
 
 
 (defn enclosing-parens [text paren-token? offset]
