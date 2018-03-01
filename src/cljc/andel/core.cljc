@@ -99,7 +99,8 @@
   (update-in state [:document :markup] intervals/add-markers markers))
 
 (defn delete-markers! [{{deleted-markers :deleted-markers :as document} :document :as state} marker-ids]
-  (swap! deleted-markers into marker-ids))
+  (when (some? deleted-markers)
+    (swap! deleted-markers into marker-ids)))
 
 (defn set-selection [state selection caret-offset]
   (-> state
