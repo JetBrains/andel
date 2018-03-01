@@ -459,4 +459,4 @@
 (defmulti create-lexer (constantly :idea))
 (defmethod create-lexer :default [& args] nil)
 
-(def empty-tree (make-interval-tree))
+(defonce empty-tree (make-interval-tree))
