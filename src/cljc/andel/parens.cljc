@@ -84,38 +84,36 @@
           (opening? c1) (find-matching-paren-forward text paren-token? offset)
           :else         nil)))))
 
-(let [a (atom 0)]
-  (defonce unique-paren-id #(swap! a inc)))
+(defonce unique-paren-id
+  (let [a (atom 0)]
+    #(swap! a inc)))
 
 (defn highlight-parens [{:keys [editor document] :as state}]
   (let [caret-offset  (core/caret-offset state)
         lexer (:lexer document)
         text (:text document)
         paren-token? (paren-token? text lexer)
-        paren-offsets (find-parens-pair text
+        [p-from p-to] (find-parens-pair text
                                         paren-token?
                                         caret-offset)
-        old-paren-ids (:paren-ids editor)]
-    (-> state
-        (core/delete-markers old-paren-ids)
-        ((fn [state]
-           (or (when-let [[p-from p-to] paren-offsets]
-                 (when (and p-from p-to)
-                   (let [from-id (str "paren-" (unique-paren-id))
-                         to-id   (str "paren-" (unique-paren-id))]
-                     (-> state
-                         (core/insert-markers [(intervals/->Marker p-from
-                                                                   (inc p-from)
-                                                                   false
-                                                                   false
-                                                                   (intervals/->Attrs from-id "highlight-paren" "" :background))
-                                               (intervals/->Marker p-to
-                                                                   (inc p-to)
-                                                                   false
-                                                                   false
-                                                                   (intervals/->Attrs to-id "highlight-paren" "" :background))])
-                         (assoc-in [:editor :paren-ids] [from-id to-id])))))
-               state))))))
+        old-paren-ids (:paren-ids editor)
+        state (core/delete-markers state old-paren-ids)]
+    (if (and p-from p-to)
+      (let [from-id (str "paren-" (unique-paren-id))
+            to-id   (str "paren-" (unique-paren-id))]
+        (-> state
+            (core/insert-markers [(intervals/->Marker p-from
+                                                      (inc p-from)
+                                                      false
+                                                      false
+                                                      (intervals/->Attrs from-id "highlight-paren" "" :background))
+                                  (intervals/->Marker p-to
+                                                      (inc p-to)
+                                                      false
+                                                      false
+                                                      (intervals/->Attrs to-id "highlight-paren" "" :background))])
+            (assoc-in [:editor :paren-ids] [from-id to-id])))
+      state)))
 
 
 (defn enclosing-parens [text paren-token? offset]
