@@ -7,12 +7,6 @@
             [andel.controller :as controller])
   #?(:clj (:import [andel.cursor Cursor TransientCursor])))
 
-(defn- set-caret-and-drop-selection [state offset]
-  (-> state
-      (assoc-in [:editor :caret :offset] offset)
-      (assoc-in [:editor :v-col] 0)
-      (assoc-in [:editor :selection] [offset offset])))
-
 (defn slurp-forward [{:keys [editor document] :as state}]
   (let [{:keys [text lexer]} document
         caret-offset (core/caret-offset state)
@@ -161,17 +155,17 @@
       (controller/type-in "{}")
       (controller/move-caret :left false)))
 
-(defn navigate-next-form [{:keys [document] :as state}]
+(defn navigate-next-form [{:keys [document] :as state} selection?]
   (let [{:keys [text lexer]} document
         paren-token? (paren-token? text lexer)
         caret-offset (core/caret-offset state)
         [_ next-to] (find-next-form text paren-token? caret-offset)
         [_ cur-to] (enclosing-parens text paren-token? caret-offset)]
-    (cond (some? next-to) (set-caret-and-drop-selection state (inc next-to))
-          (some? cur-to) (set-caret-and-drop-selection state (inc cur-to))
+    (cond (some? next-to) (controller/set-caret-at-offset state (inc next-to) selection?)
+          (some? cur-to) (controller/set-caret-at-offset state (inc cur-to) selection?)
           :else state)))
 
-(defn navigate-next-form-down [{:keys [document] :as state}]
+(defn navigate-next-form-down [{:keys [document] :as state} selection?]
   (let [{:keys [text lexer]} document
         paren-token? (paren-token? text lexer)
         max-offset (dec (text/text-length text))]
@@ -185,31 +179,31 @@
 
           (and (paren-token? next-from)
                (paren-token? next-to))
-          (set-caret-and-drop-selection state (inc next-from))
+          (controller/set-caret-at-offset state (inc next-from) selection?)
 
           :else
           (recur (inc next-to)))))))
 
-(defn navigate-next-form-up [{:keys [document] :as state}]
+(defn navigate-next-form-up [{:keys [document] :as state} selection?]
   (let [{:keys [text lexer]} document
         paren-token? (paren-token? text lexer)
         caret-offset (core/caret-offset state)
         [_ cur-to] (enclosing-parens text paren-token? caret-offset)]
     (if (some? cur-to)
-      (set-caret-and-drop-selection state (inc cur-to))
+      (controller/set-caret-at-offset state (inc cur-to) selection?)
       state)))
 
-(defn navigate-prev-form [{:keys [document] :as state}]
+(defn navigate-prev-form [{:keys [document] :as state} selection?]
   (let [{:keys [text lexer]} document
         paren-token? (paren-token? text lexer)
         caret-offset (core/caret-offset state)
         [prev-from _] (find-prev-form text paren-token? (max 0 (dec caret-offset)))
         [cur-from _] (enclosing-parens text paren-token? caret-offset)]
-    (cond (some? prev-from) (set-caret-and-drop-selection state prev-from)
-          (some? cur-from) (set-caret-and-drop-selection state cur-from)
+    (cond (some? prev-from) (controller/set-caret-at-offset state prev-from selection?)
+          (some? cur-from) (controller/set-caret-at-offset state cur-from selection?)
           :else state)))
 
-(defn navigate-prev-form-down [{:keys [document] :as state}]
+(defn navigate-prev-form-down [{:keys [document] :as state} selection?]
   (let [{:keys [text lexer]} document
         paren-token? (paren-token? text lexer)]
     (loop [offset (dec (core/caret-offset state))]
@@ -222,40 +216,19 @@
 
           (and (paren-token? prev-from)
                (paren-token? prev-to))
-          (set-caret-and-drop-selection state prev-to)
+          (controller/set-caret-at-offset state prev-to selection?)
 
           :else
           (recur (dec prev-from)))))))
 
-(defn navigate-prev-form-up [{:keys [document] :as state}]
+(defn navigate-prev-form-up [{:keys [document] :as state} selection?]
   (let [{:keys [text lexer]} document
         paren-token? (paren-token? text lexer)
         caret-offset (core/caret-offset state)
         [cur-from _] (enclosing-parens text paren-token? caret-offset)]
     (if (some? cur-from)
-      (set-caret-and-drop-selection state cur-from)
+      (controller/set-caret-at-offset state cur-from selection?)
       state)))
-
-(defn- move-cursor-at-line-start [cursor]
-  (let [[cursor' end?] (cursor/move-while cursor #(not= % \newline) :backward)]
-    (if end?
-      cursor'
-      (cursor/next cursor'))))
-
-(defn navigate-line-start [{:keys [document] :as state}]
-  (let [{:keys [text lexer]} document
-        caret-offset (max 0 (dec (core/caret-offset state)))
-        cursor (cursor/make-cursor text caret-offset)
-        line-start-cursor (move-cursor-at-line-start cursor)
-        text-start-cursor (first (cursor/move-while line-start-cursor
-                                                    #(or (= % \space)
-                                                         (= % \tab)) :forward))
-        line-start-offset (cursor/offset line-start-cursor)
-        text-start-offset (cursor/offset text-start-cursor)]
-    (if (and (< line-start-offset caret-offset)
-             (< caret-offset text-start-offset))
-      (set-caret-and-drop-selection state line-start-offset)
-      (set-caret-and-drop-selection state text-start-offset))))
 
 (defn- last-command-kill? [editor]
   false)

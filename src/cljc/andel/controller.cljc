@@ -138,11 +138,35 @@
         (update-in [:editor :caret] translate-caret-verticaly text (sign view-size-in-lines))
         (core/move-view-if-needed))))
 
-(defn home [{{:keys [caret]} :editor
-             {:keys [text]} :document
-             :as state} selection?]
-  (let [carret-line (get-caret-line caret text)]
-    (set-caret-at-line-begining state (get-caret-line caret text) selection?)))
+(defn set-caret-at-offset [{:keys [document] :as state} caret-offset' selection?]
+  (let [text (:text document)
+        caret (-> state :editor :caret)]
+    (-> state
+        (cond-> selection?
+          (update-in [:editor :selection] update-selection caret {:offset caret-offset' :v-col 0}))
+        (assoc-in [:editor :caret :offset] caret-offset')
+        (assoc-in [:editor :caret :v-col] (:col (utils/offset->line-col caret-offset' text))))))
+
+(defn- move-cursor-at-line-start [cursor]
+  (let [[cursor' end?] (cursor/move-while cursor #(not= % \newline) :backward)]
+    (if end?
+      cursor'
+      (cursor/next cursor'))))
+
+(defn home [{:keys [document] :as state} selection?]
+  (let [{:keys [text lexer]} document
+        caret-offset (max 0 (dec (core/caret-offset state)))
+        cursor (cursor/make-cursor text caret-offset)
+        line-start-cursor (move-cursor-at-line-start cursor)
+        text-start-cursor (first (cursor/move-while line-start-cursor
+                                                    #(or (= % \space)
+                                                         (= % \tab)) :forward))
+        line-start-offset (cursor/offset line-start-cursor)
+        text-start-offset (cursor/offset text-start-cursor)]
+    (if (and (< line-start-offset caret-offset)
+             (< caret-offset text-start-offset))
+      (set-caret-at-offset state line-start-offset selection?)
+      (set-caret-at-offset state text-start-offset selection?))))
 
 (defn end [{{:keys [caret]} :editor
             {:keys [text]} :document
