@@ -236,11 +236,9 @@
       (controller/set-caret-at-offset state cur-from selection?)
       state)))
 
-(defn- last-command-kill? [editor]
-  false)
-
-(defn kill-form [{:keys [document editor] :as state}]
+(defn kill-form [{:keys [document editor] :as state} id]
   (let [{:keys [text lexer]} document
+        prev-was-kill? (= id (some-> editor :prev-op-ids :kill inc))
         caret-offset (core/caret-offset state)
         paren-token? (paren-token? text lexer)
         [next-from next-to] (find-next-form text paren-token? caret-offset)]
@@ -248,8 +246,10 @@
       (let [kill-len (inc (- next-to caret-offset))
             killed-text (str (core/text-at-offset text caret-offset kill-len))]
         (-> state
+            (assoc-in [:editor :prev-op-ids :kill] id)
             (core/delete-at-offset caret-offset kill-len)
-            (assoc-in [:editor :clipboard] killed-text)))
+            (cond-> prev-was-kill? (update-in [:editor :clipboard] str killed-text)
+                    (not prev-was-kill?) (assoc-in [:editor :clipboard] killed-text))))
       state)))
 
 (defn yank [{:keys [document editor] :as state}]
