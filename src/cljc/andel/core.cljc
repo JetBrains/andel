@@ -25,8 +25,7 @@
    :editor {:caret {:offset 0 :v-col 0}
             :selection [0 0]
             :widgets {}
-            :kill-ring []
-            :prev-kill-state nil}
+            :clipboard ""}
    :viewport {:pos [0 0]
               :view-size [0 0]
               :metrics nil

@@ -233,36 +233,6 @@
 (defn- last-command-kill? [editor]
   false)
 
-(defn- push-kill-ring [editor killed-text]
-  (let [kill-ring-last (dec (count (:kill-ring editor)))]
-    (if (last-command-kill? editor)
-      (update-in editor [:kill-ring kill-ring-last] #(str % killed-text))
-      (update-in editor [:kill-ring] #(conj % killed-text)))))
-
-(defn- pop-kill-ring [editor]
-  (let [killed-text (peek (:kill-ring editor))
-        editor' (update editor :kill-ring pop)]
-    [killed-text editor']))
-
-(defn- peek-kill-ring [editor]
-  (peek (:kill-ring editor)))
-
-(defn yank [{:keys [document editor] :as state}]
-  (let [yanked-text (peek-kill-ring editor)
-        caret-offset (core/caret-offset state)]
-    (if (some? yanked-text)
-      (core/insert-at-offset state caret-offset yanked-text)
-      state)))
-
-(defn yank-and-pop [{:keys [document editor] :as state}]
-  (let [[yanked-text editor'] (pop-kill-ring editor)
-        caret-offset (core/caret-offset state)]
-    (if (some? yanked-text)
-      (-> state
-          (assoc :editor editor')
-          (core/insert-at-offset caret-offset yanked-text))
-      state)))
-
 (defn kill-form [{:keys [document editor] :as state}]
   (let [{:keys [text lexer]} document
         caret-offset (core/caret-offset state)
@@ -270,8 +240,12 @@
         [next-from next-to] (find-next-form text paren-token? caret-offset)]
     (if (some? (and next-from next-to))
       (let [kill-len (inc (- next-to caret-offset))
-            killed-text (core/text-at-offset text caret-offset kill-len)]
+            killed-text (str (core/text-at-offset text caret-offset kill-len))]
         (-> state
             (core/delete-at-offset caret-offset kill-len)
-            (update :editor #(push-kill-ring % killed-text))))
+            (assoc-in [:editor :clipboard] killed-text)))
       state)))
+
+(defn yank [{:keys [document editor] :as state}]
+  (let [{:keys [clipboard]} editor]
+    (controller/type-in state clipboard)))
