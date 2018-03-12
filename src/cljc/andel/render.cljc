@@ -91,53 +91,59 @@
                 coll))
    :cljs (def join-strings clojure.string/join))
 
-(defn shred-markup [type]
-  (fn [rf]
-        (let
-          [pendings (make-pendings)
-           *last-pos (atom 0)
-           join-classes (fn [markers]
-                          (->> markers
-                               (eduction (map (fn [^Marker m]
-                                                (case type
-                                                  :background (some-> m ^Attrs (.-attrs) (.-background))
-                                                  :foreground (some-> m ^Attrs (.-attrs) (.-foreground))))))
-                               (join-strings " ")))]
-      (fn
-        ([] (rf))
-        ([res ^Marker m]
-         (loop [res res]
-           (let [^Marker p (next-pending pendings)
-                 last-pos  @*last-pos
-                 new-class (join-classes pendings)]
-             (if (or (nil? p) (< (.-from m) (.-to p)))
-               (do
-                 (add-pending! pendings m)
-                 (reset! *last-pos (.-from m))
-                 (if (identical? last-pos (.-from m))
-                   res
-                   (rf res (- (.-from m) last-pos) new-class)))
-
-               (do
-                 (remove-pending! pendings p)
-                 (reset! *last-pos (.-to p))
-                 (if (identical? last-pos (.-to p))
-                   (recur res)
-                   (recur (rf res (- (.-to p) last-pos) new-class))))))))
-        ([res]
-         (rf
+(defn shred-markup
+  "Consumes andel.intervals.Marker. Transducer with a quirk: it will call downstream with (r-f state token-length token-class)"
+  [type]
+  (let [marker-class (fn [^Marker m]
+                       (case type
+                         :background (some-> m ^Attrs (.-attrs) (.-background))
+                         :foreground (some-> m ^Attrs (.-attrs) (.-foreground))))
+        join-classes (fn [^PriorityQueue markers]
+                       (let [size (.size markers)]
+                         (cond
+                           (= 0 size) nil
+                           (= 1 size) (marker-class (.peek markers))
+                           :else (->> markers
+                                      (eduction (map marker-class))
+                                      (join-strings " ")))))]
+    (fn [rf]
+      (let [pendings (make-pendings)
+            *last-pos (atom 0)]
+        (fn
+          ([] (rf))
+          ([res ^Marker m]
            (loop [res res]
              (let [^Marker p (next-pending pendings)
                    last-pos  @*last-pos
                    new-class (join-classes pendings)]
-               (if (some? p)
+               (if (or (nil? p) (< (.-from m) (.-to p)))
+                 (do
+                   (add-pending! pendings m)
+                   (reset! *last-pos (.-from m))
+                   (if (identical? last-pos (.-from m))
+                     res
+                     (rf res (- (.-from m) last-pos) new-class)))
+
                  (do
                    (remove-pending! pendings p)
                    (reset! *last-pos (.-to p))
-                   (if (= last-pos (.-to p))
+                   (if (identical? last-pos (.-to p))
                      (recur res)
-                     (recur (rf res (- (.-to p) last-pos) new-class))))
-                 res)))))))))
+                     (recur (rf res (- (.-to p) last-pos) new-class))))))))
+          ([res]
+           (rf
+            (loop [res res]
+              (let [^Marker p (next-pending pendings)
+                    last-pos  @*last-pos
+                    new-class (join-classes pendings)]
+                (if (some? p)
+                  (do
+                    (remove-pending! pendings p)
+                    (reset! *last-pos (.-to p))
+                    (if (= last-pos (.-to p))
+                      (recur res)
+                      (recur (rf res (- (.-to p) last-pos) new-class))))
+                  res))))))))))
 
 (defn multiplex [& rfs]
   (let [rfs (into [] rfs)]
@@ -273,19 +279,6 @@
            :infinity)]
 
         :else nil))
-
-(defn ceil [x]
-  #?(:clj (Math/ceil x)
-     :cljs (js/Math.ceil x)))
-
-;; both lines inclusive
-(defn viewport-info [{metrics :metrics
-                      [w h] :view-size
-                      [_ from-y-offset] :pos :as viewport}]
-  (let [line-height (utils/line-height metrics)
-        top-line (int (/ (double (max 0 from-y-offset)) line-height))]
-    {:top-line top-line
-     :bottom-line (+ top-line (ceil (/ (double h) line-height)))}))
 
 (defn viewport-lines [state viewport-info]
   (let [{{:keys [text lines markup hashes deleted-markers lexer]} :document
