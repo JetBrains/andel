@@ -73,9 +73,12 @@
         caret-offset (core/caret-offset state)
         paren-token? (paren-token? text lexer)]
     (if-let [[cur-from cur-to] (enclosing-parens text paren-token? caret-offset)]
-      (-> state
-          (core/delete-at-offset cur-to 1)
-          (core/delete-at-offset cur-from (- caret-offset cur-from)))
+      (let [kill-len (- caret-offset cur-from)
+            killed-text (str (core/text-at-offset text (inc cur-from) (dec kill-len)))]
+        (-> state
+            (assoc-in [:editor :clipboard] killed-text)
+            (core/delete-at-offset cur-to 1)
+            (core/delete-at-offset cur-from kill-len)))
       state)))
 
 (defn splice-kill-right [{:keys [editor document] :as state}]
@@ -83,9 +86,12 @@
         caret-offset (core/caret-offset state)
         paren-token? (paren-token? text lexer)]
     (if-let [[cur-from cur-to] (enclosing-parens text paren-token? caret-offset)]
-      (-> state
-          (core/delete-at-offset caret-offset (inc (- cur-to caret-offset)))
-          (core/delete-at-offset cur-from 1))
+      (let [kill-len (- cur-to caret-offset)
+            killed-text (str (core/text-at-offset text caret-offset kill-len))]
+        (-> state
+            (assoc-in [:editor :clipboard] killed-text)
+            (core/delete-at-offset caret-offset (inc kill-len))
+            (core/delete-at-offset cur-from 1)))
       state)))
 
 (defn delete [{:keys [document] :as state}]
