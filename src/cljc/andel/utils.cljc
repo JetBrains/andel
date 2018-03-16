@@ -12,7 +12,7 @@
   (let [line-height (line-height metrics)
         font-width (:width metrics)
         line (int (Math/floor (/ (double y) line-height)))
-        col (int (Math/floor (/ (double x) font-width)))]
+        col (int (Math/floor (/ (double (- x (:gutter-width metrics))) font-width)))]
     {:line line :col col}))
 
 (defn grid-pos->offset
