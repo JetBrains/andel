@@ -220,7 +220,8 @@
                (shred-markup :foreground))
         widgets-xf (keep (fn [^Marker marker]
                            (some-> (get widgets (.-id ^Attrs (.-attrs marker)))
-                                   (assoc :ends-on-this-line? (<= (.-to marker) end-offset)))))
+                                   (assoc :ends-on-this-line? (<= start-offset (.-to marker) end-offset)
+                                          :starts-on-this-line? (<= start-offset (.-from marker) end-offset)))))
         tokens (if (some? lexer-state)
                  (intervals/lexemes lexer-state start-offset end-offset)
                  (object-array 0))]
