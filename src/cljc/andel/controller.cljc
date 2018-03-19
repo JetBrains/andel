@@ -144,6 +144,8 @@
     (-> state
         (cond-> selection?
           (update-in [:editor :selection] update-selection caret {:offset caret-offset' :v-col 0}))
+        (cond-> (not selection?)
+          (assoc-in [:editor :selection] [caret-offset' caret-offset']))
         (assoc-in [:editor :caret :offset] caret-offset')
         (assoc-in [:editor :caret :v-col] (:col (utils/offset->line-col caret-offset' text))))))
 
