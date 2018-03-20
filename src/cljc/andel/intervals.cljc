@@ -1,7 +1,8 @@
 (ns andel.intervals
   (:require [andel.tree :as tree]
-            [andel.bloomfilter :as bloom]
-            [andel.array-list :as al])
+            [clojure.data.int-map :as i]
+            [andel.array-list :as al]
+            [andel.utils])
   (:import [andel.tree Leaf Node ZipperLocation ZipperOps]))
 
 (def plus-infinity
@@ -16,7 +17,7 @@
         [offset
          length
          rightest
-         bloom
+         marker-ids
          greedy-left?
          greedy-right?
          attrs])
@@ -58,23 +59,21 @@
   (+ (location-from loc)
      (.-length ^Data (tree/metrics (tree/node loc)))))
 
+
 (def tree-config
   {:reducing-fn      reducing-fn
    :metrics-fn       identity
    :make-node (fn [children]
                 (if (empty? children)
-                  (tree/->Node (Data. 0 0 0 (bloom/create) nil nil nil) [])
-                  (let [bloom (if (tree/node? (first children))
-                                (bloom/merge-many (into [] (map (fn [c] (.-bloom ^Data (tree/metrics c)))) children))
-                                (reduce (fn [f ^Leaf c]
-                                          (bloom/add! f (.-id ^Attrs (.-attrs ^Data (.-data c)))))
-                                        (bloom/create)
-                                        children))
+                  (tree/->Node (Data. 0 0 0 (i/int-set) nil nil nil) [])
+                  (let [marker-ids (if (tree/node? (first children))
+                                     (transduce (map (fn [c] (.-marker-ids ^Data (tree/metrics c)))) (completing i/union) (i/int-set) children)
+                                     (into (i/int-set) (map (fn [^Leaf c] (.-id ^Attrs (.-attrs ^Data (.-data c))))) children))
                         ^Data data (reduce (fn [acc x] (reducing-fn acc (tree/metrics x))) (reducing-fn) children)]
                     (tree/->Node (Data. (.-offset data)
                                         (.-length data)
                                         (.-rightest data)
-                                        bloom nil nil nil)
+                                        marker-ids nil nil nil)
                                  children))))
    :leaf-overflown?  (constantly false)
    :split-thresh     32
@@ -137,7 +136,7 @@
                  (Data. (f (.-offset data))
                         (.-length data)
                         (.-rightest data)
-                        (.-bloom data)
+                        (.-marker-ids data)
                         (.-greedy-left? data)
                         (.-greedy-right? data)
                         (.-attrs data)))))
@@ -148,7 +147,7 @@
                  (Data. (.-offset data)
                         (f (.-length data))
                         (.-rightest data)
-                        (.-bloom data)
+                        (.-marker-ids data)
                         (.-greedy-left? data)
                         (.-greedy-right? data)
                         (.-attrs data)))))
@@ -416,7 +415,7 @@
                                   (Data. (+ (.-offset data) bias)
                                          (.-length data)
                                          (.-rightest data)
-                                         (.-bloom data)
+                                         (.-marker-ids data)
                                          (.-greedy-left? data)
                                          (.-greedy-right? data)
                                          (.-attrs data))
@@ -431,23 +430,19 @@
          bias]))))
 
 (defn gc [itree deleted-markers]
-  (let [deleted? #(contains? deleted-markers %)
-        deleted-bloom (reduce bloom/add! (bloom/create) deleted-markers)]
-    (loop [loc (zipper itree)
-           bias 0]
+  (loop [loc (zipper itree)
+         bias 0]
       (cond
         (tree/end? loc)
         (tree/root loc)
-
         (tree/branch? loc)
-        (let [bloom (-> loc (tree/node) ^Data (tree/metrics) (.-bloom))]
-          (if (or (bloom/intersects? bloom deleted-bloom)
-                  (< 0 bias))
+        (let [marker-ids (-> loc (tree/node) ^Data (tree/metrics) (.-marker-ids))]
+          (if (andel.utils/sets-intersect? marker-ids deleted-markers)
             (recur (tree/next-leaf loc) bias)
             (recur (tree/skip loc) bias)))
 
-        :else (let [[loc' bias] (gc-leafs (tree/up loc) bias deleted?)]
-                (recur (tree/skip loc') bias))))))
+        :else (let [[loc' bias] (gc-leafs (tree/up loc) bias deleted-markers)]
+                (recur (tree/skip loc') bias)))))
 
 (defprotocol Lexer
   (lexemes [this from to])

@@ -71,3 +71,9 @@
 
 (defn scan-to-next-line [loc]
   (text/scan-to-line-start loc (inc (line-number loc))))
+
+(defn sets-intersect? [s1 s2]
+  (if (<= (count s1) (count s2))
+    (reduce (fn [r x] (if (contains? s2 x) (reduced true) r)) false s1)
+    (sets-intersect? s2 s1)))
+

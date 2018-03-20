@@ -99,8 +99,8 @@
         old-paren-ids (:paren-ids editor)
         state (core/delete-markers state old-paren-ids)]
     (if (and p-from p-to)
-      (let [from-id (str "paren-" (unique-paren-id))
-            to-id   (str "paren-" (unique-paren-id))]
+      (let [from-id (unique-paren-id)
+            to-id   (unique-paren-id)]
         (-> state
             (core/insert-markers [(intervals/->Marker p-from
                                                       (inc p-from)
