@@ -435,14 +435,36 @@
       (cond
         (tree/end? loc)
         (tree/root loc)
+
         (tree/branch? loc)
         (let [marker-ids (-> loc (tree/node) ^Data (tree/metrics) (.-marker-ids))]
-          (if (andel.utils/sets-intersect? marker-ids deleted-markers)
+          (if (or (andel.utils/sets-intersect? marker-ids deleted-markers)
+                  (< 0 bias))
             (recur (tree/next-leaf loc) bias)
             (recur (tree/skip loc) bias)))
 
         :else (let [[loc' bias] (gc-leafs (tree/up loc) bias deleted-markers)]
                 (recur (tree/skip loc') bias)))))
+
+(comment
+  (def markers [(Marker. 0 1 false false (Attrs. 1 nil nil nil))
+                (Marker. 1 3 false false (Attrs. 2 nil nil nil))
+                (Marker. 2 4 false false (Attrs. 3 nil nil nil))
+                (Marker. 2 3 false false (Attrs. 7 nil nil nil))
+                (Marker. 3 5 false false (Attrs. 4 nil nil nil))
+                (Marker. 4 6 false false (Attrs. 5 nil nil nil))
+                (Marker. 5 7 false false (Attrs. 6 nil nil nil))])
+
+  (def tt (-> (make-interval-tree)
+              (add-markers markers)
+              (gc (i/int-set [1 4]))))
+
+  (def remains (query-intervals (zipper tt) 0 8))
+
+  {:deleted #{1 4}
+   :before markers
+   :after remains}
+  )
 
 (defprotocol Lexer
   (lexemes [this from to])
