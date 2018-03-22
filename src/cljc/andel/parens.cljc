@@ -16,11 +16,18 @@
 
 (defn paren-symbol? [c] (or (closing? c) (opening? c)))
 
-(defn paren-token? [text lexer]
-  (fn [offset]
-    (if (some? lexer)
-      (intervals/is-brace-token? lexer offset)
-      (paren? (-> text text/text->char-seq (nth offset))))))
+(defn paren-token? [{:keys [text lexer tokens-container is-brace?] :as document}]
+  (cond (some? tokens-container)
+        (fn [offset]
+          (and (is-brace? tokens-container offset)
+               (paren? (-> text text/text->char-seq (nth offset)))))
+        (some? lexer)
+        (fn [offset]
+          (and (is-brace? (intervals/get-tokens-container lexer) offset)
+               (paren? (-> text text/text->char-seq (nth offset)))))
+        :else
+        (fn [offset]
+          (paren? (-> text text/text->char-seq (nth offset))))))
 
 (defn- find-matching-paren [text paren-token? offset should-push? should-pop? advance]
   (when (and (<= 0 offset)
@@ -90,9 +97,8 @@
 
 (defn highlight-parens [{:keys [editor document] :as state}]
   (let [caret-offset  (core/caret-offset state)
-        lexer (:lexer document)
         text (:text document)
-        paren-token? (paren-token? text lexer)
+        paren-token? (paren-token? document)
         [p-from p-to] (find-parens-pair text
                                         paren-token?
                                         caret-offset)

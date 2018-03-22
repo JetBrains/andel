@@ -469,9 +469,7 @@
 (defprotocol Lexer
   (lexemes [this from to])
   (update-text [this new-text offset added-len removed-len])
-  (get-matching-brace-type [this offset])
-  (get-token-type-by-offset [this offset])
-  (is-brace-token? [this offset]))
+  (get-tokens-container [this]))
 
 (defmulti create-lexer (constantly :idea))
 (defmethod create-lexer :default [& args] nil)

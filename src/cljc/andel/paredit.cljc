@@ -8,9 +8,9 @@
   #?(:clj (:import [andel.cursor Cursor TransientCursor])))
 
 (defn slurp-forward [{:keys [editor document] :as state}]
-  (let [{:keys [text lexer]} document
+  (let [{:keys [text]} document
         caret-offset (core/caret-offset state)
-        paren-token? (paren-token? text lexer)]
+        paren-token? (paren-token? document)]
     (if-let [[_ cur-to] (enclosing-parens text paren-token? caret-offset)]
       (let [[_ next-to] (find-next-form text paren-token? (inc cur-to))
             paren-str (core/text-at-offset text cur-to 1)]
@@ -20,9 +20,9 @@
       state)))
 
 (defn slurp-backward [{:keys [editor document] :as state}]
-  (let [{:keys [text lexer]} document
+  (let [{:keys [text]} document
         caret-offset (core/caret-offset state)
-        paren-token? (paren-token? text lexer)]
+        paren-token? (paren-token? document)]
     (if-let [[cur-from _] (enclosing-parens text paren-token? caret-offset)]
       (let [[prev-from _] (find-prev-form text paren-token? (dec cur-from))
             paren-str (core/text-at-offset text cur-from 1)]
@@ -32,9 +32,9 @@
       state)))
 
 (defn barf-backward [{:keys [editor document] :as state}]
-  (let [{:keys [text lexer]} document
+  (let [{:keys [text]} document
         caret-offset (core/caret-offset state)
-        paren-token? (paren-token? text lexer)]
+        paren-token? (paren-token? document)]
     (if-let [[cur-from cur-to] (enclosing-parens text paren-token? caret-offset)]
       (let [[_ first-to] (find-next-form text paren-token? (inc cur-from))
             [second-from _] (find-next-form text paren-token? (inc first-to))
@@ -45,9 +45,9 @@
       state)))
 
 (defn barf-forward [{:keys [editor document] :as state}]
-  (let [{:keys [text lexer]} document
+  (let [{:keys [text]} document
         caret-offset (core/caret-offset state)
-        paren-token? (paren-token? text lexer)]
+        paren-token? (paren-token? document)]
     (if-let [[cur-from cur-to] (enclosing-parens text paren-token? caret-offset)]
       (let [[last-from _] (find-prev-form text paren-token? (dec cur-to))
             [_ prev-to] (find-prev-form text paren-token? (dec last-from))
@@ -59,9 +59,9 @@
       state)))
 
 (defn splice [{:keys [editor document] :as state}]
-  (let [{:keys [text lexer]} document
+  (let [{:keys [text]} document
         caret-offset (core/caret-offset state)
-        paren-token? (paren-token? text lexer)]
+        paren-token? (paren-token? document)]
     (if-let [[cur-from cur-to] (enclosing-parens text paren-token? caret-offset)]
       (-> state
           (core/delete-at-offset cur-to 1)
@@ -69,9 +69,9 @@
       state)))
 
 (defn splice-kill-left [{:keys [editor document] :as state}]
-  (let [{:keys [text lexer]} document
+  (let [{:keys [text]} document
         caret-offset (core/caret-offset state)
-        paren-token? (paren-token? text lexer)]
+        paren-token? (paren-token? document)]
     (if-let [[cur-from cur-to] (enclosing-parens text paren-token? caret-offset)]
       (let [kill-len (- caret-offset cur-from)
             killed-text (str (core/text-at-offset text (inc cur-from) (dec kill-len)))]
@@ -82,9 +82,9 @@
       state)))
 
 (defn splice-kill-right [{:keys [editor document] :as state}]
-  (let [{:keys [text lexer]} document
+  (let [{:keys [text]} document
         caret-offset (core/caret-offset state)
-        paren-token? (paren-token? text lexer)]
+        paren-token? (paren-token? document)]
     (if-let [[cur-from cur-to] (enclosing-parens text paren-token? caret-offset)]
       (let [kill-len (- cur-to caret-offset)
             killed-text (str (core/text-at-offset text caret-offset kill-len))]
@@ -95,9 +95,9 @@
       state)))
 
 (defn delete [{:keys [document] :as state}]
-  (let [{:keys [text lexer]} document
+  (let [{:keys [text]} document
         [sel-from sel-to] (core/selection state)
-        paren-token? (paren-token? text lexer)
+        paren-token? (paren-token? document)
         caret-offset (core/caret-offset state)
         max-offset (text/text-length text)
         character (when (< caret-offset max-offset) (first (core/text-at-offset text caret-offset 1)))]
@@ -121,9 +121,9 @@
           (controller/delete state))))))
 
 (defn backspace [{:keys [document] :as state}]
-  (let [{:keys [text lexer]} document
+  (let [{:keys [text]} document
         [sel-from sel-to] (core/selection state)
-        paren-token? (paren-token? text lexer)
+        paren-token? (paren-token? document)
         caret-offset (core/caret-offset state)
         deletion-offset (dec caret-offset)
         character (when (<= 0 deletion-offset) (first (core/text-at-offset text deletion-offset 1)))]
@@ -162,8 +162,8 @@
       (controller/move-caret :left false)))
 
 (defn navigate-next-form [{:keys [document] :as state} selection?]
-  (let [{:keys [text lexer]} document
-        paren-token? (paren-token? text lexer)
+  (let [{:keys [text]} document
+        paren-token? (paren-token? document)
         caret-offset (core/caret-offset state)
         [_ next-to] (find-next-form text paren-token? caret-offset)
         [_ cur-to] (enclosing-parens text paren-token? caret-offset)]
@@ -172,8 +172,8 @@
           :else state)))
 
 (defn navigate-next-form-down [{:keys [document] :as state} selection?]
-  (let [{:keys [text lexer]} document
-        paren-token? (paren-token? text lexer)
+  (let [{:keys [text]} document
+        paren-token? (paren-token? document)
         max-offset (dec (text/text-length text))]
     (loop [offset (core/caret-offset state)]
       (let [[next-from next-to] (find-next-form text paren-token? offset)]
@@ -191,8 +191,8 @@
           (recur (inc next-to)))))))
 
 (defn navigate-next-form-up [{:keys [document] :as state} selection?]
-  (let [{:keys [text lexer]} document
-        paren-token? (paren-token? text lexer)
+  (let [{:keys [text]} document
+        paren-token? (paren-token? document)
         caret-offset (core/caret-offset state)
         [_ cur-to] (enclosing-parens text paren-token? caret-offset)]
     (if (some? cur-to)
@@ -200,8 +200,8 @@
       state)))
 
 (defn navigate-prev-form [{:keys [document] :as state} selection?]
-  (let [{:keys [text lexer]} document
-        paren-token? (paren-token? text lexer)
+  (let [{:keys [text]} document
+        paren-token? (paren-token? document)
         caret-offset (core/caret-offset state)
         [prev-from _] (find-prev-form text paren-token? (max 0 (dec caret-offset)))
         [cur-from _] (enclosing-parens text paren-token? caret-offset)]
@@ -210,8 +210,8 @@
           :else state)))
 
 (defn navigate-prev-form-down [{:keys [document] :as state} selection?]
-  (let [{:keys [text lexer]} document
-        paren-token? (paren-token? text lexer)]
+  (let [{:keys [text]} document
+        paren-token? (paren-token? document)]
     (loop [offset (dec (core/caret-offset state))]
       (let [[prev-from prev-to] (find-prev-form text paren-token? offset)]
         (cond
@@ -228,8 +228,8 @@
           (recur (dec prev-from)))))))
 
 (defn navigate-prev-form-up [{:keys [document] :as state} selection?]
-  (let [{:keys [text lexer]} document
-        paren-token? (paren-token? text lexer)
+  (let [{:keys [text]} document
+        paren-token? (paren-token? document)
         caret-offset (core/caret-offset state)
         [cur-from _] (enclosing-parens text paren-token? caret-offset)]
     (if (some? cur-from)
@@ -237,10 +237,10 @@
       state)))
 
 (defn kill-form [{:keys [document editor] :as state} id]
-  (let [{:keys [text lexer]} document
+  (let [{:keys [text]} document
         prev-was-kill? (= id (some-> editor :prev-op-ids :kill inc))
         caret-offset (core/caret-offset state)
-        paren-token? (paren-token? text lexer)
+        paren-token? (paren-token? document)
         [next-from next-to] (find-next-form text paren-token? caret-offset)]
     (if (some? (and next-from next-to))
       (let [kill-len (inc (- next-to caret-offset))
