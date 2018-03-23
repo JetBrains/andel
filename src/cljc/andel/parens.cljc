@@ -84,11 +84,7 @@
           (opening? c1) (find-matching-paren-forward text paren-token? offset)
           :else         nil)))))
 
-(defonce unique-paren-id
-  (let [a (atom 0)]
-    #(swap! a inc)))
-
-(defn highlight-parens [{:keys [editor document] :as state}]
+(defn highlight-parens [{:keys [editor document marker-id-generator] :as state}]
   (let [caret-offset  (core/caret-offset state)
         lexer (:lexer document)
         text (:text document)
@@ -99,8 +95,8 @@
         old-paren-ids (:paren-ids editor)
         state (core/delete-markers state old-paren-ids)]
     (if (and p-from p-to)
-      (let [from-id (unique-paren-id)
-            to-id   (unique-paren-id)]
+      (let [from-id (marker-id-generator)
+            to-id   (marker-id-generator)]
         (-> state
             (core/insert-markers [(intervals/->Marker p-from
                                                       (inc p-from)
