@@ -16,16 +16,11 @@
 
 (defn paren-symbol? [c] (or (closing? c) (opening? c)))
 
-(defn paren-token? [{:keys [text lexer tokens-container is-brace?] :as document}]
-  (cond (some? tokens-container)
+(defn paren-token? [{:keys [text lexer is-brace?] :as document}]
+  (if (some? lexer)
         (fn [offset]
-          (and (is-brace? tokens-container offset)
+          (and (is-brace? lexer offset)
                (paren? (-> text text/text->char-seq (nth offset)))))
-        (some? lexer)
-        (fn [offset]
-          (and (is-brace? (intervals/get-tokens-container lexer) offset)
-               (paren? (-> text text/text->char-seq (nth offset)))))
-        :else
         (fn [offset]
           (paren? (-> text text/text->char-seq (nth offset))))))
 

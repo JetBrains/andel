@@ -469,7 +469,7 @@
 (defprotocol Lexer
   (lexemes [this from to])
   (update-text [this new-text offset added-len removed-len])
-  (get-tokens-container [this]))
+  (token-type [this offset]))
 
 (defmulti create-lexer (constantly :idea))
 (defmethod create-lexer :default [& args] nil)
