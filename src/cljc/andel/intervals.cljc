@@ -426,7 +426,9 @@
                    (inc i)
                    changed?
                    (al/conj! res n))))
-        [(tree/replace loc (make-node-fn res))
+        [(if (empty? res)
+           (tree/remove loc)
+           (tree/replace loc (make-node-fn res)))
          bias]))))
 
 (defn gc [itree deleted-markers]
@@ -453,11 +455,17 @@
                 (Marker. 2 3 false false (Attrs. 7 nil nil nil))
                 (Marker. 3 5 false false (Attrs. 4 nil nil nil))
                 (Marker. 4 6 false false (Attrs. 5 nil nil nil))
-                (Marker. 5 7 false false (Attrs. 6 nil nil nil))])
+                (Marker. 5 7 false false (Attrs. 6 nil nil nil))
+                (Marker. 5 7 false false (Attrs. 8 nil nil nil))
+                (Marker. 5 7 false false (Attrs. 9 nil nil nil))
+                (Marker. 5 7 false false (Attrs. 10 nil nil nil))
+                (Marker. 5 7 false false (Attrs. 11 nil nil nil))
+                (Marker. 5 7 false false (Attrs. 12 nil nil nil))
+                (Marker. 5 7 false false (Attrs. 13 nil nil nil))])
 
   (def tt (-> (make-interval-tree)
               (add-markers markers)
-              (gc (i/int-set [1 4]))))
+              (gc (i/int-set [1 2 3 4 5 6 7 8 9 10 11 12 13]))))
 
   (def remains (query-intervals (zipper tt) 0 8))
 
