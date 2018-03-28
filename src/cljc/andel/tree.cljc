@@ -448,15 +448,15 @@
                      loc
                      (loop [idx (.-idx loc)
                             a (or (.-acc loc) (reducing-fn))]
-                       (let [n (al/get siblings idx)]
-                         (let [m (metrics n)]
+                       (when (< idx (count siblings))
+                         (let [n (al/get siblings idx)
+                               m (metrics n)]
                            (if (pred a m)
                              (z-merge loc
                                       {:acc a
                                        :idx idx})
-                             (when (< idx (dec (count siblings)))
-                               (recur (inc idx)
-                                      (reducing-fn a m))))))))]
+                             (recur (inc idx)
+                                    (reducing-fn a m)))))))]
       (if (some? next-loc)
         (if (branch? next-loc)
           (recur (down next-loc) pred)

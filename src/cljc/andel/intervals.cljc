@@ -269,7 +269,7 @@
          acc (transient [])]
     (let [new-loc (next-changed loc offset)]
       (if (tree/end? new-loc)
-        [(tree/root new-loc) acc]
+        [(tree/root new-loc) (persistent! acc)]
         (let [from    (location-from new-loc)
               to      (location-to new-loc)]
           (if (< offset from)
