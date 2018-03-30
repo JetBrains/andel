@@ -30,6 +30,11 @@
   [line text]
   (grid-pos->offset {:line line :col 0} text))
 
+(defn line->from-to-offsets [line text]
+  (let [from (line->offset line text)
+        to (dec (line->offset (inc line) text))]
+    [from to]))
+
 (defn offset->line
   "transforms absolute offset into absolute line value ignoring col"
   [offset text]
