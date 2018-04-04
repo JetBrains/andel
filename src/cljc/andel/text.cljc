@@ -80,7 +80,11 @@
 (defn zipper [tree]
   (tree/zipper tree tree-config))
 
-(def root tree/root)
+(defn root [^ZipperLocation loc]
+  (let [root (tree/root loc)]
+    (if-not (empty? (.-children root))
+      root
+      (make-text ""))))
 
 (defn metrics-offset [^"[J" m]
   (some-> m (aget 0)))
@@ -249,7 +253,7 @@
           rel-offset (- i chunk-offset)
           chunk-l (count (.-data ^Leaf (tree/node loc)))
           end (min chunk-l (+ rel-offset l))
-          next-loc  (if (and (= rel-offset 0) (= end chunk-l) (not (tree/last-root-child? loc)))
+          next-loc  (if (and (= rel-offset 0) (= end chunk-l))
                       (tree/remove (forget-acc loc))
                       (-> loc
                           (tree/edit (fn [node]
@@ -320,3 +324,4 @@
 #?(:clj
     (defn ^CharSequence text->char-seq [t]
       (TextSequence. t (scan-by-offset-exclusive (zipper t) 0) 0 (text-length t))))
+
