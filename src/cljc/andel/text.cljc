@@ -4,46 +4,23 @@
   #?(:clj (:import [andel.tree ZipperLocation Leaf]
                    [java.lang CharSequence])))
 
-#?(:clj
-   (do
-     (defn array [& args] (long-array args))))
+(defrecord TextMetrics [^long length
+                        ^long lines-count])
 
-#?(:clj
-   (defn metrics [^String x]
-     (let [l (.length x)]
-       (long-array [l
-                    (loop [i 0
+(defn metrics [^String x]
+  (let [l (.length x)]
+    (TextMetrics. l (loop [i 0
                            c 0]
                       (if (= i l)
                         c
                         (if (= (.charAt x i) \newline)
                           (recur (inc i) (inc c))
-                          (recur (inc i) c))))])))
-   :cljs
-   (defn metrics [x]
-     (assert (string? x))
-     (let [l (.-length x)]
-       (array l
-              (loop [i 0
-                     c 0]
-                (if (identical? i l)
-                  c
-                  (if (identical? (.charAt x i) \newline)
-                    (recur (inc i) (inc c))
-                    (recur (inc i) c))))))))
-#?(:clj
-   (defn r-f
-     ([] (long-array [0 0]))
-     ([^"[J" acc ^"[J" metrics]
-      (doto (long-array 2)
-        (aset 0 (+ (aget acc 0) (aget metrics 0)))
-        (aset 1 (+ (aget acc 1) (aget metrics 1))))))
-   :cljs
-   (defn r-f
-     ([] (array 0 0))
-     ([[x1 x2 :as acc] [y1 y2]]
-      (array (+ x1 y1)
-             (+ x2 y2)))))
+                          (recur (inc i) c)))))))
+
+(defn r-f
+  ([] (TextMetrics. 0 0))
+  ([^TextMetrics acc ^TextMetrics metrics]
+   (TextMetrics. (+ (.-length acc) (.-length metrics)) (+ (.-lines-count acc) (.-lines-count metrics)))))
 
 (defn split-count [i j thresh]
   (let [x (- j i)]
@@ -86,16 +63,16 @@
       root
       (make-text ""))))
 
-(defn metrics-offset [^"[J" m]
-  (some-> m (aget 0)))
+(defn metrics-offset [^TextMetrics m]
+  (when m (.-length m)))
 
 (defn node-offset
   "Returns offset of the current node ignoring overriding accumulator"
   [loc]
   (metrics-offset (tree/acc loc)))
 
-(defn metrics-line [^"[J" m]
-  (some-> m (aget 1)))
+(defn metrics-line [^TextMetrics m]
+  (when m (.-lines-count m)))
 
 (defn by-offset [i]
   (fn [acc m] (<= i (metrics-offset (r-f acc m)))))
