@@ -103,9 +103,7 @@
                          (cond
                            (= 0 size) nil
                            (= 1 size) (marker-class (.peek markers))
-                           :else (->> markers
-                                      (eduction (map marker-class))
-                                      (join-strings " ")))))]
+                           :else (join-strings " " (map marker-class markers)))))]
     (fn [rf]
       (let [pendings (make-pendings)
             *last-pos (atom 0)]

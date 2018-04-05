@@ -9,22 +9,24 @@
   #?(:cljs 1000000000.0 #_js/Number.POSITIVE_INFINITY
      :clj Integer/MAX_VALUE #_100000 #_Double/POSITIVE_INFINITY))
 
+
 (defonce records
   (do
-    (defrecord Attrs [id background foreground layer])
+    (defrecord Attrs [^long id background foreground layer])
 
     (defrecord Data
-        [offset
-         length
-         rightest
+        [^long offset
+         ^long length
+         ^long rightest
+
          marker-ids
          greedy-left?
          greedy-right?
          attrs])
 
     (defrecord Marker
-        [from
-         to
+        [^long from
+         ^long to
          greedy-left?
          greedy-right?
          attrs])
@@ -37,17 +39,11 @@
      (nil? left) right
      (nil? right) left
      :else
-     (let [l-offset   (.-offset left)
-           l-length   (.-length left)
-           l-rightest (.-rightest left)
-           r-offset   (.-offset right)
-           r-rightest (.-rightest right)
-           r-length   (.-length right)]
-       (Data. l-offset
-              (max l-length (+ l-rightest r-offset r-length))
-              (+ l-rightest r-offset r-rightest)
-              nil
-              nil nil nil)))))
+     (Data. (.-offset left)
+            (max (.-length left) (+ (.-rightest left) (.-offset right) (.-length right)))
+            (+ (.-rightest left) (.-offset right) (.-rightest right))
+            nil
+            nil nil nil))))
 
 (defn location-from [^ZipperLocation loc]
   (let [^Data acc  (tree/loc-acc loc)
@@ -177,11 +173,9 @@
       (< from-snd to-fst))))
 
 (defn intersects-inclusive? [from1 to1 from2 to2]
-  (let [to-fst (if (< from1 from2) to1 to2)
-        from-snd   (max from1 from2)
-        len1       (- to1 from1)
-        len2       (- to2 from2)]
-    (<= from-snd to-fst)))
+  (if (< from1 from2)
+    (<= from2 to1)
+    (<= from1 to2)))
 
 (defn by-intersect [from to]
   (fn [^Data acc-metrics ^Data node-metrics]
@@ -248,32 +242,17 @@
              loc)))
         (update-leaf-offset #(+ % offset)))))
 
-(defn next-changed [loc offset]
-  (tree/scan loc
-             (fn [^Data acc-metrics ^Data node-metrics]
-               (let [^Data metrics     (reducing-fn acc-metrics node-metrics)
-                     rightest    (or (some-> acc-metrics (.-rightest)) 0)
-                     node-offset (.-offset node-metrics)
-                     length      (.-length node-metrics)
-                     from        (+ node-offset rightest)
-                     to          (+ from length)]
-                 (or
-                  (and (<= from offset)
-                       (<= offset to))
-
-                  (< offset (+ (.-offset metrics) (.-rightest metrics))))))))
-
 ;; tree -> offset -> size -> [tree acc]
-(defn collect-with-remove [itree offset size]
+(defn collect-with-remove [itree end-offset delta pred]
   (loop [loc (zipper itree)
          acc (transient [])]
-    (let [new-loc (next-changed loc offset)]
+    (let [new-loc (tree/scan loc pred)]
       (if (tree/end? new-loc)
         [(tree/root new-loc) (persistent! acc)]
         (let [from    (location-from new-loc)
               to      (location-to new-loc)]
-          (if (< offset from)
-            [(tree/root (update-leaf-offset new-loc #(+ % size))) (persistent! acc)]
+          (if (< end-offset from)
+            [(tree/root (update-leaf-offset new-loc #(+ % delta))) (persistent! acc)]
             (recur (remove-leaf new-loc) (conj! acc (loc->tree-marker new-loc)))))))))
 
 (defn process-interval [^Marker marker offset size]
@@ -305,36 +284,30 @@
              greedy-right?
              (.-attrs marker))))
 
-(defn type-in [itree offset size]
-  (let [offset             (offset->tree-basis offset)
-        [itree' intervals] (collect-with-remove itree offset size)
-        intervals'         (sort-by :from (map #(process-interval % offset size) intervals))]
-    (->> intervals'
-         (reduce insert-one (zipper itree'))
-         root)))
+(defn contains-offset-pred [offset]
+  (fn [^Data acc-metrics ^Data node-metrics]
+    (let [^Data metrics     (reducing-fn acc-metrics node-metrics)
+          rightest    (or (some-> acc-metrics (.-rightest)) 0)
+          node-offset (.-offset node-metrics)
+          length      (.-length node-metrics)
+          from        (+ node-offset rightest)
+          to          (+ from length)]
+      (or
+       (<= from offset to)
+       (< offset (+ (.-offset metrics) (.-rightest metrics)))))))
 
-(defn collect-with-remove-changed [itree offset size]
-  (let [changed? (fn [^Data acc-metrics ^Data node-metrics]
-                   (let [^Data metrics     (reducing-fn acc-metrics node-metrics)
-                         rightest    (or (some-> acc-metrics (.-rightest)) 0)
-                         node-offset (.-offset node-metrics)
-                         length      (.-length node-metrics)
-                         from        (+ node-offset rightest)
-                         to          (+ from length)]
-                     (or
-                      (intersects-inclusive? from to
-                                             offset (+ offset size))
-                      (< (+ offset size) (+ (.-offset metrics) (.-rightest metrics))))))]
-    (loop [loc (zipper itree)
-           acc (transient [])]
-      (let [new-loc (tree/scan loc changed?)]
-        (if (tree/end? new-loc)
-          [(tree/root new-loc) acc]
-          (let [from    (location-from new-loc)
-                to      (location-to new-loc)]
-            (if (< (+ offset size) from)
-              [(tree/root (update-leaf-offset new-loc #(- % size))) (persistent! acc)]
-              (recur (remove-leaf new-loc) (conj! acc (loc->tree-marker new-loc))))))))))
+(defn intersects-pred [i-from i-to]
+  (fn [^Data acc-metrics ^Data node-metrics]
+    (let [^Data metrics     (reducing-fn acc-metrics node-metrics)
+          rightest    (or (some-> acc-metrics (.-rightest)) 0)
+          node-offset (.-offset node-metrics)
+          length      (.-length node-metrics)
+          from        (+ node-offset rightest)
+          to          (+ from length)]
+      (or
+       (<= from i-from to)
+       (<= i-from from i-to)       
+       (< i-to (+ (.-offset metrics) (.-rightest metrics)))))))
 
 (defn process-single-interval-deletion [^Marker marker offset length]
   (let [from         (.-from marker)
@@ -351,13 +324,24 @@
              g-r?
              (.-attrs marker))))
 
+(defn type-in [itree offset size]
+  (let [offset             (offset->tree-basis offset)
+        [itree' intervals] (collect-with-remove itree offset size (contains-offset-pred offset))
+        intervals'         (sort-by :from (map #(process-interval % offset size) intervals))]
+    (->> intervals'
+         (reduce insert-one (zipper itree'))
+         root)))
+
 (defn delete-range [itree offset size]
   (let [offset             (offset->tree-basis offset)
-        [itree' intervals] (collect-with-remove-changed itree offset size)
+        [itree' intervals] (collect-with-remove itree (+ offset size) (- size) (intersects-pred offset (+ offset size)))
         intervals'         (sort-by :from (map #(process-single-interval-deletion % offset size) intervals))]
     (->> intervals'
          (reduce insert-one (zipper itree'))
          root)))
+
+(defn play [itree operation]
+  )
 
 (defn xquery-intervals [loc from to]
   (let [from           (offset->tree-basis from)
