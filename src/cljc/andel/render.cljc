@@ -199,7 +199,7 @@
                     (rf acc (aget lexer-markers i)))
              (rf acc))))))))
 
-(defn ^LineInfo build-line-info [{:keys [caret lexer-state selection markers-zipper start-offset end-offset text-zipper]} widgets]
+(defn ^LineInfo build-line-info [{:keys [caret lexer-state selection deleted-markers markers-zipper start-offset end-offset text-zipper]} widgets]
   (let [markup (intervals/xquery-intervals markers-zipper start-offset end-offset)
         text (text/text text-zipper (- end-offset start-offset))
         text-length (count text)
@@ -224,15 +224,16 @@
                  (intervals/lexemes lexer-state start-offset end-offset)
                  (object-array 0))]
     (transduce
-     (multiplex (widgets-xf collect-to-array)
-                 ((comp to-relative-offsets
-                        (merge-tokens tokens)
-                        (multiplex (bg-xf collect-to-array)
-                                   (fg-xf collect-to-array)))
-                  (fn
-                    ([] nil)
-                    ([r] r)
-                    ([r i] i))))
+     (comp (remove (fn [^Marker m] (contains? deleted-markers (.-id ^Attrs (.-attrs m)))))
+           (multiplex (widgets-xf collect-to-array)
+                      ((comp to-relative-offsets
+                             (merge-tokens tokens)
+                             (multiplex (bg-xf collect-to-array)
+                                        (fg-xf collect-to-array)))
+                        (fn
+                          ([] nil)
+                          ([r] r)
+                          ([r i] i)))))
      (completing
       (fn [acc [widgets [bg fg]]]
         (LineInfo. text caret selection fg bg widgets)))
