@@ -161,10 +161,6 @@
 (defn root? [^ZipperLocation loc]
   (.-root? loc))
 
-(defn last-root-child? [^ZipperLocation loc]
-  (and (= (count (.-siblings loc)) 1)
-       (.-root? ^ZipperLocation (.-pzip loc))))
-
 (defn log2 [i]
   #?(:clj (/ (java.lang.Math/log i) (java.lang.Math/log 2))
      :cljs (js/Math.log2 i))
