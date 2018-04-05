@@ -74,22 +74,8 @@
    (defn remove-pending! [^PriorityQueue pendings p]
      (.remove pendings p)))
 
-#?(:cljs
-   (def add-pending! push!)
-   :clj
-   (defn add-pending! [^PriorityQueue pendings p]
-     (.add pendings p)))
-
-#?(:clj
-   (defn join-strings [separator coll]
-     (transduce (interpose separator)
-                (completing
-                 (fn [^java.lang.StringBuilder sb ^java.lang.String i]
-                   (.append sb i))
-                 str)
-                (java.lang.StringBuilder.)
-                coll))
-   :cljs (def join-strings clojure.string/join))
+(defn add-pending! [^PriorityQueue pendings p]
+  (.add pendings p))
 
 (defn shred-markup
   "Consumes andel.intervals.Marker. Transducer with a quirk: it will call downstream with (r-f state token-length token-class)"
@@ -103,7 +89,15 @@
                          (cond
                            (= 0 size) nil
                            (= 1 size) (marker-class (.peek markers))
-                           :else (join-strings " " (map marker-class markers)))))]
+                           :else (transduce (comp
+                                             (map marker-class)
+                                             (interpose " "))
+                                            (completing
+                                             (fn [^java.lang.StringBuilder sb ^java.lang.String i]
+                                               (.append sb i))
+                                             str)
+                                            (java.lang.StringBuilder.)
+                                            markers))))]
     (fn [rf]
       (let [pendings (make-pendings)
             *last-pos (atom 0)]
@@ -205,7 +199,7 @@
                     (rf acc (aget lexer-markers i)))
              (rf acc))))))))
 
-(defn ^LineInfo build-line-info [{:keys [caret lexer-state selection markers-zipper start-offset end-offset deleted-markers text-zipper]} widgets]
+(defn ^LineInfo build-line-info [{:keys [caret lexer-state selection markers-zipper start-offset end-offset text-zipper]} widgets]
   (let [markup (intervals/xquery-intervals markers-zipper start-offset end-offset)
         text (text/text text-zipper (- end-offset start-offset))
         text-length (count text)
@@ -230,9 +224,7 @@
                  (intervals/lexemes lexer-state start-offset end-offset)
                  (object-array 0))]
     (transduce
-     (comp
-      (remove (fn [^Marker m] (contains? deleted-markers (.-id ^Attrs (.-attrs m)))))
-      (multiplex (widgets-xf collect-to-array)
+     (multiplex (widgets-xf collect-to-array)
                  ((comp to-relative-offsets
                         (merge-tokens tokens)
                         (multiplex (bg-xf collect-to-array)
@@ -240,7 +232,7 @@
                   (fn
                     ([] nil)
                     ([r] r)
-                    ([r i] i)))))
+                    ([r i] i))))
      (completing
       (fn [acc [widgets [bg fg]]]
         (LineInfo. text caret selection fg bg widgets)))
