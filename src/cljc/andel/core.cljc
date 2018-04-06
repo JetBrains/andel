@@ -10,18 +10,15 @@
 (s/def :andel/text :andel/tree)
 (s/def :andel/markup :andel/tree)
 (s/def :andel/lexer any?)
-(s/def :andel/deleted-markers (s/coll-of any? :kind set?))
 (s/def :andel/document (s/keys :req [:andel/text
                                      :andel/markup
-                                     :andel/lexer
-                                     :andel/deleted-markers]))
+                                     :andel/lexer]))
 (s/def :andel/widgets (s/map-of nat-int? map?))
 
 (defn make-editor-state [language color-scheme]
   {:document {:text (text/make-text "")
               :markup (intervals/make-interval-tree)
-              :lexer (andel.intervals/create-lexer language "" color-scheme)
-              :deleted-markers #{}}
+              :lexer (andel.intervals/create-lexer language "" color-scheme)}
    :editor {:caret {:offset 0 :v-col 0}
             :selection [0 0]
             :widgets {}
@@ -97,8 +94,8 @@
 (defn insert-markers [state markers]
   (update-in state [:document :markup] intervals/add-markers markers))
 
-(defn delete-markers [{{:keys [deleted-markers] :as document} :document :as state} marker-ids]
-  (update-in state [:document :deleted-markers] into marker-ids))
+(defn delete-markers [state marker-ids]
+  (update-in state [:document :markup] intervals/gc marker-ids))
 
 (defn set-selection [state selection caret-offset]
   (-> state

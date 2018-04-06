@@ -1,5 +1,6 @@
 (ns andel.parens
-  (:require [andel.text :as text]
+  (:require [clojure.data.int-map :as i]
+            [andel.text :as text]
             [andel.core :as core]
             [andel.cursor :as cursor]
             [andel.controller :as controller]
@@ -109,7 +110,7 @@
                                                       false
                                                       false
                                                       (intervals/->Attrs to-id "highlight-paren" "" :background))])
-            (assoc-in [:editor :paren-ids] [from-id to-id])))
+            (assoc-in [:editor :paren-ids] (i/int-set [from-id to-id]))))
       state)))
 
 
