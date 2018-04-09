@@ -76,7 +76,7 @@
       (let [kill-len (- caret-offset cur-from)
             killed-text (str (core/text-at-offset text (inc cur-from) (dec kill-len)))]
         (-> state
-            (assoc-in [:editor :clipboard] killed-text)
+            (controller/put-to-clipboard killed-text)
             (core/delete-at-offset cur-to 1)
             (core/delete-at-offset cur-from kill-len)))
       state)))
@@ -89,7 +89,7 @@
       (let [kill-len (- cur-to caret-offset)
             killed-text (str (core/text-at-offset text caret-offset kill-len))]
         (-> state
-            (assoc-in [:editor :clipboard] killed-text)
+            (controller/put-to-clipboard killed-text)
             (core/delete-at-offset caret-offset (inc kill-len))
             (core/delete-at-offset cur-from 1)))
       state)))
@@ -248,10 +248,11 @@
         (-> state
             (assoc-in [:editor :prev-op-ids :kill] id)
             (core/delete-at-offset caret-offset kill-len)
-            (cond-> prev-was-kill? (update-in [:editor :clipboard] str killed-text)
-                    (not prev-was-kill?) (assoc-in [:editor :clipboard] killed-text))))
+            (cond-> prev-was-kill? (-> (update-in [:editor :clipboard :content] str killed-text)
+                                       (update-in [:editor :clipboard :timestamp inc]))
+                    (not prev-was-kill?) (controller/put-to-clipboard killed-text))))
       state)))
 
 (defn yank [{:keys [document editor] :as state}]
   (let [{:keys [clipboard]} editor]
-    (controller/type-in state clipboard)))
+    (controller/type-in state (:content clipboard))))

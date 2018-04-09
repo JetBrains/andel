@@ -229,6 +229,11 @@
         (assoc-in [:editor :selection] selection')
         (core/move-view-if-needed))))
 
+(defn put-to-clipboard [state content]
+  (-> state
+      (assoc-in [:editor :clipboard :content] content)
+      (update-in [:editor :clipboard :timestamp] inc)))
+
 (defn copy [state]
   (let [text (get-in state [:document :text])
         [sel-from _ :as selection] (core/selection state)
@@ -236,7 +241,7 @@
         selected-text (str (core/text-at-offset text sel-from sel-len))]
     (cond-> state
       (< 0 sel-len)
-      (-> (assoc-in [:editor :clipboard] selected-text)))))
+      (put-to-clipboard selected-text))))
 
 (defn cut [state]
   (let [text (get-in state [:document :text])
@@ -246,7 +251,7 @@
     (cond-> state
       (< 0 sel-len)
       (-> (core/delete-at-offset sel-from sel-len)
-          (assoc-in [:editor :clipboard] selected-text)))))
+          (put-to-clipboard selected-text)))))
 
 (defn scroll [{:keys [document viewport] :as state} {:keys [x y width height]}]
   (let [;screen-height (get-in viewport [:view-size 1])
