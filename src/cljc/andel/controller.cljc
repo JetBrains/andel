@@ -229,6 +229,15 @@
         (assoc-in [:editor :selection] selection')
         (core/move-view-if-needed))))
 
+(defn copy [state]
+  (let [text (get-in state [:document :text])
+        [sel-from _ :as selection] (core/selection state)
+        sel-len (selection-length selection)
+        selected-text (str (core/text-at-offset text sel-from sel-len))]
+    (cond-> state
+      (< 0 sel-len)
+      (-> (assoc-in [:editor :clipboard] selected-text)))))
+
 (defn cut [state]
   (let [text (get-in state [:document :text])
         [sel-from _ :as selection] (core/selection state)
