@@ -11,25 +11,27 @@
   (let [{:keys [text]} document
         caret-offset (core/caret-offset state)
         paren-token? (paren-token? document)]
-    (if-let [[_ cur-to] (enclosing-parens text paren-token? caret-offset)]
-      (let [[_ next-to] (find-next-form text paren-token? (inc cur-to))
-            paren-str (core/text-at-offset text cur-to 1)]
-        (-> state
-            (core/delete-at-offset cur-to 1)
-            (core/insert-at-offset next-to paren-str)))
-      state)))
+    (loop [[_ cur-to] (enclosing-parens text paren-token? caret-offset)]
+      (if (some? cur-to)
+        (if-let [[_ next-to] (find-next-form text paren-token? (inc cur-to))]
+          (-> state
+              (core/delete-at-offset cur-to 1)
+              (core/insert-at-offset next-to (core/text-at-offset text cur-to 1)))
+          (recur (enclosing-parens text paren-token? (inc cur-to))))
+        state))))
 
 (defn slurp-backward [{:keys [editor document] :as state}]
   (let [{:keys [text]} document
         caret-offset (core/caret-offset state)
         paren-token? (paren-token? document)]
-    (if-let [[cur-from _] (enclosing-parens text paren-token? caret-offset)]
-      (let [[prev-from _] (find-prev-form text paren-token? (dec cur-from))
-            paren-str (core/text-at-offset text cur-from 1)]
-        (-> state
+    (loop [[cur-from _] (enclosing-parens text paren-token? caret-offset)]
+      (if (some? cur-from)
+        (if-let [[prev-from _] (find-prev-form text paren-token? (dec cur-from))]
+          (-> state
             (core/delete-at-offset cur-from 1)
-            (core/insert-at-offset prev-from paren-str)))
-      state)))
+            (core/insert-at-offset prev-from (core/text-at-offset text cur-from 1)))
+          (recur (enclosing-parens text paren-token? cur-from)))
+        state))))
 
 (defn barf-backward [{:keys [editor document] :as state}]
   (let [{:keys [text]} document
