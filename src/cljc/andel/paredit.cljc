@@ -250,9 +250,8 @@
         (-> state
             (assoc-in [:editor :prev-op-ids :kill] id)
             (core/delete-at-offset caret-offset kill-len)
-            (cond-> prev-was-kill? (-> (update-in [:editor :clipboard :content] str killed-text)
-                                       (update-in [:editor :clipboard :timestamp inc]))
-                    (not prev-was-kill?) (controller/put-to-clipboard killed-text))))
+            (cond-> prev-was-kill? (controller/conj-to-clipboard killed-text)
+              (not prev-was-kill?) (controller/put-to-clipboard killed-text))))
       state)))
 
 (defn yank [{:keys [document editor] :as state}]
