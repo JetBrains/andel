@@ -249,7 +249,7 @@
             (assoc-in [:editor :prev-op-ids :kill] id)
             (core/delete-at-offset caret-offset kill-len)
             (cond-> prev-was-kill? (-> (update-in [:editor :clipboard :content] str killed-text)
-                                       (update-in [:editor :clipboard :timestamp inc]))
+                                       (update-in [:editor :clipboard :timestamp] inc))
                     (not prev-was-kill?) (controller/put-to-clipboard killed-text))))
       state)))
 
