@@ -4,7 +4,8 @@
             [clojure.test.check :as tc]
             [andel.intervals :refer :all]
             [andel.tree :as tree]
-            [clojure.test :refer :all]))
+            [clojure.test :refer :all]
+            [clojure.data.int-map :as i]))
 
 
 (defn compare-intervals [a b]
@@ -12,19 +13,22 @@
 
 (def sort-intervals (partial sort (comparator compare-intervals)))
 
-(def interval-gen (g/fmap (fn [[a b g-l? g-r?]]
-                            (map->Marker {:from (min a b)
-                                          :to (max a b)
-                                          :greedy-left? g-l?
-                                          :greedy-right? g-r?
-                                          :attrs (map->Attrs {:id 0})}))
-                          (g/tuple (g/large-integer* {:min 0 :max 10000})
-                                   (g/large-integer* {:min 0 :max 10000})
-                                   g/boolean
-                                   g/boolean)))
 
-(def intervals-bulk-gen (g/fmap (fn [v] (vec (sort-intervals v)))
-                                (g/vector interval-gen 0 100)))
+(def intervals-bulk-gen
+  (g/bind (g/large-integer* {:min 1 :max 1000})
+          (fn [cnt]
+            (g/let [a (g/vector (g/large-integer* {:min 0 :max 10000}) cnt)
+                    b (g/vector (g/large-integer* {:min 0 :max 10000}) cnt)
+                    g-l? (g/vector g/boolean cnt)
+                    g-r? (g/vector g/boolean cnt)
+                    ids (g/return (vec (range cnt)))]
+              (sort-intervals (mapv (fn [a b g-l? g-r? id]
+                                      (map->Marker {:from (min a b)
+                                                    :to (max a b)
+                                                    :greedy-left? g-l?
+                                                    :greedy-right? g-r?
+                                                    :attrs (map->Attrs {:id id})})) a b g-l? g-r? ids))))
+          ))
 
 (deftest bulk-insertion
   (is (:result (tc/quick-check 1000
@@ -152,3 +156,19 @@
                                     ops)]
            (= (set (tree->intervals tree))
               (set model))))))))
+
+(deftest gc-test
+  (tc/quick-check 100
+                  (prop/for-all [[bulk i] (g/bind intervals-bulk-gen
+                                                  (fn [b]
+                                                    (g/tuple (g/return b) (g/choose 0 (count b))))
+                                                  )]
+                                (let [tree (bulk->tree bulk)
+                                      to-delete (i/int-set (range i))
+                                      tree' (gc tree to-delete)]
+                                  (= (tree->intervals tree')
+                                     (remove (fn [m] (to-delete (-> m (.-attrs) (.-id)))) bulk))
+                                  ))))
+
+
+

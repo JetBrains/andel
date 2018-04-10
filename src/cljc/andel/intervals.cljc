@@ -410,10 +410,9 @@
                    (inc i)
                    changed?
                    (al/conj! res n))))
-        [(if (empty? res)
-           (tree/remove loc)
-           (tree/replace loc (make-node-fn res)))
-         bias]))))
+        (if (empty? res)
+           [(tree/remove loc) bias]
+           [(tree/skip (tree/replace loc (make-node-fn res))) bias])))))
 
 (defn gc [itree deleted-markers]
   (loop [loc (zipper itree)
@@ -430,7 +429,7 @@
             (recur (tree/skip loc) bias)))
 
         :else (let [[loc' bias] (gc-leafs (tree/up loc) bias deleted-markers)]
-                (recur (tree/skip loc') bias)))))
+                (recur loc' bias)))))
 
 (comment
   (def markers [(Marker. 0 1 false false (Attrs. 1 nil nil nil))
