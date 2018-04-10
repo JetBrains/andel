@@ -8,14 +8,18 @@
   (andel-test slurp-forward "(|) aaa" "(| aaa)")
   (andel-test slurp-forward "(|) ()" "(| ())")
   (andel-test slurp-forward "(|) (   )" "(| (   ))")
-  (andel-test slurp-forward "(|) \"aa bb\"" "(| \"aa bb\")"))
+  (andel-test slurp-forward "(|) \"aa bb\"" "(| \"aa bb\")")
+  (andel-test slurp-forward "((|)) ()" "((|) ())")
+  (andel-test slurp-forward "((|)) aaa" "((|) aaa)"))
 
 (deftest slurp-backward-test
   (andel-test slurp-backward "a (|)" "(a |)")
   (andel-test slurp-backward "aaa (|)" "(aaa |)")
   (andel-test slurp-backward "() (|)" "(() |)")
   (andel-test slurp-backward "(   ) (|)" "((   ) |)")
-  (andel-test slurp-backward "\"aa bb\" (|)" "(\"aa bb\" |)"))
+  (andel-test slurp-backward "\"aa bb\" (|)" "(\"aa bb\" |)")
+  (andel-test slurp-backward "() ((|))" "(() (|))")
+  (andel-test slurp-backward "aaa ((|))" "(aaa (|))"))
 
 (deftest barf-forward-test
   (andel-test barf-forward "(|a)" "()|a")

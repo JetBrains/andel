@@ -234,6 +234,11 @@
       (assoc-in [:editor :clipboard :content] content)
       (update-in [:editor :clipboard :timestamp] inc)))
 
+(defn conj-to-clipboard [state content]
+  (-> state
+      (update-in [:editor :clipboard :content] str content)
+      (update-in [:editor :clipboard :timestamp] inc)))
+
 (defn copy [state]
   (let [text (get-in state [:document :text])
         [sel-from _ :as selection] (core/selection state)
