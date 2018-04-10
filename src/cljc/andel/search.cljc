@@ -7,9 +7,11 @@
 
 (def ^:dynamic j)
 
+(def special-char (char 0))
+
 ;; naive kmp
 (defn- str-kmp [text-string pattern]
-  (let [s (str pattern "#" text-string)
+  (let [s (str pattern special-char text-string)
         pl (count pattern)
         n (count s)
         p #^ints (make-array Integer/TYPE n)]
@@ -39,7 +41,7 @@
   (-> text-tree
       text/zipper
       (text/scan-to-offset 0)
-      (text/insert (str pattern "#"))
+      (text/insert (str pattern special-char))
       (tree/root)))
 
 (defn text-kmp [text pattern]
