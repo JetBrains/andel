@@ -203,6 +203,6 @@
     (if (some? type)
       (case type
         :insert (recur (+ i (count x)) rest (document-insert-at-offset andel-document i x))
-        :retain (recur (+ i x) rest andel-document)
+        :retain (recur (+ i ^long x) rest andel-document)
         :delete (recur i rest (document-delete-at-offset andel-document i (count x))))
       andel-document)))

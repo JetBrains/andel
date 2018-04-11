@@ -127,7 +127,7 @@
 
 (defn node
   "Returns the node at loc"
-  [^ZipperLocation loc]
+  ^Node [^ZipperLocation loc]
   (al/get (.-siblings loc) (.-idx loc)))
 
 (defn acc
@@ -355,7 +355,7 @@
 
 (defn root
   "Modified version of clojure.zip/root to work with balancing version of up"
-  [^ZipperLocation loc]
+  ^Node [^ZipperLocation loc]
   (if (end? loc)
     (node loc)
     (let [p (up loc)]

@@ -430,7 +430,7 @@
             (recur (tree/skip loc) bias)))
 
         :else (let [[loc' bias] (gc-leafs (tree/up loc) bias deleted-markers)]
-                (recur loc' bias)))))
+                (recur loc' (long bias))))))
 
 (comment
   (def markers [(Marker. 0 1 false false (Attrs. 1 nil nil nil))
