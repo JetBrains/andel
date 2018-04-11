@@ -113,7 +113,7 @@
     0
     (loop [from 0
            n n]
-      (let [i (clojure.string/index-of s c from)]
+      (let [^long i (clojure.string/index-of s c from)]
         (if (= n 1)
           i
           (when (some? i)
