@@ -202,6 +202,16 @@
         (cond-> delta start-of-text? dec))
       0)))
 
+(defn delete-word-forward [state]
+  (let [caret-offset (core/caret-offset state)
+        delta (next-word-delta state)]
+    (core/delete-at-offset state caret-offset delta)))
+
+(defn delete-word-backward [state]
+  (let [caret-offset (core/caret-offset state)
+        delta (prev-word-delta state)] ;; negative delta
+    (core/delete-at-offset state (+ caret-offset delta) (- delta))))
+
 (defn move-caret [{:keys [document editor] :as state} dir selection?]
   (let [{:keys [caret selection]} editor
         text (:text document)
