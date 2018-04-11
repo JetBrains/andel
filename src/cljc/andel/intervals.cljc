@@ -372,21 +372,22 @@
 (defn query-intervals [loc from to]
   (into [] (xquery-intervals loc from to)))
 
-(defn- gc-leafs [loc bias deleted?]
+
+(defn- gc-leafs [^ZipperLocation loc bias deleted?]
   (let [children (tree/children loc)
         len (count children)
-        ops (.-ops loc)
+        ^ZipperOps ops (.-ops loc)
         make-node-fn (.-make-node ops)]
     (loop [bias bias
            i 0
            changed? false
            res (al/into-array-list [])]
       (if (< i len)
-        (let [n (al/get children i)
-              data (.-data n)]
+        (let [^Leaf n (al/get children i)
+              ^Data data (.-data n)]
           (cond
-            (deleted? (-> n (.-data) (.-attrs) (.-id)))
-            (recur (+ bias (-> n (.-data) (.-offset)))
+            (deleted? (.-id ^Attrs (.-attrs data)))
+            (recur (+ bias (-> data (.-offset)))
                    (inc i)
                    true
                    res)
