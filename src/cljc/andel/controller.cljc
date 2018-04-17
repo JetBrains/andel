@@ -249,6 +249,12 @@
       (update-in [:editor :clipboard :content] str content)
       (update-in [:editor :clipboard :timestamp] inc)))
 
+(defn select-all [state]
+  (let [text (get-in state [:document :text])
+        from 0
+        to (text/text-length text)]
+    (assoc-in state [:editor :selection] [from to])))
+
 (defn copy [state]
   (let [text (get-in state [:document :text])
         [sel-from _ :as selection] (core/selection state)
