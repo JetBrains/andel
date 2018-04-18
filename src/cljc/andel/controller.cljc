@@ -42,13 +42,12 @@
 
 (defn type-in [{:keys [editor] :as state} str]
   (let [str-len (count str)
-        caret-offset (core/caret-offset state)
         selection (core/selection state)
         selection-len (selection-length selection)]
     (-> state
         (cond-> (< 0 selection-len)
                 (core/delete-at-offset (first selection) selection-len))
-        (core/insert-at-offset caret-offset str)
+        (as-> <> (core/insert-at-offset <> (core/caret-offset <>) str))
         (core/move-view-if-needed)
         (as-> st (update-in st [:editor :caret] drop-virtual-position (get-in st [:document :text]))))))
 
