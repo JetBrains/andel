@@ -110,7 +110,7 @@
         caret-offset (get-in editor [:caret :offset])
         markup (get editor :markup)]
     (cond-> editor
-      (some? markup) (assoc :makrup (intervals/type-in markup offset length))
+      (some? markup) (assoc :markup (intervals/type-in markup offset length))
       (and (some? sel-from)     (<= offset sel-from)) (assoc-in [:selection 0] (+ sel-from length))
       (and (some? sel-to)       (<= offset sel-to)) (assoc-in [:selection 1] (+ sel-to length))
       (and (some? caret-offset) (<= offset caret-offset)) (assoc-in [:caret :offset] (+ caret-offset length)))))
@@ -120,7 +120,7 @@
         caret-offset (get-in editor [:caret :offset])
         markup (get editor :markup)]
     (cond-> editor
-      (some? markup) (assoc :makrup (intervals/delete-range markup offset length))
+      (some? markup) (assoc :markup (intervals/delete-range markup offset length))
       (and (some? sel-from)     (<= offset sel-from)) (assoc-in [:selection 0] (max offset (- sel-from length)))
       (and (some? sel-to)       (<= offset sel-to)) (assoc-in [:selection 1] (max offset (- sel-to length)))
       (and (some? caret-offset) (<= offset caret-offset)) (assoc-in [:caret :offset] (max offset (- caret-offset length))))))
