@@ -177,7 +177,7 @@
        (al/conj! b)))
     ([r] r)))
 
-(defn merge-tokens [^"[Ljava.lang.Object;" lexer-markers]
+(defn merge-tokens [lexer-markers]
   (fn [rf]
     (let [lexer-markers-count (count lexer-markers)
           *i                  (atom 0)]
@@ -186,8 +186,8 @@
         ([acc ^Marker m]
          (loop [i   @*i
                 acc acc]
-           (if (and (< i lexer-markers-count) (< (.-from ^Marker (aget lexer-markers i)) (.-from ^Marker m)))
-             (recur (inc i) (rf acc (aget lexer-markers i)))
+           (if (and (< i lexer-markers-count) (< (.-from ^Marker (nth lexer-markers i)) (.-from ^Marker m)))
+             (recur (inc i) (rf acc (nth lexer-markers i)))
              (do
                (reset! *i i)
                (rf acc m)))))
@@ -196,11 +196,19 @@
                 acc acc]
            (if (< i lexer-markers-count)
              (recur (inc i)
-                    (rf acc (aget lexer-markers i)))
+                    (rf acc (nth lexer-markers i)))
              (rf acc))))))))
 
-(defn ^LineInfo build-line-info [{:keys [caret lexer-state selection markers-zipper start-offset end-offset text-zipper]} widgets]
-  (let [markup (intervals/xquery-intervals markers-zipper start-offset end-offset)
+(defn ^LineInfo build-line-info [{:keys [caret
+                                         lexer-state
+                                         selection
+                                         document-markers-zipper
+                                         editor-markers-zipper
+                                         start-offset
+                                         end-offset
+                                         text-zipper]} widgets]
+  (let [document-markup (intervals/xquery-intervals document-markers-zipper start-offset end-offset)
+        editor-markup (intervals/xquery-intervals editor-markers-zipper start-offset end-offset)
         text (text/text text-zipper (- end-offset start-offset))
         text-length (count text)
         to-relative-offsets (map
@@ -224,20 +232,22 @@
                  (intervals/lexemes lexer-state start-offset end-offset)
                  (object-array 0))]
     (transduce
-     (multiplex (widgets-xf collect-to-array)
-                      ((comp to-relative-offsets
-                             (merge-tokens tokens)
-                             (multiplex (bg-xf collect-to-array)
-                                        (fg-xf collect-to-array)))
-                        (fn
-                          ([] nil)
-                          ([r] r)
-                          ([r i] i))))
+     (comp
+      (merge-tokens (into [] editor-markup))
+      (multiplex (widgets-xf collect-to-array)
+                ((comp to-relative-offsets
+                       (merge-tokens tokens)
+                       (multiplex (bg-xf collect-to-array)
+                                  (fg-xf collect-to-array)))
+                  (fn
+                    ([] nil)
+                    ([r] r)
+                    ([r i] i)))))
      (completing
       (fn [acc [widgets [bg fg]]]
         (LineInfo. text caret selection fg bg widgets)))
      nil
-     markup)))
+     document-markup)))
 
 (defn line-props-equiv? [old new]
   (let [end-offset (max (:end-offset old) (:end-offset new))]
@@ -245,8 +255,11 @@
          (tree/compare-zippers (:text-zipper old)
                                (:text-zipper new)
                                (text/by-offset end-offset))
-         (tree/compare-zippers (:markers-zipper old)
-                               (:markers-zipper new)
+         (tree/compare-zippers (:document-markers-zipper old)
+                               (:document-markers-zipper new)
+                               (intervals/by-offset end-offset))
+         (tree/compare-zippers (:editor-markers-zipper old)
+                               (:editor-markers-zipper new)
                                (intervals/by-offset end-offset))
          (= (:selection old) (:selection new))
          (= (:caret old) (:caret new))
@@ -272,13 +285,14 @@
 
 (defn viewport-lines [state viewport-info]
   (let [{{:keys [text lines markup hashes lexer]} :document
-         {:keys [caret selection]} :editor} state
+         {:keys [caret selection] editor-markup :markup} :editor} state
         {:keys [top-line bottom-line]} viewport-info
         caret-offset (get caret :offset)]
     (tree/reducible
      (fn [f init]
        (loop [text-zipper    (text/scan-to-line-start (text/zipper text) top-line)
-              markers-zipper (intervals/zipper markup)
+              document-markers-zipper (intervals/zipper markup)
+              editor-markers-zipper (intervals/zipper editor-markup)
               line-number    top-line
               result         init
               result-empty?  true]
@@ -291,17 +305,18 @@
                                          (not (tree/end? next-line-text-zipper)) (dec))
                  intersects?           (intervals/by-intersect start-offset end-offset)
                  overscans?            (intervals/by-offset end-offset)
-                 markers-zipper        (tree/scan markers-zipper
-                                                  (fn [acc metrics]
-                                                    (or (intersects? acc metrics)
-                                                        (overscans? acc metrics))))
+                 marker-zipper-pred (fn [acc metrics] (or (intersects? acc metrics) (overscans? acc metrics)))
+                 document-markers-zipper  (tree/scan document-markers-zipper marker-zipper-pred)
+                 editor-markers-zipper  (tree/scan editor-markers-zipper marker-zipper-pred)
                  caret-here? (and (<= start-offset caret-offset) (<= caret-offset end-offset))]
              (recur next-line-text-zipper
-                    markers-zipper
+                    document-markers-zipper
+                    editor-markers-zipper
                     (inc line-number)
                     (f result {:text-zipper     text-zipper
                                :line-number     line-number
-                               :markers-zipper  markers-zipper
+                               :document-markers-zipper  document-markers-zipper
+                               :editor-markers-zipper editor-markers-zipper
                                :lexer-state     lexer
                                :start-offset    start-offset
                                :selection       (line-selection selection start-offset end-offset)
