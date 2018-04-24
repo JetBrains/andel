@@ -182,20 +182,6 @@
   (let [char-seq (text/text->char-seq text)]
     (.subSequence char-seq offset (+ offset length))))
 
-(defn- next-widget-id [widgets]
-  (or (some->> widgets
-               keys
-               (apply max)
-               inc)
-      0))
-
-(defn add-widget [{{:keys [widgets]} :editor {:keys [text]} :document :as state} {:keys [element] :as widget}]
-  (let [widget-id (next-widget-id widgets)]
-    (assoc-in state [:editor :widgets widget-id] widget)))
-
-(defn remove-widget [state widget-id]
-  (update-in state [:editor :widgets] #(dissoc % widget-id)))
-
 (defn play-operation [andel-document operation]
   (loop [i 0
          [[type x] & rest] operation
