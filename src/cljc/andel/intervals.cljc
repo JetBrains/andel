@@ -340,9 +340,6 @@
          (reduce insert-one (zipper itree'))
          root)))
 
-(defn play [itree operation]
-  )
-
 (defn xquery-intervals [loc from to]
   (let [from           (offset->tree-basis from)
         to             (offset->tree-basis to)
