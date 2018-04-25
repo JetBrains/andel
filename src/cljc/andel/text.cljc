@@ -48,11 +48,33 @@
                   :leaf-underflown? (fn [s] (< (count s) string-merge-thresh))
                   :merge-leafs (fn [s1 s2] (str s1 s2))})
 
+(defn- reduce-string [^String s]
+  (let [last-idx (.length s)
+        leaf-vec (if (= last-idx 0)
+                   [(tree/make-leaf "" tree-config)]
+                   (let [leaf-vec (transient [])]
+                     (loop [idx 0]
+                       (if (= idx last-idx)
+                         (persistent! leaf-vec)
+                         (let [idx' (min (+ idx string-thresh) last-idx)]
+                           (conj! leaf-vec (tree/make-leaf (subs s idx idx') tree-config))
+                           (recur idx'))))))]
+    leaf-vec))
+
+(defn- reduce-nodes [nodes-vec]
+  (let [p (:split-thresh tree-config)]
+    (mapv (fn [nodes]
+            (tree/make-node (al/into-array-list nodes) tree-config))
+          (partition p p nil nodes-vec))))
+
+(defn- reduce-tree [node-vec]
+  (loop [node-vec' (reduce-nodes node-vec)]
+    (if (= 1 (count node-vec'))
+      (first node-vec')
+      (recur (reduce-nodes node-vec')))))
+
 (defn make-text [s]
-  (-> (tree/zipper (tree/make-node (al/into-array-list [(tree/make-leaf s tree-config)]) tree-config) tree-config)
-      (tree/down)
-      (tree/mark-changed)
-      (tree/root)))
+  (reduce-tree (reduce-string s)))
 
 (defn zipper [tree]
   (tree/zipper tree tree-config))
@@ -301,47 +323,3 @@
 #?(:clj
     (defn ^CharSequence text->char-seq [t]
       (TextSequence. t (scan-by-offset-exclusive (zipper t) 0) 0 (text-length t))))
-
-(defn- reduce-string [^String s]
-  (let [last-idx (.length s)
-        leaf-vec (let [leaf-vec (transient [])]
-                   (loop [idx 0]
-                     (if (= idx last-idx)
-                       (persistent! leaf-vec)
-                       (let [idx' (min (+ idx string-thresh) last-idx)]
-                         (conj! leaf-vec (tree/make-leaf (subs s idx idx') tree-config))
-                         (recur idx')))))]
-    leaf-vec))
-
-(defn- reduce-nodes [nodes-vec]
-  (let [p (:split-thresh tree-config)]
-    (mapv (fn [nodes]
-            (tree/make-node (al/into-array-list nodes) tree-config))
-          (partition p p nil nodes-vec))))
-
-(defn- reduce-tree [node-vec]
-  (loop [node-vec' (reduce-nodes node-vec)]
-    (if (= 1 (count node-vec'))
-      (first node-vec')
-      (recur (reduce-nodes node-vec')))))
-
-(defn make-text-incremental [s]
-  (reduce-tree (reduce-string s)))
-
-(comment
-
-  ;; bench
-
-  (defn generate-string [len]
-    (apply str (take len (repeatedly #(char (+ (rand 26) 65))))))
-
-  (defn bench [make-text]
-    (for [i (range 0 100)]
-      (let [string (generate-string 1000000)]
-        (time (make-text string)))))
-
-  (bench make-text)
-
-  (bench make-text-incremental)
-
-  )
