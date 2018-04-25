@@ -326,3 +326,5 @@
                                :caret-decorator (when caret-here? (:caret-decorator state))
                                :end-offset      end-offset})
                     false))))))))
+
+

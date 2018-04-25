@@ -306,7 +306,7 @@
           to          (+ from length)]
       (or
        (<= from i-from to)
-       (<= i-from from i-to)       
+       (<= i-from from i-to)
        (< i-to (+ (.-offset metrics) (.-rightest metrics)))))))
 
 (defn process-single-interval-deletion [^Marker marker offset length]
@@ -358,8 +358,8 @@
 
             (tree/leaf? (tree/node loc))
             (recur (tree/scan (tree/next loc) stop?)
-                   (if (intersects? (location-from loc) (location-to loc)
-                                    from to)
+                   (if (intersects-inclusive? (location-from loc) (location-to loc)
+                                              from to)
                      (f s (loc->Marker loc))
                      s))
 
