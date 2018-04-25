@@ -27,8 +27,8 @@
    :viewport {:pos [0 0]
               :view-size [0 0]
               :metrics nil
-              :focused? false}}
-   :sibling-editors {})
+              :focused? false}
+   :sibling-editors {}})
 
 (defn- edit-at-offset
   [{:keys [document] :as state} offset f]
