@@ -94,10 +94,10 @@
           :else state)))
 
 (defn insert-markers [state markers]
-  (update-in state [:document :markup] intervals/add-markers markers))
+  (update-in state [:editor :markup] intervals/add-markers markers))
 
 (defn delete-markers [state marker-ids]
-  (update-in state [:document :markup] intervals/gc marker-ids))
+  (update-in state [:editor :markup] intervals/gc marker-ids))
 
 (defn set-selection [state selection caret-offset]
   (-> state
