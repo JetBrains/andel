@@ -148,21 +148,6 @@
                         (.-greedy-right? data)
                         (.-attrs data)))))
 
-(defn tree->intervals [tr]
-  (loop [loc (zipper tr)
-         acc []]
-    (cond (tree/end? loc)
-      (->> acc
-           (drop 1) ;; drop left sentinel
-           (drop-last 1) ;; drop right sentinel
-           (vec))
-
-      (tree/leaf? (tree/node loc))
-      (recur (tree/next loc) (conj acc (loc->Marker loc)))
-
-      :else
-      (recur (tree/next loc) acc))))
-
 (defn intersects? [from1 to1 from2 to2]
   (let [to-fst (if (< from1 from2) to1 to2)
         from-snd   (max from1 from2)
@@ -339,6 +324,20 @@
     (->> intervals'
          (reduce insert-one (zipper itree'))
          root)))
+
+(defn xquery-all [tree]
+  (tree/reducible
+      (fn [f init]
+        (loop [loc (tree/next-leaf (zipper tree))
+               acc init]
+          (if (tree/end? loc)
+            acc
+            (let [start (location-from loc)]
+              (if (or (= start 0) (= start plus-infinity)) ;; skip sentinels
+                (recur (tree/next-leaf loc) acc)
+                (recur (tree/next-leaf loc) (f acc (loc->Marker loc))))))))))
+
+(defn tree->intervals [tree] (into [] (xquery-all tree)))
 
 (defn xquery-intervals [loc from to]
   (let [from           (offset->tree-basis from)
