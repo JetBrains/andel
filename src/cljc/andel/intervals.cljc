@@ -240,7 +240,7 @@
             [(tree/root (update-leaf-offset new-loc #(+ % delta))) (persistent! acc)]
             (recur (remove-leaf new-loc) (conj! acc (loc->tree-marker new-loc)))))))))
 
-(defn process-interval [^Marker marker offset size]
+(defn process-single-interval-typing [^Marker marker offset size]
   (let [from          (.-from marker)
         to            (.-to marker)
         greedy-left?  (.-greedy-left? marker)
@@ -281,6 +281,14 @@
        (<= from offset to)
        (< offset (+ (.-offset metrics) (.-rightest metrics)))))))
 
+(defn type-in [itree offset size]
+  (let [offset             (offset->tree-basis offset)
+        [itree' intervals] (collect-with-remove itree offset size (contains-offset-pred offset))
+        intervals'         (sort-by :from (map #(process-single-interval-typing % offset size) intervals))]
+    (->> intervals'
+         (reduce insert-one (zipper itree'))
+         root)))
+
 (defn intersects-pred [i-from i-to]
   (fn [^Data acc-metrics ^Data node-metrics]
     (let [^Data metrics     (reducing-fn acc-metrics node-metrics)
@@ -302,25 +310,25 @@
         update-point (fn [point offset length]
                        (if (< offset point)
                          (max offset (- point length))
-                         point))]
-    (Marker. (update-point from offset length)
-             (update-point to offset length)
-             g-l?
-             g-r?
-             (.-attrs marker))))
-
-(defn type-in [itree offset size]
-  (let [offset             (offset->tree-basis offset)
-        [itree' intervals] (collect-with-remove itree offset size (contains-offset-pred offset))
-        intervals'         (sort-by :from (map #(process-interval % offset size) intervals))]
-    (->> intervals'
-         (reduce insert-one (zipper itree'))
-         root)))
+                         point))
+        from' (update-point from offset length)
+        to' (update-point to offset length)]
+    (when (or (< 0 (- to' from')) g-l? g-r?)
+      (Marker. from'
+               to'
+               g-l?
+               g-r?
+               (.-attrs marker)))))
 
 (defn delete-range [itree offset size]
   (let [offset             (offset->tree-basis offset)
         [itree' intervals] (collect-with-remove itree (+ offset size) (- size) (intersects-pred offset (+ offset size)))
-        intervals'         (sort-by :from (map #(process-single-interval-deletion % offset size) intervals))]
+        intervals'         (sort-by :from
+                                    (into []
+                                          (comp
+                                           (map #(process-single-interval-deletion % offset size))
+                                           (filter some?))
+                                          intervals))]
     (->> intervals'
          (reduce insert-one (zipper itree'))
          root)))
