@@ -194,7 +194,7 @@
         text-len (text/text-length text)
         caret-offset (core/caret-offset state)]
     (if (< 0 caret-offset)
-      (let [cursor (cursor/prev (cursor/make-cursor text caret-offset))
+      (let [cursor (cursor/make-cursor text (dec caret-offset))
             word-end-cursor (first (cursor/move-while cursor whitespace? :backward))
             [word-begin-cursor start-of-text?] (cursor/move-while word-end-cursor (complement whitespace?) :backward)
             delta (- (cursor/distance cursor word-begin-cursor))]
