@@ -5,6 +5,9 @@
 (defn line-height [{:keys [height spacing] :as metrics}]
   (+ height spacing))
 
+(defn max-line-length [text]
+  (.max-line-length (.metrics text)))
+
 (defn pixels->grid-position
   "transforms absolute position in pixels into absolute [line col] value
    CAUTION! col might be bigger, than length of line."

@@ -5,22 +5,81 @@
                    [java.lang CharSequence])))
 
 (defrecord TextMetrics [^long length
-                        ^long lines-count])
+                        ^long lines-count
+                        ^long newline-prefix-length
+                        ^long max-line-length
+                        ^long newline-suffix-length])
 
-(defn metrics [^String x]
-  (let [l (.length x)]
-    (TextMetrics. l (loop [i 0
-                           c 0]
-                      (if (= i l)
-                        c
-                        (if (= (.charAt x i) \newline)
-                          (recur (inc i) (inc c))
-                          (recur (inc i) c)))))))
+(defn metrics [^String str]
+  (let [length
+        (.length str)
 
-(defn r-f
-  ([] (TextMetrics. 0 0))
+        [lines-count prefix-length max-line-length suffix-length]
+        (loop [offset 0
+               lines-count 0
+               prefix-length 0
+               max-line-length 0
+               prev-line-offset 0]
+          (if (= offset length)
+            (let [suffix-length (cond-> (- offset prev-line-offset)
+                                  (not= 0 lines-count) dec)]
+              [lines-count (if (= 0 lines-count) length prefix-length) (max max-line-length suffix-length) suffix-length])
+            (if (= (.charAt str offset) \newline)
+              (recur
+                (inc offset)
+                (inc lines-count)
+                (if (= lines-count 0)
+                  offset
+                  prefix-length)
+                (max max-line-length (- offset prev-line-offset) prefix-length)
+                offset)
+              (recur
+                (inc offset)
+                lines-count
+                prefix-length
+                max-line-length
+                prev-line-offset))))]
+
+    (TextMetrics. length
+                  lines-count
+                  prefix-length
+                  max-line-length
+                  suffix-length)))
+
+(defn scan-r-f
+  ([] (TextMetrics. 0 0 0 0 0))
   ([^TextMetrics acc ^TextMetrics metrics]
-   (TextMetrics. (+ (.-length acc) (.-length metrics)) (+ (.-lines-count acc) (.-lines-count metrics)))))
+   (TextMetrics. (+ (.-length acc) (.-length metrics))
+                 (+ (.-lines-count acc) (.-lines-count metrics))
+                 0
+                 0
+                 0)))
+
+(defn build-r-f
+  ([] (TextMetrics. 0 0 0 0 0))
+  ([^TextMetrics acc ^TextMetrics metrics]
+   (let [l-length (.-length acc)
+         l-lines-count (.-lines-count acc)
+         l-prefix (.-newline-prefix-length acc)
+         l-maxlen (.-max-line-length acc)
+         l-suffix (.-newline-suffix-length acc)
+         r-length (.-length acc)
+         r-lines-count (.-lines-count metrics)
+         r-prefix (.-newline-prefix-length metrics)
+         r-maxlen (.-max-line-length metrics)
+         r-suffix (.-newline-suffix-length metrics)]
+     (TextMetrics. (+ (.-length acc) (.-length metrics))
+                   (+ (.-lines-count acc) (.-lines-count metrics))
+                   (if (= l-lines-count 0)
+                     (+ l-prefix r-prefix)
+                     l-prefix)
+                   (max l-maxlen
+                        r-maxlen
+                        (+ l-suffix
+                           r-prefix))
+                   (if (= r-lines-count 0)
+                     (+ l-suffix r-suffix)
+                     r-suffix)))))
 
 (defn split-count [i j thresh]
   (let [x (- j i)]
@@ -37,10 +96,10 @@
   (map (fn [[i j]] (subs x i j)) (split-count 0 (count x) string-thresh)))
 
 (def tree-config {:make-node (fn [children]
-                               (tree/->Node (reduce (fn [acc x] (r-f acc (tree/metrics x)))
-                                                    (r-f) children)
+                               (tree/->Node (reduce (fn [acc x] (build-r-f acc (tree/metrics x)))
+                                                    (build-r-f) children)
                                             children))
-                  :reducing-fn r-f
+                  :reducing-fn build-r-f
                   :metrics-fn metrics
                   :leaf-overflown? (fn [x] (<= string-thresh (count x)))
                   :split-thresh 32
@@ -97,13 +156,13 @@
   (when m (.-lines-count m)))
 
 (defn by-offset [i]
-  (fn [acc m] (<= i (metrics-offset (r-f acc m)))))
+  (fn [acc m] (<= i (metrics-offset (scan-r-f acc m)))))
 
 (defn by-offset-exclusive [i]
-  (fn [acc m] (< i (metrics-offset (r-f acc m)))))
+  (fn [acc m] (< i (metrics-offset (scan-r-f acc m)))))
 
 (defn by-line [i]
-  (fn [acc m] (<= i (metrics-line (r-f acc m)))))
+  (fn [acc m] (<= i (metrics-line (scan-r-f acc m)))))
 
 (defn offset [^ZipperLocation loc]
   (if (tree/end? loc)
@@ -158,7 +217,7 @@
       (let [o (node-offset offset-loc)
             s (subs (.-data ^Leaf (tree/node offset-loc)) 0 (- i o))
             a (.-acc ^ZipperLocation offset-loc)
-            offset-loc (tree/assoc-o-acc offset-loc (r-f a (metrics s)))
+            offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics s)))
             next-node (tree/next-leaf offset-loc)]
         (if (and (at-the-right-border? offset-loc)
                  (not (tree/end? next-node)))
@@ -179,7 +238,7 @@
                                (- n l))
             s (subs (.-data ^Leaf (tree/node nth-eol-loc)) 0 eol-idx)
             a (.-acc ^ZipperLocation nth-eol-loc)
-            prev-line-end (tree/assoc-o-acc nth-eol-loc (r-f a (metrics s)))]
+            prev-line-end (tree/assoc-o-acc nth-eol-loc (scan-r-f a (metrics s)))]
         (-> prev-line-end
             (retain 1))))))
 
