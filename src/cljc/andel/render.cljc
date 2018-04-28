@@ -305,6 +305,7 @@
                                :start-offset    start-offset
                                :selection       (line-selection selection start-offset end-offset)
                                :focused?        (:focused? state)
+                               :lamp            (when caret-here? (:lamp state))
                                :caret           (when caret-here?
                                                   (- caret-offset start-offset))
                                :caret-decorator (when caret-here? (:caret-decorator state))
