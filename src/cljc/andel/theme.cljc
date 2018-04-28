@@ -57,4 +57,4 @@
 
 (def background (zenburn :bg))
 (def foreground (zenburn :fg))
-(def selection (zenburn :bg-1))
+(def selection "#214283")
