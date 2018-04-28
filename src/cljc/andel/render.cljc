@@ -177,26 +177,26 @@
        (al/conj! b)))
     ([r] r)))
 
-(defn merge-tokens [lexer-markers]
+(defn merge-tokens [^java.util.ArrayList lexer-markers]
   (fn [rf]
-    (let [lexer-markers-count (count lexer-markers)
+    (let [lexer-markers-count (.size lexer-markers)
           *i                  (atom 0)]
       (fn
         ([] (rf))
         ([acc ^Marker m]
-         (loop [i   @*i
+         (loop [i   (long @*i)
                 acc acc]
-           (if (and (< i lexer-markers-count) (< (.-from ^Marker (nth lexer-markers i)) (.-from ^Marker m)))
-             (recur (inc i) (rf acc (nth lexer-markers i)))
+           (if (and (< i lexer-markers-count) (< (.-from ^Marker (.get lexer-markers i)) (.-from ^Marker m)))
+             (recur (inc i) (rf acc (.get lexer-markers i)))
              (do
                (reset! *i i)
                (rf acc m)))))
         ([acc]
-         (loop [i   @*i
+         (loop [i   (long @*i)
                 acc acc]
            (if (< i lexer-markers-count)
              (recur (inc i)
-                    (rf acc (nth lexer-markers i)))
+                    (rf acc (.get lexer-markers i)))
              (rf acc))))))))
 
 (defn ^LineInfo build-line-info [{:keys [caret
@@ -230,10 +230,10 @@
                                           :starts-on-this-line? (<= start-offset (.-from marker) end-offset)))))
         tokens (if (some? lexer-state)
                  (intervals/lexemes lexer-state start-offset end-offset)
-                 (object-array 0))]
+                 (al/empty-array-list))]
     (transduce
      (comp
-      (merge-tokens (into [] editor-markup))
+      (merge-tokens (al/into-array-list editor-markup))
       (multiplex (widgets-xf collect-to-array)
                 ((comp to-relative-offsets
                        (merge-tokens tokens)
@@ -248,8 +248,6 @@
         (LineInfo. text caret selection fg bg widgets)))
      nil
      document-markup)))
-
-
 
 (defn line-selection [[from to] line-start-offset line-end-offset]
   (cond (= from to) nil

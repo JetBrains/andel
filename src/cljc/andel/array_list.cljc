@@ -17,8 +17,12 @@
    :cljs (defn conj-all! [a xs]
            (reduxe conj! a xs)))
 
-#?(:clj (defn into-array-list [^Collection coll]
-          (ArrayList. coll))
+(defn empty-array-list [] (ArrayList.))
+
+#?(:clj (defn into-array-list [coll]
+          (if (instance? Collection coll)
+            (ArrayList. ^Collection coll)
+            (reduce conj! (ArrayList.) coll)))
    :cljs (def into-array-list into-array))
 
 #?(:clj (defn array-list? [x]
