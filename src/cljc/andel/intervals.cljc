@@ -31,6 +31,7 @@
          greedy-right?
          attrs])
     :defined))
+()
 
 (defn reducing-fn
   ([] nil)
@@ -63,8 +64,13 @@
                 (if (empty? children)
                   (tree/->Node (Data. 0 0 0 (i/int-set) nil nil nil) [])
                   (let [marker-ids (if (tree/node? (first children))
-                                     (transduce (map (fn [c] (.-marker-ids ^Data (tree/metrics c)))) (completing i/union) (i/int-set) children)
-                                     (into (i/int-set) (map (fn [^Leaf c] (.-id ^Attrs (.-attrs ^Data (.-data c))))) children))
+                                     (transduce (map (fn [c] (.-marker-ids ^Data (tree/metrics c))))
+                                                (completing i/union)
+                                                (i/int-set)
+                                                children)
+                                     (into (i/int-set)
+                                           (map (fn [^Leaf c] (.-id ^Attrs (.-attrs ^Data (.-data c)))))
+                                           children))
                         ^Data data (reduce (fn [acc x] (reducing-fn acc (tree/metrics x))) (reducing-fn) children)]
                     (tree/->Node (Data. (.-offset data)
                                         (.-length data)
