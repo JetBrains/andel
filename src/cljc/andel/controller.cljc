@@ -176,6 +176,7 @@
     (set-caret-at-line-end state (get-caret-line caret text) selection?)))
 
 (def whitespace? #{\newline \space \tab})
+(def stop-symbol? (into whitespace? #{\( \) \{ \} \[ \] \; \: \> \< \. \, \\ \- \+ \* \/ \= \& \| \@ \# \^}))
 
 (defn next-word-delta [state]
   (let [text (-> state :document :text)
@@ -183,8 +184,8 @@
         caret-offset (core/caret-offset state)]
     (if (< caret-offset text-len)
       (let [cursor (cursor/make-cursor text caret-offset)
-            word-begin-cursor (first (cursor/move-while cursor whitespace? :forward))
-            [word-end-cursor end-of-text?] (cursor/move-while word-begin-cursor (complement whitespace?) :forward)
+            word-begin-cursor (first (cursor/move-while cursor stop-symbol? :forward))
+            [word-end-cursor end-of-text?] (cursor/move-while word-begin-cursor (complement stop-symbol?) :forward)
             delta (cursor/distance cursor word-end-cursor)]
         (cond-> delta end-of-text? inc))
       0)))
@@ -195,8 +196,8 @@
         caret-offset (core/caret-offset state)]
     (if (< 0 caret-offset)
       (let [cursor (cursor/make-cursor text (dec caret-offset))
-            word-end-cursor (first (cursor/move-while cursor whitespace? :backward))
-            [word-begin-cursor start-of-text?] (cursor/move-while word-end-cursor (complement whitespace?) :backward)
+            word-end-cursor (first (cursor/move-while cursor stop-symbol? :backward))
+            [word-begin-cursor start-of-text?] (cursor/move-while word-end-cursor (complement stop-symbol?) :backward)
             delta (- (cursor/distance cursor word-begin-cursor))]
         (cond-> delta start-of-text? dec))
       0)))
