@@ -101,11 +101,11 @@
                                             children))
                   :reducing-fn build-r-f
                   :metrics-fn metrics
-                  :leaf-overflown? (fn [x] (<= string-thresh (count x)))
+                  :leaf-overflown? (fn [^String x] (<= string-thresh (.length x)))
                   :split-thresh 32
                   :split-leaf split-string
-                  :leaf-underflown? (fn [s] (< (count s) string-merge-thresh))
-                  :merge-leafs (fn [s1 s2] (str s1 s2))})
+                  :leaf-underflown? (fn [^String s] (< (.length s) string-merge-thresh))
+                  :merge-leafs (fn [^String s1 ^String s2] (.concat s1 s2))})
 
 (defn- reduce-string [^String s]
   (let [last-idx (.length s)
