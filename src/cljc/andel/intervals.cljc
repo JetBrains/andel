@@ -10,28 +10,25 @@
      :clj Integer/MAX_VALUE #_100000 #_Double/POSITIVE_INFINITY))
 
 
-(defonce records
-  (do
-    (defrecord Attrs [^long id background foreground layer])
+(defrecord Attrs [^long id background foreground layer])
 
-    (defrecord Data
-        [^long offset
-         ^long length
-         ^long rightest
+(defrecord Data
+  [^long offset
+   ^long length
+   ^long rightest
 
-         marker-ids
-         greedy-left?
-         greedy-right?
-         attrs])
+   marker-ids
+   greedy-left?
+   greedy-right?
+   attrs])
 
-    (defrecord Marker
-        [^long from
-         ^long to
-         greedy-left?
-         greedy-right?
-         attrs])
-    :defined))
-()
+(defrecord Marker
+  [^long from
+   ^long to
+   greedy-left?
+   greedy-right?
+   attrs])
+
 
 (defn reducing-fn
   ([] nil)
