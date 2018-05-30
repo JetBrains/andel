@@ -2,7 +2,7 @@
   (:require [andel.text :as text]
             [andel.tree :as tree]))
 
-(defn line-height ^long [{:keys [^long height ^long spacing] :as metrics}]
+(defn line-height ^double [{:keys [^double height ^double spacing] :as metrics}]
   (+ height spacing))
 
 (defn pixels->grid-position
@@ -11,8 +11,8 @@
   [[^long x ^long y] metrics]
   (let [line-height (line-height metrics)
         line (int (Math/floor (/ (double y) line-height)))
-        col (int (Math/round (/ (double (max 0 (- x ^long (:gutter-width metrics))))
-                                ^long (:width metrics))))]
+        col (int (Math/round (/ (double (max 0 (- x ^double (:gutter-width metrics))))
+                                ^double (:width metrics))))]
     {:line line :col col}))
 
 (defn grid-pos->offset
