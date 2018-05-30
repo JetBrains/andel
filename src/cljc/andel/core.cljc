@@ -132,7 +132,7 @@
         (edit-at-offset offset #(text/insert % insertion))
         (update :document (fn [{:keys [text lexer] :as document}]
                             (cond-> document
-                              (some? lexer) (assoc :lexer (intervals/update-text lexer (text/text->char-seq text) offset length 0)))))
+                              (some? lexer) (assoc :lexer (intervals/update-text lexer (text/text->char-seq text) offset length)))))
         (update-in [:document :markup] intervals/type-in offset (count insertion))
         (cond->
           (some? (:editor state))
@@ -156,7 +156,7 @@
         (edit-at-offset offset #(text/delete % length))
         (update :document (fn [{:keys [text] :as document}]
                             (cond-> document (some? (:lexer document))
-                                    (update :lexer intervals/update-text (text/text->char-seq text) offset 0 length))))
+                                    (update :lexer intervals/update-text (text/text->char-seq text) offset (- length)))))
         (update-in [:document :markup] intervals/delete-range offset length)
         (cond->
           (some? (:editor state))

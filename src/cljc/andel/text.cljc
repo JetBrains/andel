@@ -11,42 +11,37 @@
                         ^long newline-suffix-length])
 
 (defn metrics [^String str]
-  (let [length
-        (.length str)
+  (let [length (.length str)]
+    (loop [offset 0
+           lines-count 0
+           prefix-length 0
+           max-line-length 0
+           prev-line-offset 0]
+      (if (= offset length)
+        (let [suffix-length (cond-> (- offset prev-line-offset)
+                              (not= 0 lines-count) dec)]
+          (TextMetrics. length
+                        lines-count
+                        (if (= 0 lines-count) length prefix-length)
+                        (max max-line-length suffix-length)
+                        suffix-length))
+        (if (= (.charAt str offset) \newline)
+          (recur
+           (inc offset)
+           (inc lines-count)
+           (if (= lines-count 0)
+             offset
+             prefix-length)
+           (max max-line-length (- offset prev-line-offset) prefix-length)
+           offset)
+          (recur
+           (inc offset)
+           lines-count
+           prefix-length
+           max-line-length
+           prev-line-offset))))))
 
-        [lines-count prefix-length max-line-length suffix-length]
-        (loop [offset 0
-               lines-count 0
-               prefix-length 0
-               max-line-length 0
-               prev-line-offset 0]
-          (if (= offset length)
-            (let [suffix-length (cond-> (- offset prev-line-offset)
-                                  (not= 0 lines-count) dec)]
-              [lines-count (if (= 0 lines-count) length prefix-length) (max max-line-length suffix-length) suffix-length])
-            (if (= (.charAt str offset) \newline)
-              (recur
-                (inc offset)
-                (inc lines-count)
-                (if (= lines-count 0)
-                  offset
-                  prefix-length)
-                (max max-line-length (- offset prev-line-offset) prefix-length)
-                offset)
-              (recur
-                (inc offset)
-                lines-count
-                prefix-length
-                max-line-length
-                prev-line-offset))))]
-
-    (TextMetrics. length
-                  lines-count
-                  prefix-length
-                  max-line-length
-                  suffix-length)))
-
-(defn scan-r-f
+(defn ^TextMetrics scan-r-f
   ([] (TextMetrics. 0 0 0 0 0))
   ([^TextMetrics acc ^TextMetrics metrics]
    (TextMetrics. (+ (.-length acc) (.-length metrics))
@@ -81,15 +76,15 @@
                      (+ l-suffix r-suffix)
                      r-suffix)))))
 
-(defn split-count [i j thresh]
+(defn split-count [^long i ^long j ^long thresh]
   (let [x (- j i)]
     (if (< x thresh)
       [[i j]]
       (let [x-h (quot x 2)]
         (concat (split-count i (+ i x-h) thresh) (split-count (+ i x-h) j thresh))))))
 
-(def string-thresh 64)
-(def string-merge-thresh (quot string-thresh 2))
+(def ^{:tag 'long} string-thresh 64)
+(def ^{:tag 'long} string-merge-thresh (quot string-thresh 2))
 
 (defn split-string [x]
   (assert (<= string-thresh (count x)))
@@ -144,61 +139,64 @@
       root
       (make-text ""))))
 
-(defn metrics-offset [^TextMetrics m]
-  (when m (.-length m)))
+(defn metrics-offset ^long [^TextMetrics m]
+  (.-length m))
+
+(defn metrics-line ^long [^TextMetrics m]
+  (.-lines-count m))
 
 (defn node-offset
   "Returns offset of the current node ignoring overriding accumulator"
-  [loc]
+  ^long [loc]
   (metrics-offset (tree/acc loc)))
 
-(defn metrics-line [^TextMetrics m]
-  (when m (.-lines-count m)))
-
-(defn by-offset [i]
+(defn by-offset [^long i]
   (fn [acc m] (<= i (metrics-offset (scan-r-f acc m)))))
 
-(defn by-offset-exclusive [i]
+(defn by-offset-exclusive [^long i]
   (fn [acc m] (< i (metrics-offset (scan-r-f acc m)))))
 
-(defn by-line [i]
+(defn by-line [^long i]
   (fn [acc m] (<= i (metrics-line (scan-r-f acc m)))))
 
-(defn offset [^ZipperLocation loc]
-  (if (tree/end? loc)
-    (metrics-offset (tree/metrics (tree/node loc)))
-    (or (metrics-offset (.-o-acc loc))
-        (metrics-offset (.-acc loc))
-        0)))
+(defn offset ^long [^ZipperLocation loc]
+  (cond
+    (tree/end? loc) (metrics-offset (tree/metrics (tree/node loc)))
+    (.-o-acc loc) (metrics-offset (.-o-acc loc))
+    (.-acc loc) (metrics-offset (.-acc loc))
+    :else 0))
 
-(defn line [^ZipperLocation loc]
-  (if (tree/end? loc)
-    (metrics-line (tree/metrics (tree/node loc)))
-    (or (metrics-line (.-o-acc loc)) (metrics-line (.-acc loc)) 0)))
+(defn line ^long [^ZipperLocation loc]
+  (cond
+    (tree/end? loc) (metrics-line (tree/metrics (tree/node loc)))
+    (.-o-acc loc) (metrics-line (.-o-acc loc))
+    (.-acc loc) (metrics-line (.-acc loc))
+    :else 0))
 
 (defn node-line
   "Returns offset of the current node ignoring overriding accumulator"
-  [loc]
+  ^long [loc]
   (metrics-line (tree/acc loc)))
 
-(defn count-of [s c from to]
+(defn count-of ^long [s c ^long from ^long to]
   (loop [res 0
          from from]
-    (let [i (clojure.string/index-of s c from)]
-      (if (and (some? i) (< i to))
-        (recur (inc res) (inc i))
-        res))))
+    (if-let [i (clojure.string/index-of s c from)]
+      (if (< (long i) to)
+        (recur (inc res) (inc (long i)))
+        res)
+      res)))
 
-(defn nth-index [s c n]
+(defn nth-index [s c ^long n]
   (if (= n 0)
     0
     (loop [from 0
            n n]
-      (let [^long i (clojure.string/index-of s c from)]
+      (let [i (clojure.string/index-of s c from)]
         (if (= n 1)
           i
           (when (some? i)
-            (recur (inc i) (dec n))))))))
+            (recur (inc (long i)) (dec n))))))))
 
 (defn forget-acc [loc]
   (tree/assoc-o-acc loc nil))
@@ -210,7 +208,7 @@
         rel-offset (- o loc-offset)]
     (= rel-offset (count s))))
 
-(defn scan-to-offset [loc i]
+(defn scan-to-offset [loc ^long i]
   (let [offset-loc (tree/scan loc (by-offset i))]
     (if (tree/end? offset-loc)
       offset-loc
@@ -224,10 +222,10 @@
           next-node
           offset-loc)))))
 
-(defn retain [loc l]
+(defn retain [loc ^long l]
   (scan-to-offset loc (+ (offset loc) l)))
 
-(defn scan-to-line-start [loc n]
+(defn scan-to-line-start [loc ^long n]
   (let [nth-eol-loc (tree/scan loc (by-line n))]
     (if (or (tree/end? nth-eol-loc) (<= n 0))
       nth-eol-loc
@@ -242,7 +240,7 @@
         (-> prev-line-end
             (retain 1))))))
 
-(defn distance-to-EOL [loc]
+(defn distance-to-EOL ^long [loc]
   (let [next-loc (scan-to-line-start loc (inc (line loc)))
         len (- (offset next-loc)
                (offset loc))]
@@ -250,7 +248,7 @@
       len
       (dec len))))
 
-(defn lazy-text [loc l]
+(defn lazy-text [loc ^long l]
   (when (< 0 l)
     (if (tree/end? loc)
       (throw (ex-info "Length is out of bounds" {:l l}))
@@ -268,17 +266,14 @@
             (list s)))))))
 
 (defn lines-count [t]
-  (or (some-> t
-              (tree/metrics)
-              (metrics-line)
-              (inc))
-      0))
+  (if t
+    (inc (.-lines-count ^TextMetrics (tree/metrics t)))
+    0))
 
-(defn text-length [t]
-  (or (some-> t
-              (tree/metrics)
-              (metrics-offset))
-      0))
+(defn text-length ^long [t]
+  (if t
+    (metrics-offset (tree/metrics t))
+    0))
 
 (defn text [loc l]
   (loop [s ""
@@ -303,7 +298,7 @@
                          (tree/make-leaf (str (subs data 0 rel-offset) s (subs data rel-offset)) tree-config))))
           (retain (count s))))))
 
-(defn delete [loc l]
+(defn delete [loc ^long l]
   (if (tree/branch? loc)
     (recur (tree/down loc) l)
     (let [i (offset loc)
@@ -339,6 +334,8 @@
   (let [loc (scan-to-line-start (zipper t) i)]
     (text loc (distance-to-EOL loc))))
 
+(defn max-line-length ^long [text]
+  (.-max-line-length ^TextMetrics (tree/metrics text)))
 
 (defn leaf->text [loc]
   {:base (metrics-offset (tree/loc-acc loc))
@@ -348,14 +345,14 @@
   (tree/scan loc (by-offset-exclusive i)))
 
 #?(:clj
-    (deftype TextSequence [t ^{:volatile-mutable true} loc from to]
+    (deftype TextSequence [t ^{:volatile-mutable true} loc ^long from ^long to]
       CharSequence
       (^int length [this]
             (- to from))
       (^char charAt [this ^int index]
              (assert (< index (- to from)) "Index out of range")
-             (let [^int absolute-index (+ index from)
-                   {:keys [^int base ^String text]} (leaf->text loc)]
+       (let [absolute-index (+ index from)
+                   {:keys [^long base ^String text]} (leaf->text loc)]
                (cond
                  (< absolute-index base)
                  (let [new-loc (scan-by-offset-exclusive (zipper t) absolute-index)
@@ -368,7 +365,7 @@
 
                  (<= (+ base (count text)) absolute-index)
                  (let [new-loc (scan-by-offset-exclusive loc absolute-index)
-                       {:keys [base ^String text]} (leaf->text new-loc)]
+                       {:keys [^long base ^String text]} (leaf->text new-loc)]
                    (set! loc new-loc)
                    (.charAt text (- absolute-index base)))
 

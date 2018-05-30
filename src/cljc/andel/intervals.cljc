@@ -43,16 +43,17 @@
             nil
             nil nil nil))))
 
-(defn location-from [^ZipperLocation loc]
+(defn location-from ^long [^ZipperLocation loc]
   (let [^Data acc  (tree/loc-acc loc)
         node (tree/node loc)
         ^Data metrics (tree/metrics node)]
-    (+ (or (some-> acc (.-rightest)) 0) (.-offset ^Data metrics))))
+    (if acc
+      (+ (.-offset metrics) (.-rightest acc))
+      (.-offset metrics))))
 
-(defn location-to [^ZipperLocation loc]
+(defn location-to ^long [^ZipperLocation loc]
   (+ (location-from loc)
      (.-length ^Data (tree/metrics (tree/node loc)))))
-
 
 (def tree-config
   {:reducing-fn      reducing-fn
@@ -83,15 +84,15 @@
 
 (defn root [loc] (tree/root loc))
 
-(defn by-offset [offset]
+(defn by-offset [^long offset]
   (fn [acc m]
     (let [^Data m (reducing-fn acc m)]
       (< offset (+ (.-offset m) (.-rightest m))))))
 
-(defn offset->tree-basis [offset]
+(defn offset->tree-basis ^long [^long offset]
   (inc offset))
 
-(defn tree-basis->offset [offset]
+(defn tree-basis->offset [^long offset]
   (dec offset))
 
 (defn loc->Marker [loc]
@@ -151,7 +152,7 @@
                         (.-greedy-right? data)
                         (.-attrs data)))))
 
-(defn intersects? [from1 to1 from2 to2]
+(defn intersects? [^long from1 ^long to1 ^long from2 ^long to2]
   (let [to-fst (if (< from1 from2) to1 to2)
         from-snd   (max from1 from2)
         len1       (- to1 from1)
@@ -160,19 +161,19 @@
       false
       (< from-snd to-fst))))
 
-(defn intersects-inclusive? [from1 to1 from2 to2]
+(defn intersects-inclusive? [^long from1 ^long to1 ^long from2 ^long to2]
   (if (< from1 from2)
     (<= from2 to1)
     (<= from1 to2)))
 
-(defn by-intersect [from to]
+(defn by-intersect [^long from ^long to]
   (fn [^Data acc-metrics ^Data node-metrics]
-    (let [rightest (or (some-> acc-metrics (.-rightest)) 0)
+    (let [rightest (if acc-metrics (.-rightest acc-metrics) 0)
           offset   (.-offset node-metrics)
           length   (.-length node-metrics)
-          loc-from     (+ offset rightest)]
-      (intersects-inclusive? loc-from (+ loc-from length)
-                             from to))))
+          loc-from (+ offset rightest)
+          loc-to   (+ loc-from length)]
+      (intersects-inclusive? loc-from loc-to from to))))
 
 (defn make-leaf [offset length greedy-left? greedy-right? attrs]
   (tree/make-leaf (Data. offset length 0 nil greedy-left? greedy-right? attrs) tree-config))
@@ -184,7 +185,9 @@
 
 (defn insert-one
   ([loc from to greedy-left? greedy-right? attrs]
-   (let [r-sibling-loc    (tree/scan loc (by-offset from))
+   (let [from (long from)
+         to (long to)
+         r-sibling-loc    (tree/scan loc (by-offset from))
          ^Data r-metrics  (-> r-sibling-loc tree/node (tree/metrics))
          r-offset         (.-offset r-metrics)
          r-from           (location-from r-sibling-loc)
@@ -228,10 +231,10 @@
            (if-not (tree/leaf? (tree/node loc))
              (tree/next-leaf loc)
              loc)))
-        (update-leaf-offset #(+ % offset)))))
+        (update-leaf-offset (fn [^long x] (+ x offset))))))
 
 ;; tree -> offset -> size -> [tree acc]
-(defn collect-with-remove [itree end-offset delta pred]
+(defn collect-with-remove [itree ^long end-offset ^long delta pred]
   (loop [loc (zipper itree)
          acc (transient [])]
     (let [new-loc (tree/scan loc pred)]
@@ -240,10 +243,10 @@
         (let [from    (location-from new-loc)
               to      (location-to new-loc)]
           (if (< end-offset from)
-            [(tree/root (update-leaf-offset new-loc #(+ % delta))) (persistent! acc)]
+            [(tree/root (update-leaf-offset new-loc (fn [^long x] (+ x delta)))) (persistent! acc)]
             (recur (remove-leaf new-loc) (conj! acc (loc->tree-marker new-loc)))))))))
 
-(defn process-single-interval-typing [^Marker marker offset size]
+(defn process-single-interval-typing [^Marker marker ^long offset ^long size]
   (let [from          (.-from marker)
         to            (.-to marker)
         greedy-left?  (.-greedy-left? marker)
@@ -272,10 +275,10 @@
              greedy-right?
              (.-attrs marker))))
 
-(defn contains-offset-pred [offset]
+(defn contains-offset-pred [^long offset]
   (fn [^Data acc-metrics ^Data node-metrics]
     (let [^Data metrics     (reducing-fn acc-metrics node-metrics)
-          rightest    (or (some-> acc-metrics (.-rightest)) 0)
+          rightest    (if acc-metrics (.-rightest acc-metrics) 0)
           node-offset (.-offset node-metrics)
           length      (.-length node-metrics)
           from        (+ node-offset rightest)
@@ -288,14 +291,15 @@
   (let [offset             (offset->tree-basis offset)
         [itree' intervals] (collect-with-remove itree offset size (contains-offset-pred offset))
         intervals'         (sort-by :from (map #(process-single-interval-typing % offset size) intervals))]
+    
     (->> intervals'
          (reduce insert-one (zipper itree'))
          root)))
 
-(defn intersects-pred [i-from i-to]
+(defn intersects-pred [^long i-from ^long i-to]
   (fn [^Data acc-metrics ^Data node-metrics]
     (let [^Data metrics     (reducing-fn acc-metrics node-metrics)
-          rightest    (or (some-> acc-metrics (.-rightest)) 0)
+          rightest    (if acc-metrics (.-rightest acc-metrics) 0)
           node-offset (.-offset node-metrics)
           length      (.-length node-metrics)
           from        (+ node-offset rightest)
@@ -305,15 +309,16 @@
        (<= i-from from i-to)
        (< i-to (+ (.-offset metrics) (.-rightest metrics)))))))
 
-(defn process-single-interval-deletion [^Marker marker offset length]
+(defn- update-point ^long [^long point ^long offset ^long length]
+  (if (< offset point)
+    (max offset (- point length))
+    point))
+
+(defn process-single-interval-deletion [^Marker marker ^long offset ^long length]
   (let [from         (.-from marker)
         to           (.-to marker)
         g-l?         (.-greedy-left? marker)
-        g-r?         (.-greedy-right? marker)
-        update-point (fn [point offset length]
-                       (if (< offset point)
-                         (max offset (- point length))
-                         point))
+        g-r?         (.-greedy-right? marker)        
         from' (update-point from offset length)
         to' (update-point to offset length)]
     (when (or (< 0 (- to' from')) g-l? g-r?)
@@ -323,7 +328,7 @@
                g-r?
                (.-attrs marker)))))
 
-(defn delete-range [itree offset size]
+(defn delete-range [itree ^long offset ^long size]
   (let [offset             (offset->tree-basis offset)
         [itree' intervals] (collect-with-remove itree (+ offset size) (- size) (intersects-pred offset (+ offset size)))
         intervals'         (sort-by :from
@@ -341,16 +346,15 @@
       (fn [f init]
         (loop [loc (tree/next-leaf (zipper tree))
                acc init]
-          (if (tree/end? loc)
-            acc
-            (let [start (location-from loc)]
-              (if (or (= start 0) (= start plus-infinity)) ;; skip sentinels
-                (recur (tree/next-leaf loc) acc)
-                (recur (tree/next-leaf loc) (f acc (loc->Marker loc))))))))))
+          (let [start (location-from loc)
+                next-loc (tree/next-leaf loc)]
+            (cond (= start 0) (recur next-loc acc)
+                  (tree/end? next-loc) acc ;; skip sentinel
+                  :else (recur next-loc (f acc (loc->Marker loc)))))))))
 
 (defn tree->intervals [tree] (into [] (xquery-all tree)))
 
-(defn xquery-intervals [loc from to]
+(defn xquery-intervals [loc ^long from ^long to]
   (let [from           (offset->tree-basis from)
         to             (offset->tree-basis to)
         my-intersects? (by-intersect from to)
@@ -380,7 +384,7 @@
   (into [] (xquery-intervals loc from to)))
 
 
-(defn- gc-leafs [^ZipperLocation loc bias deleted?]
+(defn- gc-leafs [^ZipperLocation loc ^long bias deleted?]
   (let [children (tree/children loc)
         len (count children)
         ^ZipperOps ops (.-ops loc)
@@ -467,7 +471,7 @@
 
 (defprotocol Lexer
   (lexemes [this from to])
-  (update-text [this new-text offset added-len removed-len])
+  (update-text [this new-text offset length-delta])
   (token-type [this offset]))
 
 (defmulti create-lexer (constantly :idea))

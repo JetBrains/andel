@@ -204,8 +204,8 @@
                                          selection
                                          document-markers-zipper
                                          editor-markers-zipper
-                                         start-offset
-                                         end-offset
+                                         ^long start-offset
+                                         ^long end-offset
                                          text-zipper]} widgets]
   (let [document-markup (intervals/xquery-intervals document-markers-zipper start-offset end-offset)
         editor-markup (intervals/xquery-intervals editor-markers-zipper start-offset end-offset)
@@ -249,7 +249,7 @@
      nil
      document-markup)))
 
-(defn line-selection [[from to] line-start-offset line-end-offset]
+(defn line-selection [[^long from ^long to] ^long line-start-offset ^long line-end-offset]
   (cond (= from to) nil
 
         (and (< from line-start-offset) (< line-start-offset to))

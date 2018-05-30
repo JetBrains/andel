@@ -2,25 +2,22 @@
   (:require [andel.text :as text]
             [andel.tree :as tree]))
 
-(defn line-height [{:keys [height spacing] :as metrics}]
+(defn line-height ^long [{:keys [^long height ^long spacing] :as metrics}]
   (+ height spacing))
-
-(defn max-line-length [text]
-  (.max-line-length (.metrics text)))
 
 (defn pixels->grid-position
   "transforms absolute position in pixels into absolute [line col] value
    CAUTION! col might be bigger, than length of line."
-  [[x y] metrics]
+  [[^long x ^long y] metrics]
   (let [line-height (line-height metrics)
-        font-width (:width metrics)
         line (int (Math/floor (/ (double y) line-height)))
-        col (int (Math/round (/ (max 0 (double (- x (:gutter-width metrics)))) font-width)))]
+        col (int (Math/round (/ (double (max 0 (- x ^long (:gutter-width metrics))))
+                                ^long (:width metrics))))]
     {:line line :col col}))
 
 (defn grid-pos->offset
   "transforms [line col] value into absolute offset value"
-  [{:keys [line col]} text]
+  ^long [{:keys [^long line ^long col]} text]
   (let [line-loc (text/scan-to-line-start (text/zipper text) line)
         line-len (text/distance-to-EOL line-loc)
         line-offset (text/offset line-loc)
@@ -30,28 +27,28 @@
 
 (defn line->offset
   "transforms line value into absolute offset value"
-  [line text]
+  ^long [line text]
   (grid-pos->offset {:line line :col 0} text))
 
-(defn line->from-to-offsets [line text]
+(defn line->from-to-offsets [^long line text]
   (let [from (line->offset line text)
         to (dec (line->offset (inc line) text))]
     [from to]))
 
 (defn offset->line
   "transforms absolute offset into absolute line value ignoring col"
-  [offset text]
+  ^long [offset text]
   (-> text
       (text/zipper)
       (text/scan-to-offset offset)
       (text/line)))
 
-(defn line-length [line text]
+(defn line-length ^long [line text]
   (text/distance-to-EOL (text/scan-to-line-start (text/zipper text) line)))
 
 (defn offset->line-col
   "transforms absolute offset into absolute [line col] value"
-  [offset text]
+  [^long offset text]
   (let [line (offset->line offset text)
         line-offset (grid-pos->offset {:line line :col 0} text)
         col (- offset line-offset)]
@@ -67,14 +64,14 @@
 
 (defn line-col->loc
   "transforms absolute [line col] into zipper pointer"
-  [{:keys [line col]} text]
+  [{:keys [^long line ^long col]} text]
   (let [line-loc (line->loc line text)
         line-offset (text/offset line-loc)]
     (text/scan-to-offset line-loc (+ line-offset col))))
 
 (defn line-number
   "transforms zipper pointer into line"
-  [loc]
+  ^long [loc]
   (text/line loc))
 
 (defn scan-to-next-line [loc]

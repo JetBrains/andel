@@ -15,22 +15,29 @@
             [clojure.pprint :as pp])
   #?(:cljs (:require-macros [andel.tree :refer [->zipper z-merge]])))
 
-(defonce records
-  (do
-    (defrecord Node [metrics children])
-    (defrecord Leaf [metrics data])
-    (defrecord ZipperOps [branch?
-                          children
-                          make-node
-                          reducing-fn
-                          metrics-fn
-                          leaf-overflown?
-                          split-thresh
-                          split-leaf
-                          leaf-underflown?
-                          merge-leafs])
-    (defrecord ZipperLocation [ops siblings idx changed? transient? acc o-acc pzip end? root?])
-    :done))
+(defrecord Node [metrics children])
+(defrecord Leaf [metrics data])
+(defrecord ZipperOps [branch?
+                      children
+                      make-node
+                      reducing-fn
+                      metrics-fn
+                      leaf-overflown?
+                      ^long split-thresh
+                      split-leaf
+                      leaf-underflown?
+                      merge-leafs])
+
+(defrecord ZipperLocation [ops
+                           siblings
+                           ^long idx
+                           changed?
+                           transient?
+                           acc
+                           o-acc
+                           pzip
+                           end?
+                           root?])
 
 #?(:clj
    (do
@@ -166,22 +173,23 @@
      :cljs (js/Math.log2 i))
   )
 
-(defn ceil [x]
+(defn ceil ^double [^double x]
   #?(:clj (java.lang.Math/ceil x)
      :cljs (js/Math.ceil x)))
 
-(defn pow [x y]
+(defn pow ^double [^double x ^double y]
   #?(:clj (java.lang.Math/pow x y)
      :cljs (js/Math.pow x y)))
 
-(defn chunk-size [c thresh]
-  (ceil (/ c (pow 2 (ceil (log2 (/ c thresh)))))))
+
+(defn chunk-size ^long [^long c ^long thresh]
+  (long (ceil (/ (double c) (pow (double 2) (ceil (log2 (/ (double c) (double thresh)))))))))
 
 (defn split-needed? [children ^ZipperOps config]
   (let [leaf-overflown? (.-leaf-overflown? config)
         split-thresh (.-split-thresh config)]
     (fast-some (if (nodes? children)
-                 (fn [^Node node] (<= split-thresh (count (.-children node))))
+                 (fn [^Node node] (< split-thresh (count (.-children node))))
                  (fn [^Leaf leaf] (leaf-overflown? (.-data leaf))))
                children)))
 
@@ -192,21 +200,21 @@
         make-node-fn (.-make-node config)]
     (if (split-needed? children config)
       (reduce
-        (fn [result node]
-          (cond (and (node? node) (<= split-thresh (count (.-children ^Node node))))
+       (fn [result node]
+         (cond (and (node? node) (< split-thresh (count (.-children ^Node node))))
 
-                (transduce (comp (partition-all (chunk-size (count (.-children ^Node node)) split-thresh))
-                                 (map make-node-fn))
-                           al/conj!
-                           result
-                           (.-children ^Node node))
+               (transduce (comp (partition-all (chunk-size (count (.-children ^Node node)) split-thresh))
+                                (map make-node-fn))
+                          al/conj!
+                          result
+                          (.-children ^Node node))
 
-                (and (leaf? node) (leaf-overflown? (.-data ^Leaf node)))
-                (reduce al/conj! result (map #(make-leaf % config) (split-leaf (.-data ^Leaf node))))
+               (and (leaf? node) (leaf-overflown? (.-data ^Leaf node)))
+               (reduce al/conj! result (map #(make-leaf % config) (split-leaf (.-data ^Leaf node))))
 
-                :else (al/conj! result node)))
-        (al/into-array-list [])
-        children)
+               :else (al/conj! result node)))
+       (al/into-array-list [])
+       children)
       children)))
 
 (defn merge-needed? [children ^ZipperOps config]
