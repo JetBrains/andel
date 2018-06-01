@@ -15,14 +15,31 @@
                                 ^double (:width metrics))))]
     {:line line :col col}))
 
+(defn offset->geom-offset ^long [zipper offset]
+  (let [offset' (-> zipper
+                    (text/scan-to-offset offset)
+                    text/geom-offset)]
+    offset'))
+
+(defn selection-to-geom [text [from to :as selection]]
+  (let [zipper (text/zipper text)
+        zipper-from (text/scan-to-offset zipper from)
+        from' (text/geom-offset zipper-from)
+        zipper-to (text/scan-to-offset zipper-from to)
+        to' (text/geom-offset zipper-to)]
+    [from' to']))
+
 (defn grid-pos->offset
   "transforms [line col] value into absolute offset value"
   ^long [{:keys [^long line ^long col]} text]
   (let [line-loc (text/scan-to-line-start (text/zipper text) line)
         line-len (text/distance-to-EOL line-loc)
         line-offset (text/offset line-loc)
+        line-geom-offset (text/geom-offset line-loc)
+        col-loc (text/scan-to-geom-offset line-loc (+ col line-geom-offset))
+        col-offset (text/offset col-loc)
         text-length (text/text-length text)
-        offset (min text-length (max 0 (+ line-offset (min line-len col))))]
+        offset (min text-length (max 0 (min col-offset (+ line-offset line-len))))]
     offset))
 
 (defn line->offset
@@ -81,4 +98,3 @@
   (if (<= (count s1) (count s2))
     (reduce (fn [r x] (if (contains? s2 x) (reduced true) r)) false s1)
     (sets-intersect? s2 s1)))
-

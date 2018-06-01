@@ -205,6 +205,7 @@
                                          document-markers-zipper
                                          editor-markers-zipper
                                          ^long start-offset
+                                         ^long start-geom-offset
                                          ^long end-offset
                                          text-zipper]} widgets]
   (let [document-markup (intervals/xquery-intervals document-markers-zipper start-offset end-offset)
@@ -218,8 +219,18 @@
                                                    false
                                                    false
                                                    (.-attrs marker))))
+        to-geom-offsets (map
+                          (fn [^Marker marker]
+                            (intervals/->Marker (- (utils/offset->geom-offset text-zipper (+ start-offset (.-from marker)))
+                                                   start-geom-offset)
+                                                (- (utils/offset->geom-offset text-zipper (+ start-offset (.-to marker)))
+                                                   start-geom-offset)
+                                                false
+                                                false
+                                                (.-attrs marker))))
         bg-xf (comp
                (filter (fn [^Marker marker] (.-background ^Attrs (.-attrs marker))))
+               to-geom-offsets
                (shred-markup :background))
         fg-xf (comp
                (filter (fn [^Marker marker] (.-foreground ^Attrs (.-attrs marker))))
