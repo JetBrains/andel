@@ -28,25 +28,26 @@
                         (if (= 0 lines-count) length prefix-length)
                         (max max-line-length suffix-length)
                         suffix-length))
-        (if (= (.charAt str offset) \newline)
-          (recur
-           (inc offset)
-           (inc geometrics-offset)
-           (inc lines-count)
-           (if (= lines-count 0)
-             offset
-             prefix-length)
-           (max max-line-length (- offset prev-line-offset) prefix-length)
-           offset)
-          (recur
-           (inc offset)
-           (if (= (.charAt str offset) \tab)
-             (+ geometrics-offset 4)
-             (+ geometrics-offset 1))
-           lines-count
-           prefix-length
-           max-line-length
-           prev-line-offset))))))
+        (let [c (.charAt str offset)]
+          (if (= c \newline)
+            (recur
+             (inc offset)
+             (inc geometrics-offset)
+             (inc lines-count)
+             (if (= lines-count 0)
+               offset
+               prefix-length)
+             (max max-line-length (- offset prev-line-offset) prefix-length)
+             offset)
+            (recur
+             (inc offset)
+             (if (= c \tab)
+               (+ geometrics-offset 4)
+               (+ geometrics-offset 1))
+             lines-count
+             prefix-length
+             max-line-length
+             prev-line-offset)))))))
 
 (defn ^TextMetrics scan-r-f
   ([] (TextMetrics. 0 0 0 0 0 0))

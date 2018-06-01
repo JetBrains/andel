@@ -199,6 +199,18 @@
                     (rf acc (.get lexer-markers i)))
              (rf acc))))))))
 
+(defn to-geom-offsets [zipper]
+  (fn [r-f]
+    (let [loc (volatile! zipper)]
+      (fn
+        ([] (r-f))
+        ([state len class]
+         (let [loc' (text/retain @loc len)
+               len' (- (text/geom-offset loc') (text/geom-offset @loc))]
+           (vreset! loc loc')
+           (r-f state len' class)))
+        ([state] (r-f state))))))
+
 (defn ^LineInfo build-line-info [{:keys [caret
                                          lexer-state
                                          selection
@@ -219,19 +231,10 @@
                                                    false
                                                    false
                                                    (.-attrs marker))))
-        to-geom-offsets (map
-                          (fn [^Marker marker]
-                            (intervals/->Marker (- (utils/offset->geom-offset text-zipper (+ start-offset (.-from marker)))
-                                                   start-geom-offset)
-                                                (- (utils/offset->geom-offset text-zipper (+ start-offset (.-to marker)))
-                                                   start-geom-offset)
-                                                false
-                                                false
-                                                (.-attrs marker))))
         bg-xf (comp
                (filter (fn [^Marker marker] (.-background ^Attrs (.-attrs marker))))
-               to-geom-offsets
-               (shred-markup :background))
+               (shred-markup :background)
+               (to-geom-offsets text-zipper))
         fg-xf (comp
                (filter (fn [^Marker marker] (.-foreground ^Attrs (.-attrs marker))))
                (shred-markup :foreground))
