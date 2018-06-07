@@ -257,3 +257,30 @@
 (defn yank [{:keys [document editor] :as state}]
   (let [{:keys [clipboard]} editor]
     (controller/type-in state (:content clipboard))))
+
+(defn kill [{:keys [document editor] :as state} id]
+  (let [{:keys [text]} document
+        prev-was-kill? (= id (some-> editor :prev-op-ids :kill inc))
+        caret-offset (core/caret-offset state)
+        caret-line (andel.utils/offset->line caret-offset text)
+        paren-token? (paren-token? document)
+        delete-to (loop [[from to] (find-next-form text paren-token? caret-offset)]
+                    (when (some? to)
+                      (let [cur-line (andel.utils/offset->line to text)]
+                        (if (< caret-line cur-line)
+                          to
+                          (if-let [[next-from next-to :as range] (find-next-form text paren-token? (inc to))]
+                            (let [next-line (andel.utils/offset->line next-from text)]
+                              (if (< caret-line next-line)
+                                to
+                                (recur range)))
+                            to)))))]
+    (if (some? delete-to)
+      (let [kill-len (inc (- delete-to caret-offset))
+            killed-text (str (core/text-at-offset text caret-offset kill-len))]
+        (-> state
+            (assoc-in [:editor :prev-op-ids :kill] id)
+            (core/delete-at-offset caret-offset kill-len)
+            (cond-> prev-was-kill? (controller/conj-to-clipboard killed-text)
+              (not prev-was-kill?) (controller/put-to-clipboard killed-text))))
+      state)))
