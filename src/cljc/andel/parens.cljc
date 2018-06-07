@@ -3,7 +3,6 @@
             [andel.text :as text]
             [andel.core :as core]
             [andel.cursor :as cursor]
-            [andel.controller :as controller]
             [andel.intervals :as intervals])
   #?(:clj (:import [andel.cursor Cursor TransientCursor])))
 
