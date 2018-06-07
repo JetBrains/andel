@@ -106,7 +106,7 @@
           ([res ^Marker m]
            (loop [res res]
              (let [^Marker p (next-pending pendings)
-                   last-pos  @*last-pos
+                   last-pos  (long @*last-pos)
                    new-class (join-classes pendings)]
                (if (or (nil? p) (< (.-from m) (.-to p)))
                  (do
@@ -126,7 +126,7 @@
            (rf
             (loop [res res]
               (let [^Marker p (next-pending pendings)
-                    last-pos  @*last-pos
+                    last-pos  (long @*last-pos)
                     new-class (join-classes pendings)]
                 (if (some? p)
                   (do

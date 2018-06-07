@@ -2,70 +2,56 @@
   (:refer-clojure :exclude (get set assoc insert remove assoc! conj!))
   (:import [java.util ArrayList Collection]))
 
-#?(:clj (defn conj!
-           "Arity 1 added to be trancducer-friendly"
-           ([a] a)
-           ([^ArrayList a x] (.add a x) a))
-   :cljs (defn conj!
-           "Arity 1 added to be trancducer-friendly"
-           ([a] a)
-           ([a x] (.push a x) a)))
+(defn conj!
+   "Arity 1 added to be trancducer-friendly"
+   ([a] a)
+   ([^ArrayList a x] (.add a x) a))
 
-#?(:clj (defn conj-all! [^ArrayList a ^Collection xs]
-          (.addAll a xs)
-          a)
-   :cljs (defn conj-all! [a xs]
-           (reduxe conj! a xs)))
+(defn conj-all! [^ArrayList a ^Collection xs]
+   (.addAll a xs)
+   a)
 
 (defn empty-array-list [] (ArrayList.))
 
-#?(:clj (defn into-array-list [coll]
-          (if (instance? Collection coll)
-            (ArrayList. ^Collection coll)
-            (reduce conj! (ArrayList.) coll)))
-   :cljs (def into-array-list into-array))
+(defn into-array-list [coll]
+  (if (instance? Collection coll)
+    (ArrayList. ^Collection coll)
+    (reduce conj! (ArrayList.) coll)))
 
-#?(:clj (defn array-list? [x]
-         (instance? ArrayList x))
-   :cljs (def array-list? array?))
+(defn array-list? [x]
+   (instance? ArrayList x))
 
-#?(:clj (defn sublist [^ArrayList x from to]
-          (.subList x from to))
-   :cljs (defn sublist [x from to]
-           (.slice x from to)))
+(defn sublist [^ArrayList x ^long from ^long to]
+   (.subList x from to))
 
-#?(:clj (defn get [^ArrayList a i]
-          (.get a i))
-   :cljs (defn get [a i] (aget a i)))
+(defn get [^ArrayList a ^long i]
+   (.get a i))
 
-#?(:clj (defn assoc! [^ArrayList a i v]
-          (.set a i v)
-          a)
-   :cljs (defn set [a i v]
-           (aset a i v)
-           a))
+(defn assoc! [^ArrayList a ^long i v]
+  (.set a i v)
+  a)
 
 (defn ->array-list [c]
   (if (array-list? c)
     c
     (into-array-list c)))
 
-(defn assoc [^ArrayList al idx v]
+(defn assoc [^ArrayList al ^long idx v]
   (assoc! (into-array-list al) idx v))
 
-#?(:clj (defn insert! [^ArrayList al idx v]
-          (.add al idx v)))
+(defn insert! [^ArrayList al ^long idx v]
+  (.add al idx v))
 
-#?(:clj (defn remove! [^ArrayList al idx]
-          (.remove al (int idx))
-          al))
+(defn remove! [^ArrayList al ^long idx]
+  (.remove al (int idx))
+  al)
 
-(defn insert [al idx x]
+(defn insert [al ^long idx x]
   (-> (into-array-list (sublist al 0 idx))
       (conj! x)
       (conj-all! (sublist al idx (count al)))))
 
-(defn remove [al idx]
+(defn remove [al ^long idx]
   (-> (into-array-list (sublist al 0 idx))
       (conj-all! (sublist al (inc idx) (count al)))))
 
