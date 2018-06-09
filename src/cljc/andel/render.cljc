@@ -216,11 +216,10 @@
                                          selection
                                          document-markers-zipper
                                          editor-markers-zipper
-                                         ^long start-offset
-                                         ^long start-geom-offset
                                          ^long end-offset
                                          text-zipper]} widgets]
-  (let [document-markup (intervals/xquery-intervals document-markers-zipper start-offset end-offset)
+  (let [start-offset (text/offset text-zipper)
+        document-markup (intervals/xquery-intervals document-markers-zipper start-offset end-offset)
         editor-markup (intervals/xquery-intervals editor-markers-zipper start-offset end-offset)
         text (text/text text-zipper (- end-offset start-offset))
         text-length (count text)
