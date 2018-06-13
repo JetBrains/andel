@@ -3,6 +3,7 @@
             [andel.text :as text]
             [andel.cursor :as cursor]
             [andel.intervals :as intervals]
+            [andel.parens :as parens]
             [andel.core :as core]))
 
 (defn selection-length [[left right :as selection]]
@@ -87,24 +88,6 @@
     {:offset (utils/grid-pos->offset {:line to-line :col new-col} text)
      :v-col new-v-col}))
 
-(defn get-caret-line [caret text]
-  (let [{caret-offset :offset} caret
-        line (utils/offset->line caret-offset text)]
-    line))
-
-(defn get-line-ident [text line]
-  (let [loc (text/scan-to-line-start (text/zipper text) line)
-        line-text (text/text loc (text/distance-to-EOL loc))
-        trimmed (clojure.string/triml line-text)
-        ident-size (- (count line-text) (count trimmed))]
-    (subs line-text 0 ident-size)))
-
-(defn on-enter [{:keys [editor document] :as state}]
-  (let [text (:text document)
-        line (get-caret-line (:caret editor) text)
-        identation (get-line-ident text line)]
-    (type-in state (str "\n" identation))))
-
 (defn set-caret-at-grid-pos [{:keys [editor document] :as state} grid-pos selection?]
   (let [{:keys [caret selection]} editor
         {:keys [text]} document
@@ -169,11 +152,10 @@
       (set-caret-at-offset state line-start-offset selection?)
       (set-caret-at-offset state text-start-offset selection?))))
 
-(defn end [{{:keys [caret]} :editor
-            {:keys [text]} :document
+(defn end [{{:keys [text]} :document
             :as state} selection?]
-  (let [carret-line (get-caret-line caret text)]
-    (set-caret-at-line-end state (get-caret-line caret text) selection?)))
+  (let [caret-line (utils/offset->line (core/caret-offset state) text)]
+    (set-caret-at-line-end state caret-line selection?)))
 
 (def whitespace? #{\newline \space \tab})
 (def stop-symbol? (into whitespace? #{\( \) \{ \} \[ \] \; \: \> \< \. \, \\ \- \+ \* \/ \= \& \| \@ \# \^}))
