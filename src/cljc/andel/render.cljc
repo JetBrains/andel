@@ -155,16 +155,13 @@
                                                   (rf (deref s)))))
                                  rfs)))))))))
 
-(defonce records
-  (do
-    (defrecord LineInfo
-        [text
-         caret
-         selection
-         foreground
-         background
-         widgets])
-    :done))
+(defrecord LineInfo
+    [text
+     caret
+     selection
+     foreground
+     background
+     widgets])
 
 (def collect-to-array
   (fn

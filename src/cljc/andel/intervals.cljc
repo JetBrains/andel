@@ -346,11 +346,13 @@
       (fn [f init]
         (loop [loc (tree/next-leaf (zipper tree))
                acc init]
-          (let [start (location-from loc)
-                next-loc (tree/next-leaf loc)]
-            (cond (= start 0) (recur next-loc acc)
-                  (tree/end? next-loc) acc ;; skip sentinel
-                  :else (recur next-loc (f acc (loc->Marker loc)))))))))
+          (if (reduced? acc)
+            @acc
+            (let [start (location-from loc)
+                  next-loc (tree/next-leaf loc)]
+              (cond (= start 0) (recur next-loc acc)
+                    (tree/end? next-loc) acc ;; skip sentinel
+                    :else (recur next-loc (f acc (loc->Marker loc))))))))))
 
 (defn tree->intervals [tree] (into [] (xquery-all tree)))
 
@@ -367,6 +369,8 @@
         (loop [loc loc
                s   init]
           (cond
+            (reduced? s) s
+            
             (or (tree/end? loc) (< to (location-from loc)))
             s
 
@@ -471,6 +475,7 @@
 
 (defprotocol Lexer
   (lexemes [this from to])
+  (lexemes-hash [this from to])
   (update-text [this new-text offset length-delta])
   (token-type [this offset]))
 
