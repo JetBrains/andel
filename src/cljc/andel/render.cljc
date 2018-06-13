@@ -214,7 +214,8 @@
                                          document-markers-zipper
                                          editor-markers-zipper
                                          ^long end-offset
-                                         text-zipper]} widgets]
+                                         text-zipper]}
+                                 widgets]
   (let [start-offset (text/offset text-zipper)
         document-markup (intervals/xquery-intervals document-markers-zipper start-offset end-offset)
         editor-markup (intervals/xquery-intervals editor-markers-zipper start-offset end-offset)
