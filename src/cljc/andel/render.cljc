@@ -9,26 +9,13 @@
   (:import [andel.intervals Marker Attrs]
            #?(:clj  [java.util PriorityQueue Comparator])))
 
-(defn infinity? [x] (keyword? x))
+
 
 (defn style [m]
   (reduce-kv
    (fn [s k v]
      (str s (name k) ":" (if (keyword? v) (name v) v) ";"))
    nil m))
-
-(defn selection-style [[from to] {:keys [width] :as metrics}]
-  {:background-color theme/selection
-   :height           (str  (utils/line-height metrics) "px")
-   :position         :absolute
-   :top              "0px"
-   :left             (if (infinity? to)
-                       0
-                       (str (* from width) "px"))
-   :margin-left      (when (infinity? to) (str (* from width) "px"))
-   :width            (if (infinity? to)
-                       "100%"
-                       (str (* (- to from) width) "px"))})
 
 (defn active-line-style [metrics]
   {:height           (str (utils/line-height metrics) "px")
@@ -37,13 +24,6 @@
    :position         :absolute
    :left             0
    :top              0})
-
-(defn caret-style [col {:keys [width] :as metrics}]
-  {:width            "1px"
-   :top              0
-   :position         :absolute
-   :left             (str (* col width) "px")
-   :height           (str (utils/line-height metrics) "px")})
 
 #?(:cljs
    (defn make-pendings []

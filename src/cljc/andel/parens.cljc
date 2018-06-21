@@ -103,12 +103,12 @@
                                                       (inc p-from)
                                                       false
                                                       false
-                                                      (intervals/->Attrs from-id "highlight-paren" "" :background))
+                                                      (intervals/->Attrs from-id "onair-frontend-editor--highlight-paren" "" :background))
                                   (intervals/->Marker p-to
                                                       (inc p-to)
                                                       false
                                                       false
-                                                      (intervals/->Attrs to-id "highlight-paren" "" :background))])
+                                                      (intervals/->Attrs to-id "onair-frontend-editor--highlight-paren" "" :background))])
             (assoc-in [:editor :paren-ids] (i/int-set [from-id to-id]))))
       state)))
 
