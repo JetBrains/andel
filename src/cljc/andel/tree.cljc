@@ -448,11 +448,12 @@
     loc
     (let [reducing-fn (.-reducing-fn ^ZipperOps (.-ops loc))
           siblings (.-siblings loc)
+          siblings-count (al/length siblings)
           next-loc (if (root? loc)
                      loc
                      (loop [idx (.-idx loc)
                             a (or (.-acc loc) (reducing-fn))]
-                       (when (< idx (count siblings))
+                       (when (< idx siblings-count)
                          (let [n (al/get siblings idx)
                                m (metrics n)]
                            (if (pred a m)

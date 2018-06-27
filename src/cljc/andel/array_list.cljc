@@ -31,6 +31,8 @@
   (.set a i v)
   a)
 
+(defn length [^ArrayList a] (.size a))
+
 (defn ->array-list [c]
   (if (array-list? c)
     c
