@@ -11,43 +11,47 @@
                         ^long max-line-length
                         ^long newline-suffix-length])
 
+(defn metrics-to [^String str ^long to metric]
+  (loop [offset 0
+         geometrics-offset 0
+         lines-count 0
+         prefix-length 0
+         max-line-length 0
+         prev-line-offset 0]
+    (if (if (= metric :offset)
+          (= offset to)
+          (<= to geometrics-offset))
+      (let [suffix-length (cond-> (- offset prev-line-offset)
+                            (not= 0 lines-count) dec)]
+        (TextMetrics. offset
+                      geometrics-offset
+                      lines-count
+                      (if (= 0 lines-count) offset prefix-length)
+                      (max max-line-length suffix-length)
+                      suffix-length))
+      (let [c (.charAt str offset)]
+        (if (= c \newline)
+          (recur
+            (inc offset)
+            (inc geometrics-offset)
+            (inc lines-count)
+            (if (= lines-count 0)
+              offset
+              prefix-length)
+            (max max-line-length (- offset prev-line-offset) prefix-length)
+            offset)
+          (recur
+            (inc offset)
+            (if (= c \tab)
+              (+ geometrics-offset 4)
+              (+ geometrics-offset 1))
+            lines-count
+            prefix-length
+            max-line-length
+            prev-line-offset))))))
+
 (defn metrics [^String str]
-  (let [length (.length str)]
-    (loop [offset 0
-           geometrics-offset 0
-           lines-count 0
-           prefix-length 0
-           max-line-length 0
-           prev-line-offset 0]
-      (if (= offset length)
-        (let [suffix-length (cond-> (- offset prev-line-offset)
-                              (not= 0 lines-count) dec)]
-          (TextMetrics. length
-                        geometrics-offset
-                        lines-count
-                        (if (= 0 lines-count) length prefix-length)
-                        (max max-line-length suffix-length)
-                        suffix-length))
-        (let [c (.charAt str offset)]
-          (if (= c \newline)
-            (recur
-             (inc offset)
-             (inc geometrics-offset)
-             (inc lines-count)
-             (if (= lines-count 0)
-               offset
-               prefix-length)
-             (max max-line-length (- offset prev-line-offset) prefix-length)
-             offset)
-            (recur
-             (inc offset)
-             (if (= c \tab)
-               (+ geometrics-offset 4)
-               (+ geometrics-offset 1))
-             lines-count
-             prefix-length
-             max-line-length
-             prev-line-offset)))))))
+  (metrics-to str (.length str) :offset))
 
 (defn ^TextMetrics scan-r-f
   ([] (TextMetrics. 0 0 0 0 0 0))
@@ -240,37 +244,23 @@
     (if (tree/end? offset-loc)
       offset-loc
       (let [o (node-offset offset-loc)
-            s (subs (.-data ^Leaf (tree/node offset-loc)) 0 (- i o))
+            s (.-data ^Leaf (tree/node offset-loc))
             a (.-acc ^ZipperLocation offset-loc)
-            offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics s)))
+            offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s (- i o) :offset)))
             next-node (tree/next-leaf offset-loc)]
         (if (and (at-the-right-border? offset-loc)
                  (not (tree/end? next-node)))
           next-node
           offset-loc)))))
 
-(defn geom-subs [^String s ^long to]
-  (let [length (.length s)
-        chars (transient [])]
-    (loop [i 0
-           g 0]
-      (if (= i length)
-        (apply str (persistent! chars))
-        (let [c (.charAt s i)
-              delta (if (= c \tab) 4 1)]
-          (if (< to (+ g delta))
-            (apply str (persistent! chars))
-            (do (conj! chars c)
-              (recur (inc i) (+ g delta)))))))))
-
 (defn scan-to-geom-offset [loc ^long i]
   (let [offset-loc (tree/scan loc (by-geom-offset i))]
     (if (tree/end? offset-loc)
       offset-loc
       (let [o (node-geom-offset offset-loc)
-            s (geom-subs (.-data ^Leaf (tree/node offset-loc)) (- i o))
+            s (.-data ^Leaf (tree/node offset-loc))
             a (.-acc ^ZipperLocation offset-loc)
-            offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics s)))
+            offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s (- i o) :geom)))
             next-node (tree/next-leaf offset-loc)]
         (if (and (at-the-right-border? offset-loc)
                  (not (tree/end? next-node)))
@@ -289,9 +279,9 @@
             eol-idx (nth-index (.-data ^Leaf (tree/node nth-eol-loc))
                                \newline
                                (- n l))
-            s (subs (.-data ^Leaf (tree/node nth-eol-loc)) 0 eol-idx)
+            s (.-data ^Leaf (tree/node nth-eol-loc))
             a (.-acc ^ZipperLocation nth-eol-loc)
-            prev-line-end (tree/assoc-o-acc nth-eol-loc (scan-r-f a (metrics s)))]
+            prev-line-end (tree/assoc-o-acc nth-eol-loc (scan-r-f a (metrics-to s eol-idx :offset)))]
         (-> prev-line-end
             (retain 1))))))
 
