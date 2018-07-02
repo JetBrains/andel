@@ -203,11 +203,11 @@
         text-length (count text)
         to-relative-offsets (map
                              (fn [^Marker marker]
-                               (intervals/->Marker (min text-length (max 0 (- (.-from marker) start-offset)))
-                                                   (min text-length (max 0 (- (.-to marker) start-offset)))
-                                                   false
-                                                   false
-                                                   (.-attrs marker))))
+                               (intervals/>Marker :from (min text-length (max 0 (- (.-from marker) start-offset)))
+                                                   :to (min text-length (max 0 (- (.-to marker) start-offset)))
+                                                   :greedy-left? false
+                                                   :greedy-right? false
+                                                   :attrs (.-attrs marker))))
         bg-xf (comp
                (filter (fn [^Marker marker] (.-background ^Attrs (.-attrs marker))))
                (shred-markup :background)

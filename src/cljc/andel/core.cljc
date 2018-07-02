@@ -16,10 +16,10 @@
 (s/def :andel/widgets (s/map-of nat-int? map?))
 
 
-(defn make-editor-state [language color-scheme]
+(defn make-editor-state [language]
   {:document {:text (text/make-text "")
               :markup (intervals/make-interval-tree)
-              :lexer (andel.intervals/create-lexer language "" color-scheme)}
+              :lexer (andel.intervals/create-lexer language "")}
    :editor {:caret {:offset 0 :v-col 0}
             :selection [0 0]
             :widgets {}

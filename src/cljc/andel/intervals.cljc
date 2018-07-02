@@ -12,6 +12,12 @@
 
 (defrecord Attrs [^long id background foreground layer])
 
+(defmacro >Attrs [& {:keys [id background foreground layer]}]
+  `(Attrs. ~id
+           ~background
+           ~foreground
+           ~layer))
+
 (defrecord Data
   [^long offset
    ^long length
@@ -29,6 +35,12 @@
    greedy-right?
    attrs])
 
+(defmacro >Marker [& {:keys [from to greedy-left? greedy-right? attrs]}]
+  `(Marker. ~from
+            ~to
+            ~greedy-left?
+            ~greedy-right?
+            ~attrs))
 
 (defn reducing-fn
   ([] nil)

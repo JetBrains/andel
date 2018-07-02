@@ -99,16 +99,20 @@
       (let [from-id (marker-id-generator)
             to-id   (marker-id-generator)]
         (-> state
-            (core/insert-markers [(intervals/->Marker p-from
-                                                      (inc p-from)
-                                                      false
-                                                      false
-                                                      (intervals/->Attrs from-id "onair-frontend-editor--highlight-paren" "" :background))
-                                  (intervals/->Marker p-to
-                                                      (inc p-to)
-                                                      false
-                                                      false
-                                                      (intervals/->Attrs to-id "onair-frontend-editor--highlight-paren" "" :background))])
+            (core/insert-markers [(intervals/>Marker :from p-from
+                                                     :to (inc p-from)
+                                                     :greedy-right? false
+                                                     :greedy-left? false
+                                                     :attrs (intervals/>Attrs :id from-id
+                                                                              :background "onair-frontend-editor--highlight-paren"
+                                                                              :foreground ""))
+                                  (intervals/>Marker :from p-to
+                                                     :to (inc p-to)
+                                                     :greedy-right? false
+                                                     :greedy-left? false
+                                                     :attrs (intervals/>Attrs :id to-id
+                                                                              :background "onair-frontend-editor--highlight-paren"
+                                                                              :foreground ""))])
             (assoc-in [:editor :paren-ids] (i/int-set [from-id to-id]))))
       state)))
 
