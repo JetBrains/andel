@@ -10,12 +10,13 @@
      :clj Integer/MAX_VALUE #_100000 #_Double/POSITIVE_INFINITY))
 
 
-(defrecord Attrs [^long id background foreground layer])
+(defrecord Attrs [^long id background foreground attrs-keys layer])
 
-(defmacro >Attrs [& {:keys [id background foreground layer]}]
+(defmacro >Attrs [& {:keys [id background foreground attrs-keys layer]}]
   `(Attrs. ~id
            ~background
            ~foreground
+           ~attrs-keys
            ~layer))
 
 (defrecord Data
@@ -191,8 +192,8 @@
   (tree/make-leaf (Data. offset length 0 nil greedy-left? greedy-right? attrs) tree-config))
 
 (defn make-interval-tree []
-  (let [sentinels [(tree/make-leaf (Data. 0 0 0 nil false false (Attrs. -1 nil nil nil)) tree-config)
-                   (tree/make-leaf (Data. plus-infinity 0 0 nil false false (Attrs. -2 nil nil nil)) tree-config)]]
+  (let [sentinels [(tree/make-leaf (Data. 0 0 0 nil false false (>Attrs :id -1)) tree-config)
+                   (tree/make-leaf (Data. plus-infinity 0 0 nil false false (>Attrs :id -2)) tree-config)]]
     (tree/make-node sentinels tree-config)))
 
 (defn insert-one
@@ -458,32 +459,6 @@
 
         :else (let [[loc' bias] (gc-leafs (tree/up loc) bias deleted-markers)]
                 (recur loc' (long bias))))))
-
-(comment
-  (def markers [(Marker. 0 1 false false (Attrs. 1 nil nil nil))
-                (Marker. 1 3 false false (Attrs. 2 nil nil nil))
-                (Marker. 2 4 false false (Attrs. 3 nil nil nil))
-                (Marker. 2 3 false false (Attrs. 7 nil nil nil))
-                (Marker. 3 5 false false (Attrs. 4 nil nil nil))
-                (Marker. 4 6 false false (Attrs. 5 nil nil nil))
-                (Marker. 5 7 false false (Attrs. 6 nil nil nil))
-                (Marker. 5 7 false false (Attrs. 8 nil nil nil))
-                (Marker. 5 7 false false (Attrs. 9 nil nil nil))
-                (Marker. 5 7 false false (Attrs. 10 nil nil nil))
-                (Marker. 5 7 false false (Attrs. 11 nil nil nil))
-                (Marker. 5 7 false false (Attrs. 12 nil nil nil))
-                (Marker. 5 7 false false (Attrs. 13 nil nil nil))])
-
-  (def tt (-> (make-interval-tree)
-              (add-markers markers)
-              (gc (i/int-set [1 2 3 4 5 6 7 8 9 10 11 12 13]))))
-
-  (def remains (query-intervals (zipper tt) 0 8))
-
-  {:deleted #{1 4}
-   :before markers
-   :after remains}
-  )
 
 (defprotocol Lexer
   (lexemes [this from to])

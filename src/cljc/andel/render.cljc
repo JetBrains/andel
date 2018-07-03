@@ -204,10 +204,10 @@
         to-relative-offsets (map
                              (fn [^Marker marker]
                                (intervals/>Marker :from (min text-length (max 0 (- (.-from marker) start-offset)))
-                                                   :to (min text-length (max 0 (- (.-to marker) start-offset)))
-                                                   :greedy-left? false
-                                                   :greedy-right? false
-                                                   :attrs (.-attrs marker))))
+                                                  :to (min text-length (max 0 (- (.-to marker) start-offset)))
+                                                  :greedy-left? false
+                                                  :greedy-right? false
+                                                  :attrs (.-attrs marker))))
         bg-xf (comp
                (filter (fn [^Marker marker] (.-background ^Attrs (.-attrs marker))))
                (shred-markup :background)
