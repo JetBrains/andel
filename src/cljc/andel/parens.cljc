@@ -104,15 +104,13 @@
                                                      :greedy-right? false
                                                      :greedy-left? false
                                                      :attrs (intervals/>Attrs :id from-id
-                                                                              :background "onair-frontend-editor--highlight-paren"
-                                                                              :foreground ""))
+                                                                              :attrs-keys ["MATCHED_BRACE_ATTRIBUTES"]))
                                   (intervals/>Marker :from p-to
                                                      :to (inc p-to)
                                                      :greedy-right? false
                                                      :greedy-left? false
                                                      :attrs (intervals/>Attrs :id to-id
-                                                                              :background "onair-frontend-editor--highlight-paren"
-                                                                              :foreground ""))])
+                                                                              :attrs-keys ["MATCHED_BRACE_ATTRIBUTES"]))])
             (assoc-in [:editor :paren-ids] (i/int-set [from-id to-id]))))
       state)))
 
