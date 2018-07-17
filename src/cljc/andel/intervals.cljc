@@ -10,12 +10,10 @@
      :clj Integer/MAX_VALUE #_100000 #_Double/POSITIVE_INFINITY))
 
 
-(defrecord Attrs [^long id background foreground attrs-keys layer])
+(defrecord Attrs [^long id attrs-keys ^long layer])
 
-(defmacro >Attrs [& {:keys [id background foreground attrs-keys layer]}]
+(defmacro >Attrs [& {:keys [id attrs-keys layer]}]
   `(Attrs. ~id
-           ~background
-           ~foreground
            ~attrs-keys
            ~layer))
 
@@ -25,15 +23,15 @@
    ^long rightest
 
    marker-ids
-   greedy-left?
-   greedy-right?
+   ^boolean greedy-left?
+   ^boolean greedy-right?
    attrs])
 
 (defrecord Marker
   [^long from
    ^long to
-   greedy-left?
-   greedy-right?
+   ^boolean greedy-left?
+   ^boolean greedy-right?
    attrs])
 
 (defmacro >Marker [& {:keys [from to greedy-left? greedy-right? attrs]}]
