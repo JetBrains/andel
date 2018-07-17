@@ -12,7 +12,7 @@
 
 (defrecord Attrs [^long id attrs-keys ^long layer])
 
-(defmacro >Attrs [& {:keys [id attrs-keys layer]}]
+(defmacro >Attrs [& {:keys [id attrs-keys layer] :or {layer 0}}]
   `(Attrs. ~id
            ~attrs-keys
            ~layer))
@@ -26,6 +26,9 @@
    ^boolean greedy-left?
    ^boolean greedy-right?
    attrs])
+
+(defmacro >Data [& {:keys [offset length rightest marker-ids greedy-left? greedy-right? attrs]}]
+  `(Data. ~offset ~length ~rightest ~marker-ids ~greedy-left? ~greedy-right? ~attrs))
 
 (defrecord Marker
   [^long from
@@ -48,11 +51,13 @@
      (nil? left) right
      (nil? right) left
      :else
-     (Data. (.-offset left)
-            (max (.-length left) (+ (.-rightest left) (.-offset right) (.-length right)))
-            (+ (.-rightest left) (.-offset right) (.-rightest right))
-            nil
-            nil nil nil))))
+     (>Data :offset (.-offset left)
+            :length (max (.-length left) (+ (.-rightest left) (.-offset right) (.-length right)))
+            :rightest (+ (.-rightest left) (.-offset right) (.-rightest right))
+            :marker-ids nil
+            :greedy-left? false
+            :greedy-right? false
+            :attrs nil))))
 
 (defn location-from ^long [^ZipperLocation loc]
   (let [^Data acc  (tree/loc-acc loc)
@@ -71,7 +76,13 @@
    :metrics-fn       identity
    :make-node (fn [children]
                 (if (empty? children)
-                  (tree/->Node (Data. 0 0 0 (i/int-set) nil nil nil) [])
+                  (tree/->Node (>Data :offset 0
+                                      :length 0
+                                      :rightest 0
+                                      :marker-ids nil
+                                      :greedy-left? false
+                                      :greedy-right? false
+                                      :attrs nil) [])
                   (let [marker-ids (if (tree/node? (first children))
                                      (transduce (map (fn [c] (.-marker-ids ^Data (tree/metrics c))))
                                                 (completing i/union)
@@ -81,10 +92,13 @@
                                            (map (fn [^Leaf c] (.-id ^Attrs (.-attrs ^Data (.-data c)))))
                                            children))
                         ^Data data (reduce (fn [acc x] (reducing-fn acc (tree/metrics x))) (reducing-fn) children)]
-                    (tree/->Node (Data. (.-offset data)
-                                        (.-length data)
-                                        (.-rightest data)
-                                        marker-ids nil nil nil)
+                    (tree/->Node (>Data :offset (.-offset data)
+                                        :length (.-length data)
+                                        :rightest (.-rightest data)
+                                        :marker-ids marker-ids
+                                        :greedy-left? false
+                                        :greedy-right? false
+                                        :attrs nil)
                                  children))))
    :leaf-overflown?  (constantly false)
    :split-thresh     32
@@ -144,24 +158,24 @@
 (defn update-leaf-offset [loc f]
   (update-leaf loc
                (fn [^Data data]
-                 (Data. (f (.-offset data))
-                        (.-length data)
-                        (.-rightest data)
-                        (.-marker-ids data)
-                        (.-greedy-left? data)
-                        (.-greedy-right? data)
-                        (.-attrs data)))))
+                 (>Data :offset (f (.-offset data))
+                        :length (.-length data)
+                        :rightest (.-rightest data)
+                        :marker-ids (.-marker-ids data)
+                        :greedy-left? (.-greedy-left? data)
+                        :greedy-right? (.-greedy-right? data)
+                        :attrs (.-attrs data)))))
 
 (defn update-leaf-length [loc f]
   (update-leaf loc
                (fn [^Data data]
-                 (Data. (.-offset data)
-                        (f (.-length data))
-                        (.-rightest data)
-                        (.-marker-ids data)
-                        (.-greedy-left? data)
-                        (.-greedy-right? data)
-                        (.-attrs data)))))
+                 (>Data :offset (.-offset data)
+                        :length (f (.-length data))
+                        :rightest (.-rightest data)
+                        :marker-ids (.-marker-ids data)
+                        :greedy-left? (.-greedy-left? data)
+                        :greedy-right? (.-greedy-right? data)
+                        :attrs (.-attrs data)))))
 
 (defn intersects? [^long from1 ^long to1 ^long from2 ^long to2]
   (let [to-fst (if (< from1 from2) to1 to2)
@@ -187,11 +201,29 @@
       (intersects-inclusive? loc-from loc-to from to))))
 
 (defn make-leaf [offset length greedy-left? greedy-right? attrs]
-  (tree/make-leaf (Data. offset length 0 nil greedy-left? greedy-right? attrs) tree-config))
+  (tree/make-leaf (>Data :offset offset
+                         :length length
+                         :rightest 0
+                         :marker-ids nil
+                         :greedy-left? greedy-left?
+                         :greedy-right? greedy-right?
+                         :attrs attrs) tree-config))
 
 (defn make-interval-tree []
-  (let [sentinels [(tree/make-leaf (Data. 0 0 0 nil false false (>Attrs :id -1)) tree-config)
-                   (tree/make-leaf (Data. plus-infinity 0 0 nil false false (>Attrs :id -2)) tree-config)]]
+  (let [sentinels [(tree/make-leaf (>Data :offset 0
+                                          :length 0
+                                          :rightest 0
+                                          :marker-ids nil
+                                          :greedy-left? false
+                                          :greedy-right? false
+                                          :attrs (>Attrs :id -1)) tree-config)
+                   (tree/make-leaf (>Data :offset plus-infinity
+                                          :length 0
+                                          :rightest 0
+                                          :marker-ids nil
+                                          :greedy-left? false
+                                          :greedy-right? false
+                                          :attrs (>Attrs :id -2)) tree-config)]]
     (tree/make-node sentinels tree-config)))
 
 (defn insert-one
@@ -288,7 +320,7 @@
 
 (defn contains-offset-pred [^long offset]
   (fn [^Data acc-metrics ^Data node-metrics]
-    (let [^Data metrics     (reducing-fn acc-metrics node-metrics)
+    (let [^Data metrics (reducing-fn acc-metrics node-metrics)
           rightest    (if acc-metrics (.-rightest acc-metrics) 0)
           node-offset (.-offset node-metrics)
           length      (.-length node-metrics)
@@ -423,13 +455,13 @@
                    (inc i)
                    true
                    (al/conj! res (tree/make-leaf
-                                  (Data. (+ (.-offset data) bias)
-                                         (.-length data)
-                                         (.-rightest data)
-                                         (.-marker-ids data)
-                                         (.-greedy-left? data)
-                                         (.-greedy-right? data)
-                                         (.-attrs data))
+                                  (>Data :offset (+ (.-offset data) bias)
+                                         :length (.-length data)
+                                         :rightest (.-rightest data)
+                                         :marker-ids (.-marker-ids data)
+                                         :greedy-left? (.-greedy-left? data)
+                                         :greedy-right? (.-greedy-right? data)
+                                         :attrs (.-attrs data))
                                   ops)))
 
             :else
