@@ -13,10 +13,11 @@
 
 (defn empty-array-list [] (ArrayList.))
 
-(defn into-array-list [coll]
-  (if (instance? Collection coll)
-    (ArrayList. ^Collection coll)
-    (reduce conj! (ArrayList.) coll)))
+(defn into-array-list
+  ([coll]
+   (into-array-list identity coll))
+  ([xf coll]
+   (transduce xf conj! (ArrayList.) coll)))
 
 (defn array-list? [x]
    (instance? ArrayList x))
