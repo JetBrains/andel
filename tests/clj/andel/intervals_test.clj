@@ -23,12 +23,12 @@
                     g-r? (g/vector g/boolean cnt)
                     ids (g/return (vec (range cnt)))]
               (sort-intervals (mapv (fn [a b g-l? g-r? id]
-                                      (map->Marker {:from (min a b)
-                                                    :to (max a b)
-                                                    :greedy-left? g-l?
-                                                    :greedy-right? g-r?
-                                                    :attrs (map->Attrs {:id id})})) a b g-l? g-r? ids))))
-          ))
+                                      (>Marker :from (min a b)
+                                               :to (max a b)
+                                               :greedy-left? g-l?
+                                               :greedy-right? g-r?
+                                               :attrs (>Attrs :id id)))
+                                    a b g-l? g-r? ids))))))
 
 (deftest bulk-insertion
   (is (:result (tc/quick-check 1000
@@ -94,8 +94,7 @@
                    (= (set (reduce play-type-in bulk qs))
                       (set (tree->intervals
                             (reduce (fn [t [o s]] (type-in t o s))
-                                    (bulk->tree bulk) qs))))))))
-  )
+                                    (bulk->tree bulk) qs)))))))))
 
 (defn drop-dead-markers [markers]
   (remove (fn [marker]
