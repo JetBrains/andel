@@ -16,22 +16,21 @@
     {:line line :col col}))
 
 (defn offset->geom-offset ^long [zipper ^long offset]
-  (let [offset' (-> zipper
-                    (text/scan-to-offset offset)
-                    text/geom-offset)]
-    offset'))
+  (-> zipper
+      (text/scan-to-offset offset)
+      (text/geom-offset)))
 
-(defn selection-to-geom [line-zipper [^long from ^long to :as selection]]
+(defn selection-to-geom [line-zipper [from to :as selection]]
   (let [line-start (text/offset line-zipper)
         line-start-geom (text/geom-offset line-zipper)
-        from-abs (+ from line-start)
-        to-abs (when (not= to :infinity) (+ to line-start))
+        from-abs (+ ^long from line-start)
         zipper-from (text/scan-to-offset line-zipper from-abs)
         from-geom (- (text/geom-offset zipper-from) line-start-geom)
-        to-geom (when (not= to :infinity)
-                      (- (text/geom-offset (text/scan-to-offset zipper-from to-abs))
-                         line-start-geom))]
-    [from-geom (or to-geom :infinity)]))
+        to-geom (if (= to :infinity)
+                  :infitiy
+                  (- (text/geom-offset (text/scan-to-offset zipper-from (+ ^long to line-start)))
+                     line-start-geom))]
+    [from-geom to-geom]))
 
 (defn grid-pos->offset
   "transforms [line col] value into absolute offset value"

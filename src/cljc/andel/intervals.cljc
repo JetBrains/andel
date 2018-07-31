@@ -25,7 +25,7 @@
    marker-ids
    ^boolean greedy-left?
    ^boolean greedy-right?
-   attrs])
+   ^Attrs attrs])
 
 (defmacro >Data [& {:keys [offset length rightest marker-ids greedy-left? greedy-right? attrs]}]
   `(Data. ~offset ~length ~rightest ~marker-ids ~greedy-left? ~greedy-right? ~attrs))
@@ -35,7 +35,7 @@
    ^long to
    ^boolean greedy-left?
    ^boolean greedy-right?
-   attrs])
+   ^Attrs attrs])
 
 (defmacro >Marker [& {:keys [from to greedy-left? greedy-right? attrs]}]
   `(Marker. ~from

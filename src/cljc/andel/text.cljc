@@ -379,6 +379,14 @@
   (let [loc (scan-to-line-start (zipper t) i)]
     (text loc (distance-to-EOL loc))))
 
+(defn text-range [tree from to]
+  (assert (<= from to))
+  (if (= from to)
+    ""
+    (-> (zipper tree)
+        (scan-to-offset from)
+        (text (- to from)))))
+
 (defn max-line-length ^long [text]
   (.-max-line-length ^TextMetrics (tree/metrics text)))
 
@@ -389,38 +397,36 @@
 (defn scan-by-offset-exclusive [loc i]
   (tree/scan loc (by-offset-exclusive i)))
 
-#?(:clj
-    (deftype TextSequence [t ^{:volatile-mutable true} loc ^long from ^long to]
-      CharSequence
-      (^int length [this]
-            (- to from))
-      (^char charAt [this ^int index]
-             (assert (< index (- to from)) "Index out of range")
-       (let [absolute-index (+ index from)
-                   {:keys [^long base ^String text]} (leaf->text loc)]
-               (cond
-                 (< absolute-index base)
-                 (let [new-loc (scan-by-offset-exclusive (zipper t) absolute-index)
-                       {:keys [^int base ^String text]} (leaf->text new-loc)]
-                   (set! loc new-loc)
-                   (.charAt text (- absolute-index base)))
+(deftype TextSequence [t ^{:volatile-mutable true} loc ^long from ^long to]
+  CharSequence
+  (^int length [this]
+               (- to from))
+  (^char charAt [this ^int index]
+                (assert (< index (- to from)) "Index out of range")
+                (let [absolute-index (+ index from)
+                      {:keys [^long base ^String text]} (leaf->text loc)]
+                  (cond
+                    (< absolute-index base)
+                    (let [new-loc (scan-by-offset-exclusive (zipper t) absolute-index)
+                          {:keys [^int base ^String text]} (leaf->text new-loc)]
+                      (set! loc new-loc)
+                      (.charAt text (- absolute-index base)))
 
-                 (< absolute-index (+ base (count text)))
-                 (.charAt text (- absolute-index base))
+                    (< absolute-index (+ base (count text)))
+                    (.charAt text (- absolute-index base))
 
-                 (<= (+ base (count text)) absolute-index)
-                 (let [new-loc (scan-by-offset-exclusive loc absolute-index)
-                       {:keys [^long base ^String text]} (leaf->text new-loc)]
-                   (set! loc new-loc)
-                   (.charAt text (- absolute-index base)))
+                    (<= (+ base (count text)) absolute-index)
+                    (let [new-loc (scan-by-offset-exclusive loc absolute-index)
+                          {:keys [^long base ^String text]} (leaf->text new-loc)]
+                      (set! loc new-loc)
+                      (.charAt text (- absolute-index base)))
 
-                 :else (assert "No way"))))
-      (^CharSequence subSequence [this ^int from' ^int to']
-                     (assert (<= from' (- to from)) "From index out of range")
-                     (assert (<= to' (- to from)) "To index out of range")
-                     (TextSequence. t (scan-by-offset-exclusive (zipper t) 0) (+ from from') (+ from to')))
-      (^String toString [this] (text (scan-to-offset (zipper t) from) (- to from)))))
+                    :else (assert "No way"))))
+  (^CharSequence subSequence [this ^int from' ^int to']
+                             (assert (<= from' (- to from)) "From index out of range")
+                             (assert (<= to' (- to from)) "To index out of range")
+                             (TextSequence. t (scan-by-offset-exclusive (zipper t) 0) (+ from from') (+ from to')))
+  (^String toString [this] (text (scan-to-offset (zipper t) from) (- to from))))
 
-#?(:clj
-    (defn ^CharSequence text->char-seq [t]
-      (TextSequence. t (scan-by-offset-exclusive (zipper t) 0) 0 (text-length t))))
+(defn ^CharSequence text->char-seq [t]
+  (TextSequence. t (scan-by-offset-exclusive (zipper t) 0) 0 (text-length t)))
