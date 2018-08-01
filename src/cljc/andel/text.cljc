@@ -380,7 +380,7 @@
     (text loc (distance-to-EOL loc))))
 
 (defn text-range [tree from to]
-  (assert (<= from to))
+  (assert (<= from to) {:from from :to to})
   (if (= from to)
     ""
     (-> (zipper tree)
