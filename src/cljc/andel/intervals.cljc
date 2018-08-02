@@ -490,6 +490,24 @@
         :else (let [[loc' bias] (gc-leafs (tree/up loc) bias deleted-markers)]
                 (recur loc' (long bias))))))
 
+(defn by-id [^long id]
+  (fn [acc m]
+    (or (contains? (.-marker-ids m) id)
+        (= id (some-> m .-attrs .-id)))))
+
+(defn- find-marker-loc [itree id]
+  (tree/scan (zipper itree) (by-id id)))
+
+(defn find-marker [itree id]
+  (-> (find-marker-loc itree id)
+      loc->Marker))
+
+(defn update-marker-attrs [itree id f]
+  (-> itree
+      (find-marker-loc id)
+      (update-leaf #(update % :attrs f))
+      tree/root))
+
 (defprotocol Lexer
   (lexemes [this from to])
   (lexemes-hash [this from to])
