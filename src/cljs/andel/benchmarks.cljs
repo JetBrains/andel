@@ -41,7 +41,7 @@
 (defn bench-insert [markup]
   (bench "TREE INSERT"
          (fn []
-           (-> (intervals/make-interval-tree)
+           (-> intervals/empty-tree
                (intervals/add-markers markup)))
          :count 1))
 
@@ -52,7 +52,7 @@
    :count 100))
 
 (defn bench-query [markup]
-  (let [itree (-> (intervals/make-interval-tree)
+  (let [itree (-> intervals/empty-tree
                   (intervals/add-markers markup))]
     (bench "TREE QUERY"
            (fn []
@@ -73,7 +73,7 @@
          :count 1000))
 
 (defn bench-type-in [markup]
-  (let [itree (-> (intervals/make-interval-tree)
+  (let [itree (-> intervals/empty-tree
                   (intervals/add-markers markup))]
     (bench "TYPE-IN BENCH"
            (fn []
@@ -83,7 +83,7 @@
            :count 1000)))
 
 (defn bench-delete [markup]
-  (let [itree (-> (intervals/make-interval-tree)
+  (let [itree (-> intervals/empty-tree
                   (intervals/add-markers markup))]
     (bench "DELETE BENCH"
            (fn []
@@ -93,7 +93,7 @@
            :count 1)))
 
 (defn bench-editing [markup]
-  (let [itree (-> (intervals/make-interval-tree)
+  (let [itree (-> intervals/empty-tree
                   (intervals/add-markers markup))]
     (bench "TREE EDITING"
            (fn []

@@ -209,23 +209,6 @@
                          :greedy-right? greedy-right?
                          :attrs attrs) tree-config))
 
-(defn make-interval-tree []
-  (let [sentinels [(tree/make-leaf (>Data :offset 0
-                                          :length 0
-                                          :rightest 0
-                                          :marker-ids nil
-                                          :greedy-left? false
-                                          :greedy-right? false
-                                          :attrs (>Attrs :id -1)) tree-config)
-                   (tree/make-leaf (>Data :offset plus-infinity
-                                          :length 0
-                                          :rightest 0
-                                          :marker-ids nil
-                                          :greedy-left? false
-                                          :greedy-right? false
-                                          :attrs (>Attrs :id -2)) tree-config)]]
-    (tree/make-node sentinels tree-config)))
-
 (defn insert-one
   ([loc from to greedy-left? greedy-right? attrs]
    (let [from (long from)
@@ -517,4 +500,18 @@
 (defmulti create-lexer (constantly :idea))
 (defmethod create-lexer :default [& args] nil)
 
-(defonce empty-tree (make-interval-tree))
+(defonce empty-tree (let [sentinels [(tree/make-leaf (>Data :offset 0
+                                                            :length 0
+                                                            :rightest 0
+                                                            :marker-ids nil
+                                                            :greedy-left? false
+                                                            :greedy-right? false
+                                                            :attrs (>Attrs :id -1)) tree-config)
+                                     (tree/make-leaf (>Data :offset plus-infinity
+                                                            :length 0
+                                                            :rightest 0
+                                                            :marker-ids nil
+                                                            :greedy-left? false
+                                                            :greedy-right? false
+                                                            :attrs (>Attrs :id -2)) tree-config)]]
+                      (tree/make-node sentinels tree-config)))

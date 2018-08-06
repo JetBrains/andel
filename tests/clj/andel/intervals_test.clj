@@ -33,7 +33,7 @@
 (deftest bulk-insertion
   (is (:result (tc/quick-check 1000
                                (prop/for-all [bulk intervals-bulk-gen]
-                                             (let [itree (add-markers (make-interval-tree) bulk)]
+                                             (let [itree (add-markers empty-tree bulk)]
                                                (= (tree->intervals itree)
                                                   bulk)))))))
 
@@ -41,7 +41,7 @@
   (is (:result (tc/quick-check 100
                                (prop/for-all [bulk-bulk (g/vector intervals-bulk-gen)]
                                              (let [itree (reduce add-markers
-                                                                 (make-interval-tree)
+                                                                 empty-tree
                                                                  bulk-bulk)]
                                                (= (set (mapcat vec bulk-bulk))
                                                   (set (tree->intervals itree)))))))))
@@ -81,7 +81,7 @@
                                                    (g/large-integer* {:min 0 :max 10000}))))))))
 
 (defn bulk->tree [bulk]
-  (-> (make-interval-tree)
+  (-> empty-tree
       (add-markers bulk)))
 
 
