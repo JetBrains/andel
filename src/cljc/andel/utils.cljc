@@ -101,3 +101,6 @@
   (if (<= (count s1) (count s2))
     (reduce (fn [r x] (if (contains? s2 x) (reduced true) r)) false s1)
     (sets-intersect? s2 s1)))
+
+(defn offset->line-start [offset text]
+  (line->offset (offset->line offset text) text))
