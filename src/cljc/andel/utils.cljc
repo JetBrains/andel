@@ -32,9 +32,7 @@
                      line-start-geom))]
     [from-geom to-geom]))
 
-(defn grid-pos->offset
-  "transforms [line col] value into absolute offset value"
-  ^long [{:keys [^long line ^long col]} text]
+(defn grid-pos->offset ^long [{:keys [^long line ^long col]} text]
   (let [line-loc (text/scan-to-line-start (text/zipper text) line)
         line-len (text/distance-to-EOL line-loc)
         line-offset (text/offset line-loc)
@@ -45,9 +43,7 @@
         offset (min text-length (max 0 (min col-offset (+ line-offset line-len))))]
     offset))
 
-(defn line->offset
-  "transforms line value into absolute offset value"
-  ^long [line text]
+(defn line->offset ^long [line text]
   (grid-pos->offset {:line line :col 0} text))
 
 (defn line->from-to-offsets [^long line text]
@@ -55,9 +51,7 @@
         to (dec (line->offset (inc line) text))]
     [from to]))
 
-(defn offset->line
-  "transforms absolute offset into absolute line value ignoring col"
-  ^long [offset text]
+(defn offset->line ^long [offset text]
   (-> text
       (text/zipper)
       (text/scan-to-offset offset)
@@ -66,32 +60,33 @@
 (defn line-length ^long [line text]
   (text/distance-to-EOL (text/scan-to-line-start (text/zipper text) line)))
 
-(defn offset->line-col
-  "transforms absolute offset into absolute [line col] value"
-  [^long offset text]
+(defn offset->line-col [^long offset text]
   (let [line (offset->line offset text)
         line-offset (grid-pos->offset {:line line :col 0} text)
         col (- offset line-offset)]
     {:line line
      :col col}))
 
-(defn line->loc
-  "transforms absolute line into zipper pointer"
-  [line text]
+(defn offset->geom-line-col [^long offset text]
+  (let [offset-loc (text/scan-to-offset (text/zipper text) offset)
+        offset-geom (text/geom-offset offset-loc)
+        line (text/line offset-loc)
+        line-loc (text/scan-to-line-start (text/zipper text) line)
+        line-geom (text/geom-offset line-loc)]
+    {:line line
+     :col (- offset-geom line-geom)}))
+
+(defn line->loc [line text]
    (-> text
        (text/zipper)
        (text/scan-to-line-start line)))
 
-(defn line-col->loc
-  "transforms absolute [line col] into zipper pointer"
-  [{:keys [^long line ^long col]} text]
+(defn line-col->loc [{:keys [^long line ^long col]} text]
   (let [line-loc (line->loc line text)
         line-offset (text/offset line-loc)]
     (text/scan-to-offset line-loc (+ line-offset col))))
 
-(defn line-number
-  "transforms zipper pointer into line"
-  ^long [loc]
+(defn line-number ^long [loc]
   (text/line loc))
 
 (defn scan-to-next-line [loc]
