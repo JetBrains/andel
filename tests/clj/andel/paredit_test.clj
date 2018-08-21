@@ -93,13 +93,22 @@
   (andel-test backspace "()|" "|")
   (andel-test backspace "(|)" "|")
   (andel-test backspace "(aaa)|" "(aaa|)")
-  (andel-test backspace "(aaa|)" "(aa|)"))
+  (andel-test backspace "(aaa|)" "(aa|)")
+  (andel-test backspace "|\"\"" "|\"\"")
+  (andel-test backspace "\"\"|" "|")
+  (andel-test backspace "\"|\"" "|")
+  (andel-test backspace "\" \"|" "\" |")
+  (andel-test backspace "\"| \"" "| \"")
+  (andel-test backspace "\\\"\"|" "\\\"|"))
 
 (deftest delete-test
   (andel-test delete "|" "|")
   (andel-test delete "|a" "|")
   (andel-test delete "|()" "|")
-  (andel-test delete "|(aaa)" "|(aaa)")
-  (andel-test delete "(|aaa)" "(|aa)"))
+  (andel-test delete "|(aaa)" "(|aaa)")
+  (andel-test delete "(|aaa)" "(|aa)")
+  ;; delete and backspace have common aux function
+  ;; so no need for many string literal tests here
+  (andel-test delete "\"\"|" "\"\"|"))
 
 (comment (run-tests))
