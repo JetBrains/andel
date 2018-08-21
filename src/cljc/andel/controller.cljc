@@ -166,22 +166,41 @@
         caret-offset (core/caret-offset state)]
     (if (< caret-offset text-len)
       (let [cursor (cursor/make-cursor text caret-offset)
-            word-begin-cursor (first (cursor/move-while cursor stop-symbol? :forward))
-            [word-end-cursor end-of-text?] (cursor/move-while word-begin-cursor (complement stop-symbol?) :forward)
-            delta (cursor/distance cursor word-end-cursor)]
-        (cond-> delta end-of-text? inc))
+            char (cursor/get-char cursor)]
+        (cond
+          (whitespace? char)
+          (let [[word-begin-cursor end-of-text?] (cursor/move-while cursor whitespace? :forward)
+                delta (cursor/distance cursor word-begin-cursor)]
+            (cond-> delta end-of-text? inc))
+          (stop-symbol? char)
+          1
+          :else
+          (let [[word-begin-cursor end1?] (cursor/move-while cursor whitespace? :forward)
+                [word-end-cursor end2?] (cursor/move-while word-begin-cursor (complement stop-symbol?) :forward)
+                [next-word-start-cursor end3?] (cursor/move-while word-end-cursor whitespace? :forward)
+                delta (cursor/distance cursor next-word-start-cursor)]
+            (cond-> delta (or end1? end2? end3?) inc))))
       0)))
 
 (defn prev-word-delta [state]
   (let [text (-> state :document :text)
-        text-len (text/text-length text)
         caret-offset (core/caret-offset state)]
     (if (< 0 caret-offset)
       (let [cursor (cursor/make-cursor text (dec caret-offset))
-            word-end-cursor (first (cursor/move-while cursor stop-symbol? :backward))
-            [word-begin-cursor start-of-text?] (cursor/move-while word-end-cursor (complement stop-symbol?) :backward)
-            delta (- (cursor/distance cursor word-begin-cursor))]
-        (cond-> delta start-of-text? dec))
+            char (cursor/get-char cursor)]
+        (cond
+          (whitespace? char)
+          (let [[word-end-cursor end-of-text?] (cursor/move-while cursor whitespace? :backward)
+                delta (- (cursor/distance cursor word-end-cursor))]
+            (cond-> delta end-of-text? dec))
+          (stop-symbol? char)
+          -1
+          :else
+          (let [[word-end-cursor end1?] (cursor/move-while cursor whitespace? :backward)
+                [word-begin-cursor end2?] (cursor/move-while word-end-cursor (complement stop-symbol?) :backward)
+                [next-word-end-cursor end3?] (cursor/move-while word-begin-cursor whitespace? :backward)
+                delta (- (cursor/distance cursor next-word-end-cursor))]
+            (cond-> delta (or end1? end2? end3?) dec))))
       0)))
 
 (defn delete-word-forward [state]
