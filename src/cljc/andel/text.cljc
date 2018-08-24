@@ -397,6 +397,24 @@
 (defn scan-by-offset-exclusive [loc i]
   (tree/scan loc (by-offset-exclusive i)))
 
+(defn skip-to-line-end [loc]
+  (let [offset (offset loc)
+        delta (distance-to-EOL loc)]
+    (scan-to-offset loc (+ offset delta))))
+
+(defn skip-columns [loc cols]
+  (let [geom (geom-offset loc)
+        cur-line (line loc)
+        loc' (scan-to-geom-offset loc (+ geom cols))]
+    (if (= cur-line (line loc'))
+      loc'
+      (skip-to-line-end loc))))
+
+(defn column ^long [^ZipperLocation loc]
+  (let [cur-line (line loc)
+        start-loc (scan-to-line-start (zipper (root loc)) cur-line)]
+    (- (geom-offset loc) (geom-offset start-loc))))
+
 (deftype TextSequence [t ^{:volatile-mutable true} loc ^long from ^long to]
   CharSequence
   (^int length [this]
