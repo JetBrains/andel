@@ -182,6 +182,11 @@
       (controller/type-in "{}")
       (controller/move-caret :left false)))
 
+(defn open-string [state]
+  (-> state
+      (controller/type-in "\"\"")
+      (controller/move-caret :left false)))
+
 (defn navigate-next-form [{:keys [document] :as state} selection?]
   (let [{:keys [text]} document
         paren-token? (paren-token? document)
