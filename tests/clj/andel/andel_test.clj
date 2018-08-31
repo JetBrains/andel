@@ -47,15 +47,10 @@
   (andel-test type-in "|" "|" "")
   (andel-test type-in "|" "42|" "42"))
 
-(deftest set-caret-at-line-begining-test
-  (andel-test set-caret-at-line-begining "|" "|" 0 false)
-  (andel-test set-caret-at-line-begining "aaa|" "|aaa" 0 false)
-  (andel-test set-caret-at-line-begining "|aaa\nbbb" "aaa\n|bbb" 1 false))
-
-(deftest set-caret-at-line-end-test
-  (andel-test set-caret-at-line-end "|" "|" 0 false)
-  (andel-test set-caret-at-line-end "|aaa" "aaa|" 0 false)
-  (andel-test set-caret-at-line-end "|aaa\nbbb" "aaa\nbbb|" 1 false))
+(deftest end-test
+  (andel-test end "|" "|" false)
+  (andel-test end "|aaa" "aaa|" false)
+  (andel-test end "|aaa\nbbb" "aaa|\nbbb" false))
 
 (deftest set-caret-at-offset-test
   (andel-test set-caret-at-offset "|" "|" 0 false)

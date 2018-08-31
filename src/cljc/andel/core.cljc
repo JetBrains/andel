@@ -15,7 +15,6 @@
                                      :andel/lexer]))
 (s/def :andel/widgets (s/map-of nat-int? map?))
 
-
 (defn make-editor-state [language]
   {:document {:text (text/make-text "")
               :markup intervals/empty-tree
@@ -24,10 +23,6 @@
             :selection [0 0]
             :widgets {}
             :clipboard {:content nil :timestamp 0}}
-   :viewport {:pos [0 0]
-              :view-size [0 0]
-              :metrics nil
-              :focused? false}
    :sibling-editors {}})
 
 (defn- edit-at-offset
@@ -45,53 +40,7 @@
 (defn selection [state]
   (get-in state [:editor :selection]))
 
-(defn caret->offset [{:keys [offset] :as caret}]
-  offset)
-
-(defn count-lines-in-view [viewport metrics]
-  (let [{:keys [view-size]} viewport
-        [_ view-size] view-size]
-    (Math/round (/ (float view-size) (utils/line-height metrics)))))
-
-;; zero based first and last full visible lines
-(defn get-view-in-lines [viewport metrics]
-  (let [{:keys [pos view-size]} viewport
-        [_ pos-px] pos
-        [_ height] view-size
-        first-full-line (Math/ceil (/ (float pos-px) (utils/line-height metrics)))
-        last-full-line (dec (Math/floor (/ (float (+ pos-px height)) (utils/line-height metrics))))]
-    [first-full-line last-full-line]))
-
-;; make line first in viewport
-(defn set-view-to-first-line [state line metrics]
-  (update state :viewport (fn [vp]
-                            (-> vp
-                                (dissoc :reason)
-                                (assoc-in [:pos 1] (* line (utils/line-height metrics)))))))
-
-;; make line last in viewport
-(defn set-view-to-last-line [{:keys [viewport] :as state} line metrics]
-  (let [[_ pos-px] (:pos viewport)
-        [_ height] (:view-size viewport)]
-    (update state :viewport (fn [vp]
-                              (-> vp
-                                  (dissoc :reason)
-                                  (assoc-in [:pos 1] (- (* (inc line) (utils/line-height metrics)) height)))))))
-
-(defn move-view-if-needed [{:keys [document editor viewport] :as state}]
-  state
-  #_(let [{:keys [text]} document
-        {:keys [caret]} editor
-        {:keys [metrics]} viewport
-        caret-l (utils/offset->line (caret->offset caret) text)
-        [from-l to-l] (get-view-in-lines viewport metrics)]
-    (cond (< caret-l from-l)
-          (set-view-to-first-line state caret-l metrics)
-
-          (< to-l caret-l)
-          (set-view-to-last-line state caret-l metrics)
-
-          :else state)))
+(defn caret->offset [{:keys [offset] :as caret}] offset)
 
 (defn insert-markers [state markers]
   (update-in state [:editor :markup] intervals/add-markers markers))
@@ -102,8 +51,7 @@
 (defn set-selection [state selection caret-offset]
   (-> state
       (assoc-in [:editor :selection] selection)
-      (assoc-in [:editor :caret :offset] caret-offset)
-      (move-view-if-needed)))
+      (assoc-in [:editor :caret :offset] caret-offset)))
 
 (defn insert-at-editor [editor {:keys [offset length]}]
   (let [[sel-from sel-to] (get editor :selection)

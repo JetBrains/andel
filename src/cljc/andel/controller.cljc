@@ -10,22 +10,23 @@
   (assert (<= left right) (str "Wrong selection positioning: " selection))
   (- right left))
 
-(defn drop-virtual-position [caret text]
-  (let [{:keys [line col]} (utils/offset->line-col (:offset caret) text)]
-    (assoc caret :v-col col)))
+(defn drop-virtual-position
+  ([state]
+   (update-in state [:editor :caret] drop-virtual-position (get-in state [:document :text])))
+  ([caret text]
+   (let [{:keys [line col]} (utils/offset->line-col (:offset caret) text)]
+     (assoc caret :v-col col))))
 
 (defn backspace [state]
   (let [selection (core/selection state)
         sel-from  (nth selection 0)
         sel-length (selection-length selection)
         caret-offset (core/caret-offset state)]
-    (as-> state st
-          (cond
-            (< 0 sel-length) (core/delete-at-offset st sel-from sel-length)
-            (= 0 caret-offset) st
-            :else (core/delete-at-offset st (dec caret-offset) 1))
-          (core/move-view-if-needed st)
-          (update-in st [:editor :caret] drop-virtual-position (get-in st [:document :text])))))
+    (-> (cond
+          (< 0 sel-length) (core/delete-at-offset state sel-from sel-length)
+          (= 0 caret-offset) state
+          :else (core/delete-at-offset state (dec caret-offset) 1))
+        drop-virtual-position)))
 
 (defn delete [state]
   (let [selection (core/selection state)
@@ -33,24 +34,21 @@
         sel-len (selection-length selection)
         sel-from (nth selection 0)
         caret-offset (core/caret-offset state)]
-    (as-> state st
-          (cond
-            (< 0 sel-len) (core/delete-at-offset st sel-from sel-len)
-            (<= text-len caret-offset) st
-            :else (core/delete-at-offset st caret-offset 1))
-          (core/move-view-if-needed st)
-          (update-in st [:editor :caret] drop-virtual-position (get-in st [:document :text])))))
+    (-> (cond
+          (< 0 sel-len) (core/delete-at-offset state sel-from sel-len)
+          (<= text-len caret-offset) state
+          :else (core/delete-at-offset state caret-offset 1))
+        drop-virtual-position)))
 
-(defn type-in [{:keys [editor] :as state} str]
-  (let [str-len (count str)
+(defn type-in [{:keys [editor] :as state} insertion]
+  (let [str-len (count insertion)
         selection (core/selection state)
         selection-len (selection-length selection)]
     (-> state
         (cond-> (< 0 selection-len)
                 (core/delete-at-offset (first selection) selection-len))
-        (as-> <> (core/insert-at-offset <> (core/caret-offset <>) str))
-        (core/move-view-if-needed)
-        (as-> st (update-in st [:editor :caret] drop-virtual-position (get-in st [:document :text]))))))
+        (as-> state (core/insert-at-offset state (core/caret-offset state) insertion))
+        drop-virtual-position)))
 
 (defn update-selection [[from to :as selection] old-caret new-caret]
   (let [caret-offset  (core/caret->offset old-caret)
@@ -83,7 +81,7 @@
         {:keys [line col]} (utils/offset->line-col carret-offset text)
         to-line (+ line delta-line)
         line-len (utils/line-length to-line text)
-        new-v-col (if (some? v-col)  (max v-col col) col)
+        new-v-col (if (some? v-col) (max v-col col) col)
         new-col (min line-len new-v-col)]
     {:offset (utils/grid-pos->offset {:line to-line :col new-col} text)
      :v-col new-v-col}))
@@ -92,9 +90,7 @@
   (let [{:keys [caret selection]} editor
         {:keys [text]} document
         caret-offset' (utils/grid-pos->offset grid-pos text)
-        caret'   (-> {:offset caret-offset'
-                      :v-col 0}
-                     (drop-virtual-position text))
+        caret' {:offset caret-offset' :v-col 0}
         selection' (if selection?
                      (update-selection selection caret caret')
                      [caret-offset' caret-offset'])]
@@ -102,43 +98,23 @@
         (assoc-in [:editor :caret] caret')
         (assoc-in [:editor :selection] selection'))))
 
-(defn set-caret-at-line-begining
-  [state line selection?]
-  (set-caret-at-grid-pos state {:line line :col 0} selection?))
-
-(defn set-caret-at-line-end
-  [state line selection?]
-  (set-caret-at-grid-pos state {:line line :col #?(:cljs js/Number.POSITIVE_INFINITY
-                                                   :clj Integer/MAX_VALUE)} selection?))
-
-(defn pg-move [{:keys [document viewport] :as state} dir selection?]
-  (let [{:keys [text]} document
-        {:keys [metrics]} viewport
-        view-size-in-lines (core/count-lines-in-view viewport metrics)
-        sign (case dir :up - :down +)]
-    (-> state
-        (update-in [:editor :caret] translate-caret-verticaly text (sign view-size-in-lines))
-        (core/move-view-if-needed))))
-
 (defn set-caret-at-offset [{:keys [document] :as state} caret-offset' selection?]
   (let [text (:text document)
-        caret (-> state :editor :caret)]
+        caret (-> state :editor :caret)
+        caret' {:offset caret-offset' :v-col 0}]
     (-> state
         (cond-> selection?
-          (update-in [:editor :selection] update-selection caret {:offset caret-offset' :v-col 0}))
+          (update-in [:editor :selection] update-selection caret caret'))
         (cond-> (not selection?)
           (assoc-in [:editor :selection] [caret-offset' caret-offset']))
-        (assoc-in [:editor :caret :offset] caret-offset')
-        (assoc-in [:editor :caret :v-col] (:col (utils/offset->line-col caret-offset' text))))))
+        (assoc-in [:editor :caret] caret'))))
 
 (defn- move-cursor-at-line-start [cursor]
   (let [[cursor' end?] (cursor/move-while cursor #(not= % \newline) :backward)]
-    (if end?
-      cursor'
-      (cursor/next cursor'))))
+    (if end? cursor' (cursor/next cursor'))))
 
-(defn home [{:keys [document] :as state} selection?]
-  (let [{:keys [text lexer]} document
+(defn home [state selection?]
+  (let [text (-> state :document :text)
         caret-offset (max 0 (dec (core/caret-offset state)))
         cursor (cursor/make-cursor text caret-offset)
         line-start-cursor (move-cursor-at-line-start cursor)
@@ -152,10 +128,10 @@
       (set-caret-at-offset state line-start-offset selection?)
       (set-caret-at-offset state text-start-offset selection?))))
 
-(defn end [{{:keys [text]} :document
-            :as state} selection?]
-  (let [caret-line (utils/offset->line (core/caret-offset state) text)]
-    (set-caret-at-line-end state caret-line selection?)))
+(defn end [state selection?]
+  (let [text (-> state :document :text)
+        caret-line (utils/offset->line (core/caret-offset state) text)]
+    (set-caret-at-grid-pos state {:line caret-line :col Integer/MAX_VALUE} selection?)))
 
 (def whitespace? #{\newline \space \tab})
 (def stop-symbol? (into whitespace? #{\( \) \{ \} \[ \] \; \: \> \< \. \, \\ \- \+ \* \/ \= \& \| \@ \# \^}))
@@ -216,39 +192,37 @@
 (defn move-caret [{:keys [document editor] :as state} dir selection?]
   (let [{:keys [caret selection]} editor
         text (:text document)
-        caret'     (case dir
-                     :left  (-> caret
-                                (translate-caret text -1)
-                                (drop-virtual-position text))
-                     :right (-> caret
-                                (translate-caret text 1)
-                                (drop-virtual-position text))
-                     :word-forward (-> caret
-                                       (translate-caret text (next-word-delta state))
-                                       (drop-virtual-position text))
-                     :word-backward (-> caret
-                                        (translate-caret text (prev-word-delta state))
-                                        (drop-virtual-position text))
-                     :up    (translate-caret-verticaly caret text -1)
-                     :down  (translate-caret-verticaly caret text 1))
+        caret' (case dir
+                 :left  (-> caret
+                            (translate-caret text -1)
+                            (drop-virtual-position text))
+                 :right (-> caret
+                            (translate-caret text 1)
+                            (drop-virtual-position text))
+                 :word-forward (-> caret
+                                   (translate-caret text (next-word-delta state))
+                                   (drop-virtual-position text))
+                 :word-backward (-> caret
+                                    (translate-caret text (prev-word-delta state))
+                                    (drop-virtual-position text))
+                 :up    (translate-caret-verticaly caret text -1)
+                 :down  (translate-caret-verticaly caret text 1))
         caret-offset' (core/caret->offset caret')
         selection' (if selection?
                      (update-selection selection caret caret')
                      [caret-offset' caret-offset'])]
     (-> state
         (assoc-in [:editor :caret] caret')
-        (assoc-in [:editor :selection] selection')
-        (core/move-view-if-needed))))
+        (assoc-in [:editor :selection] selection'))))
 
-(defn put-to-clipboard [state content]
-  (-> state
-      (assoc-in [:editor :clipboard :content] content)
-      (update-in [:editor :clipboard :timestamp] inc)))
+(defn update-clipboard [f]
+  (fn [state content]
+    (-> state
+      (update-in [:editor :clipboard :content] f content)
+      (update-in [:editor :clipboard :timestamp] inc))))
 
-(defn conj-to-clipboard [state content]
-  (-> state
-      (update-in [:editor :clipboard :content] str content)
-      (update-in [:editor :clipboard :timestamp] inc)))
+(def put-to-clipboard (update-clipboard (fn [_ v] v)))
+(def conj-to-clipboard (update-clipboard str))
 
 (defn select-all [state]
   (let [text (get-in state [:document :text])
@@ -274,22 +248,3 @@
       (< 0 sel-len)
       (-> (core/delete-at-offset sel-from sel-len)
           (put-to-clipboard selected-text)))))
-
-(defn scroll [{:keys [document viewport] :as state} {:keys [x y width height]}]
-  (let [;screen-height (get-in viewport [:view-size 1])
-        line-height (utils/line-height (:metrics viewport))
-        lines-count (text/lines-count (:text document))
-        document-height (* lines-count line-height)
-        ;allowed-y-offset (max 0 (- document-height (/ screen-height 2)))
-        abs (fn [x] (max x (- x)))]
-    (update state :viewport merge {:pos [x y]
-                                   :reason :scroll
-                                   :view-size [width height]})
-    #_(update-in state [:viewport :pos]
-               (fn [[x y]]
-                 (if (< (abs dx) (abs dy))
-                   [x (min allowed-y-offset (max 0 (+ y dy)))]
-                   [(max 0 (+ x dx)) y])))))
-
-(defn resize [state width height]
-  (assoc-in state [:viewport :view-size] [width height]))
