@@ -188,6 +188,8 @@
            (r-f state len' class)))
         ([state] (r-f state))))))
 
+
+
 (defn ^LineInfo build-line-info [{:keys [caret
                                          lexer-state
                                          selection
