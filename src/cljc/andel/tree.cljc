@@ -102,29 +102,34 @@
     (.-metrics ^Node x)
     (.-metrics ^Leaf x)))
 
-(defn zipper [tree {:keys [reducing-fn
-                           metrics-fn
-                           leaf-overflown?
-                           split-thresh
-                           split-leaf
-                           leaf-underflown?
-                           merge-leafs] :as config}]
-  (let [make-node-fn (:make-node config)]
-    (assert (some? tree))
-    (->zipper {:ops (ZipperOps. node?
-                                (fn [^Node x] (.-children x))
-                                (fn [children] (make-node-fn (al/->array-list children)))
-                                reducing-fn
-                                metrics-fn
-                                leaf-overflown?
-                                split-thresh
-                                split-leaf
-                                leaf-underflown?
-                                merge-leafs)
-               :siblings (al/into-array-list [tree])
-               :transient? false
-               :idx 0
-               :root? true})))
+(def ->zipper-ops
+  (memoize
+   (fn [{:keys [reducing-fn
+                metrics-fn
+                leaf-overflown?
+                split-thresh
+                split-leaf
+                leaf-underflown?
+                merge-leafs
+                make-node] :as config}]
+     (ZipperOps. node?
+                 (fn [^Node x] (.-children x))
+                 (fn [children] (make-node (al/->array-list children)))
+                 reducing-fn
+                 metrics-fn
+                 leaf-overflown?
+                 split-thresh
+                 split-leaf
+                 leaf-underflown?
+                 merge-leafs))))
+
+(defn zipper [tree config]
+  (assert (some? tree))
+  (->zipper {:ops (->zipper-ops config)
+             :siblings (al/into-array-list [tree])
+             :transient? false
+             :idx 0
+             :root? true}))
 
 (defn transient [loc]
   (z-merge loc {:transient true}))
