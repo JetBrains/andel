@@ -479,17 +479,21 @@
         (= id (some-> m .-attrs .-id)))))
 
 (defn- find-marker-loc [itree id]
-  (tree/scan (zipper itree) (by-id id)))
+  (let [loc (tree/scan (zipper itree) (by-id id))]
+    (when-not (or (tree/end? loc)
+                  (tree/node? loc))
+      loc)))
 
 (defn find-marker [itree id]
-  (-> (find-marker-loc itree id)
-      loc->Marker))
+  (some-> (find-marker-loc itree id)
+          loc->Marker))
 
 (defn update-marker-attrs [itree id f]
-  (-> itree
-      (find-marker-loc id)
-      (update-leaf #(update % :attrs f))
-      tree/root))
+  (or (some-> itree
+              (find-marker-loc id)
+              (update-leaf #(update % :attrs f))
+              tree/root)
+      itree))
 
 (defprotocol Lexer
   (lexemes [this from to])
