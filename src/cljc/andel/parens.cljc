@@ -134,8 +134,8 @@
           form-start-offset (+ offset (cursor/distance cursor form-start-cursor))
           form-start-char   (cursor/get-char form-start-cursor)]
       (cond (paren-symbol? form-start-char) (find-matching-paren-forward text paren-token? form-start-offset)
-            (= \" form-start-char) [form-start-char (+ form-start-offset 1 (cursor/count-matching (cursor/next form-start-cursor) #(not= \" %) :forward))]
-            (= \; form-start-char) [form-start-char (+ form-start-offset 1 (cursor/count-matching (cursor/next form-start-cursor) #(not= \newline %) :forward))]
+            (= \" form-start-char) [form-start-offset (+ form-start-offset 1 (cursor/count-matching (cursor/next form-start-cursor) #(not= \" %) :forward))]
+            (= \; form-start-char) [form-start-offset (+ form-start-offset 1 (cursor/count-matching (cursor/next form-start-cursor) #(not= \newline %) :forward))]
             :else (let [[form-end-cursor end?] (cursor/move-while form-start-cursor not-whitespace-or-paren? :forward)
                         form-end-offset (if end?
                                           (cursor/offset form-end-cursor)
