@@ -43,7 +43,8 @@
   (assoc! (into-array-list al) idx v))
 
 (defn insert! [^ArrayList al ^long idx v]
-  (.add al idx v))
+  (.add al idx v)
+  al)
 
 (defn remove! [^ArrayList al ^long idx]
   (.remove al (int idx))

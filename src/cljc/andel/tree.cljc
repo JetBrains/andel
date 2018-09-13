@@ -132,7 +132,7 @@
              :root? true}))
 
 (defn transient [loc]
-  (z-merge loc {:transient true}))
+  (z-merge loc {:transient? true}))
 
 (defn mark-changed [loc]
   (z-merge loc {:changed? true}))
