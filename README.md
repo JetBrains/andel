@@ -16,7 +16,7 @@ Current stage of the project is work in progress. It's not ready to use by any m
 
 Dev recompiles and reloads live. Prod is slow to build but resulting code is much faster.
 
-## The goals of the project and priciples behind it are:
+## The goals of the project and principles behind it are:
 * Create a universal code editor component, which could be embedded in a web application
 * Great performance
 * No limitation for the document size (it should be able to fetch only parts of a document into memory as needed)
