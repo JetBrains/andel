@@ -15,10 +15,9 @@
                                      :andel/lexer]))
 (s/def :andel/widgets (s/map-of nat-int? map?))
 
-(defn make-editor-state [language]
+(defn make-editor-state []
   {:document {:text (text/make-text "")
-              :markup intervals/empty-tree
-              :lexer (andel.intervals/create-lexer language "")}
+              :markup intervals/empty-tree}
    :editor {:caret {:offset 0 :v-col 0}
             :selection [0 0]
             :widgets {}

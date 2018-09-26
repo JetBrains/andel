@@ -20,7 +20,7 @@
                      text 0 (text/text-length text)))}))
 
 (defn mock-andel-state [{:keys [caret-offset test-string]}]
-  (-> (core/make-editor-state nil)
+  (-> (core/make-editor-state)
       (assoc-in [:document :text] (text/make-text test-string))
       (assoc-in [:editor :caret :offset] caret-offset)))
 
