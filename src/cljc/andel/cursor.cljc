@@ -256,8 +256,7 @@
 ;;;;;;;;;;;;;;;;;;;;;; util ;;;;;;;;;;;;;;;;;;;;;
 
 (defn set-to-offset! [^TransientCursor t-cursor offset]
-  (cond (= offset (.getOffset t-cursor)) (do (prn "eq")
-                                           t-cursor)
+  (cond (= offset (.getOffset t-cursor)) t-cursor
         (< offset (.getOffset t-cursor)) (while (< offset (.getOffset t-cursor))
                                            (prev! t-cursor))
         (> offset (.getOffset t-cursor)) (while (> offset (.getOffset t-cursor))
