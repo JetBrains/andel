@@ -484,9 +484,19 @@
                   (tree/node? loc))
       loc)))
 
-(defn find-marker [itree id]
+(defn find-marker-by-id [itree id]
   (some-> (find-marker-loc itree id)
           loc->Marker))
+
+(defn find-marker-linear [pred itree from-offset]
+  (loop [loc (tree/scan (zipper itree)
+                        (by-offset from-offset))]
+    (when-not (tree/end? loc)
+      (assert (tree/leaf? (andel.tree/node loc)))
+      (let [marker (loc->Marker loc)]
+        (if (pred marker)
+          marker
+          (recur (tree/next-leaf loc)))))))
 
 (defn update-marker-attrs [itree id f]
   (or (some-> itree
