@@ -488,15 +488,75 @@
   (some-> (find-marker-loc itree id)
           loc->Marker))
 
-(defn find-marker-linear [pred itree from-offset]
+(defn find-marker-linear-forward [pred itree from-offset]
   (loop [loc (tree/scan (zipper itree)
                         (by-offset from-offset))]
     (when-not (tree/end? loc)
       (assert (tree/leaf? (andel.tree/node loc)))
       (let [marker (loc->Marker loc)]
-        (if (pred marker)
+        (if (pred (.-attrs marker))
           marker
           (recur (tree/next-leaf loc)))))))
+
+;; todo copypasted from cursor, move to tree.cljc
+(defn- left
+  "warning: breaks zipper accumulator"
+  [^ZipperLocation loc]
+  (when (< 0 (.-idx loc))
+    (tree/z-merge loc {:idx (dec (.-idx loc))
+                       :acc nil
+                       :o-acc nil})))
+
+(defn- down [^ZipperLocation loc]
+  (when (tree/branch? loc)
+    (when-let [cs (tree/children loc)]
+      (tree/->zipper
+       {:siblings (al/->array-list cs)
+        :idx (dec (count cs))
+        :transient? (.-transient? loc)
+        :ops (.-ops loc)
+        :acc (.-acc loc)
+        :pzip loc}))))
+
+(defn- prev-loc
+  "warning: breaks zipper accumulator"
+  [^ZipperLocation loc]
+  (if (tree/end? loc)
+    loc
+    (or
+     (and (tree/branch? loc) (down loc))
+     (left loc)
+     (loop [^ZipperLocation p loc]
+       (if-let [u (tree/up p)]
+         (or (left u) (recur u))
+         (tree/->zipper {:ops (.-ops loc)
+                         :transient? (.-transient? loc)
+                         :siblings (al/into-array-list [(tree/node p)])
+                         :idx 0
+                         :end? true}))))))
+
+(defn- prev-leaf
+  "warning: breaks zipper accumulator"
+  [loc]
+  (let [loc (prev-loc loc)]
+    (if (or (tree/leaf? (tree/node loc))
+            (tree/end? loc))
+      loc
+      (recur loc))))
+
+(defn find-marker-linear-backward [pred itree from-offset]
+  (loop [loc (prev-leaf
+              (tree/scan (zipper itree)
+                         (by-offset from-offset)))]
+    (when-not (tree/end? loc)
+      (assert (tree/leaf? (andel.tree/node loc)))
+      (let [marker (loc->Marker loc)]
+        (if (pred (.-attrs marker))
+          ;; Because of prev-leaf acc might be broken which can cause
+          ;; wrong from-to values in marker returned by loc->Marker.
+          ;; Getting a proper marker required additional scan from root.
+          (find-marker-by-id itree (.-id (.-attrs marker)))
+          (recur (prev-leaf loc)))))))
 
 (defn update-marker-attrs [itree id f]
   (or (some-> itree
