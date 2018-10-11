@@ -79,8 +79,9 @@
   (andel-test move-caret "|;aaa" ";|aaa" :word-forward false)
   (andel-test move-caret "|" "|" :word-backward false)
   (andel-test move-caret "aaa|" "|aaa" :word-backward false)
-  (andel-test move-caret "aaa  |" "aaa|  " :word-backward false)
+  (andel-test move-caret "aaa  |" "|aaa  " :word-backward false)
   (andel-test move-caret "aaa;  |" "aaa;|  " :word-backward false)
-  (andel-test move-caret "aaa;|" "aaa|;" :word-backward false))
+  (andel-test move-caret "aaa;|" "aaa|;" :word-backward false)
+  (andel-test move-caret "foo\n    bar|" "foo\n    |bar" :word-backward false))
 
 (comment (run-tests))

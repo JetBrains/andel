@@ -165,18 +165,14 @@
       (let [cursor (cursor/make-cursor text (dec caret-offset))
             char (cursor/get-char cursor)]
         (cond
-          (whitespace? char)
-          (let [[word-end-cursor end-of-text?] (cursor/move-while cursor whitespace? :backward)
-                delta (- (cursor/distance cursor word-end-cursor))]
-            (cond-> delta end-of-text? dec))
-          (stop-symbol? char)
+          (and (stop-symbol? char)
+               (not (whitespace? char)))
           -1
           :else
           (let [[word-end-cursor end1?] (cursor/move-while cursor whitespace? :backward)
                 [word-begin-cursor end2?] (cursor/move-while word-end-cursor (complement stop-symbol?) :backward)
-                [next-word-end-cursor end3?] (cursor/move-while word-begin-cursor whitespace? :backward)
-                delta (- (cursor/distance cursor next-word-end-cursor))]
-            (cond-> delta (or end1? end2? end3?) dec))))
+                delta (- (cursor/distance cursor word-begin-cursor))]
+            (cond-> delta (or end1? end2?) dec))))
       0)))
 
 (defn delete-word-forward [state]
