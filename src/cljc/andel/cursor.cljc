@@ -18,51 +18,6 @@
   (let [^Leaf leaf (tree/node loc)]
     (.charAt ^String (.-data leaf) offset)))
 
-(defn- left
-  "warning: breaks zipper accumulator"
-  [^ZipperLocation loc]
-  (when (< 0 (.-idx loc))
-    (tree/z-merge loc {:idx (dec (.-idx loc))
-                       :acc nil
-                       :o-acc nil})))
-
-(defn- down [^ZipperLocation loc]
-  (when (tree/branch? loc)
-    (when-let [cs (tree/children loc)]
-      (tree/->zipper
-       {:siblings (al/->array-list cs)
-        :idx (dec (count cs))
-        :transient? (.-transient? loc)
-        :ops (.-ops loc)
-        :acc (.-acc loc)
-        :pzip loc}))))
-
-(defn- prev-loc
-  "warning: breaks zipper accumulator"
-  [^ZipperLocation loc]
-  (if (tree/end? loc)
-    loc
-    (or
-     (and (tree/branch? loc) (down loc))
-     (left loc)
-     (loop [^ZipperLocation p loc]
-       (if-let [u (tree/up p)]
-         (or (left u) (recur u))
-         (tree/->zipper {:ops (.-ops loc)
-                         :transient? (.-transient? loc)
-                         :siblings (al/into-array-list [(tree/node p)])
-                         :idx 0
-                         :end? true}))))))
-
-(defn- prev-leaf
-  "warning: breaks zipper accumulator"
-  [loc]
-  (let [loc (prev-loc loc)]
-    (if (or (tree/leaf? (tree/node loc))
-            (tree/end? loc))
-      loc
-      (recur loc))))
-
 (defrecord Cursor [zipper node-offset text-length inner-offset leaf-length])
 
 #?(:clj
@@ -134,7 +89,7 @@
         :leaf-length  leaf-length})
 
       (< 0 (+ node-offset inner-offset))
-      (let [prev-leaf   (prev-leaf zipper)
+      (let [prev-leaf   (tree/prev-leaf zipper)
             leaf-length (get-leaf-length prev-leaf)]
         (->cursor
          {:zipper       prev-leaf
@@ -206,7 +161,7 @@
           this)
 
       (< 0 (+ node-offset inner-offset))
-      (let [prev-leaf    (prev-leaf zipper)
+      (let [prev-leaf    (tree/prev-leaf zipper)
             leaf-length' (get-leaf-length prev-leaf)]
         (when exhausted?
           (set! exhausted? false))

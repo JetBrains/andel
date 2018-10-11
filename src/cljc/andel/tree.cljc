@@ -350,12 +350,14 @@
                     :acc (reducing-fn (acc loc) (metrics (node loc)))
                     :o-acc nil}))))
 
-(defn down [^ZipperLocation loc]
+(defn down [^ZipperLocation loc & {:keys [direction] :or {direction :forward}}]
   (when (branch? loc)
     (when-let [cs (children loc)]
       (->zipper
        {:siblings (al/->array-list cs)
-        :idx 0
+        :idx (case direction
+               :forward 0
+               :backward (dec (count cs)))
         :transient? (.-transient? loc)
         :ops (.-ops loc)
         :acc (.-acc loc)
@@ -407,6 +409,44 @@
                     :idx 0
                     :siblings (al/into-array-list [(node p)])
                     :end? true}))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn- left
+  "warning: breaks zipper accumulator"
+  [^ZipperLocation loc]
+  (when (< 0 (.-idx loc))
+    (z-merge loc {:idx (dec (.-idx loc))
+                  :acc nil
+                  :o-acc nil})))
+
+(defn- prev
+  "warning: breaks zipper accumulator"
+  [^ZipperLocation loc]
+  (if (end? loc)
+    loc
+    (or
+     (and (branch? loc) (down loc :direction :backward))
+     (left loc)
+     (loop [^ZipperLocation p loc]
+       (if-let [u (up p)]
+         (or (left u) (recur u))
+         (->zipper {:ops (.-ops loc)
+                    :transient? (.-transient? loc)
+                    :siblings (al/into-array-list [(node p)])
+                    :idx 0
+                    :end? true}))))))
+
+(defn prev-leaf
+  "warning: breaks zipper accumulator"
+  [loc]
+  (let [loc (prev loc)]
+    (if (or (leaf? (node loc))
+            (end? loc))
+      loc
+      (recur loc))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn insert-right
   "Inserts the item as the right sibling of the node at this loc, without moving"
