@@ -1,8 +1,7 @@
 (ns andel.utils
   (:require [andel.text :as text]
             [andel.tree :as tree]
-            [clojure.spec.alpha :as s]
-            [clojure.core.specs.alpha :as specs]))
+            [clojure.spec.alpha :as s]))
 
 (defn line-height ^double [{:keys [^double height ^double spacing] :as metrics}]
   (+ height spacing))
@@ -101,35 +100,3 @@
 
 (defn offset->line-start [offset text]
   (line->offset (offset->line offset text) text))
-
-
-
-
-(defn let-record* [[destructuring expr] body]
-  (let [r-sym (with-meta (gensym) (meta expr))]
-    `(let [~r-sym ~expr
-           ~@(->> (destructure [destructuring r-sym])
-                  (partition 2 2)
-                  (remove (fn [[binding expr]] (and (seq? expr) (= (first expr) `if))))
-                  (mapcat (fn [[binding expr :as tuple]]
-                            (if (and (list? expr) (= (first expr) `get))
-                              (let [[_ x kw] expr]
-                                [binding (list (symbol (str ".-" (name kw))) x)])
-                              tuple))))]
-       ~body)))
-
-(defn let-records* [bindings body]
-  (if (seq bindings)
-    (let [[b f & r] bindings]
-      (let-record* [b f] (let-records* r body)))
-    body))
-
-(s/fdef let-records :args (s/cat :bindings ::specs/bindings
-                                 :body any?))
-(defmacro let-records [bindings & body]
-  (let-records* bindings `(do ~@body)))
-
-;(macroexpand '(let-records [{:keys [x y]} point] 12))
-
-
-
