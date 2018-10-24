@@ -59,7 +59,7 @@
         error-stripes (:error-stripes editor)]
     (cond-> editor
       (some? markup) (assoc :markup (intervals/type-in markup offset length))
-      (some? error-stripes) (assoc :markup (intervals/type-in error-stripes offset length))
+      (some? error-stripes) (assoc :error-stripes (intervals/type-in error-stripes offset length))
       (and (some? sel-from)     (<= offset sel-from)) (assoc-in [:selection 0] (+ sel-from length))
       (and (some? sel-to)       (<= offset sel-to)) (assoc-in [:selection 1] (+ sel-to length))
       (and (some? caret-offset) (<= offset caret-offset)) (assoc-in [:caret :offset] (+ caret-offset length)))))
