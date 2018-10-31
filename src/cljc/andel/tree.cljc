@@ -102,8 +102,19 @@
     (.-metrics ^Node x)
     (.-metrics ^Leaf x)))
 
+(defn memoize-by-ref
+  [f]
+  (let [^java.util.concurrent.ConcurrentHashMap mem (java.util.concurrent.ConcurrentHashMap.)]
+    (fn [arg]
+      (let [key (System/identityHashCode arg)]
+        (if-let [res (.get mem key)]
+          res
+          (let [res (f arg)]
+            (.put mem key res)
+            res))))))
+
 (def ->zipper-ops
-  (memoize
+  (memoize-by-ref
    (fn [{:keys [reducing-fn
                 metrics-fn
                 leaf-overflown?

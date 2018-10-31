@@ -14,45 +14,41 @@
 
 (def opposite {\( \) \) \( \[ \] \] \[ \{ \} \} \{})
 
-(defn paren-symbol? [c] (or (closing? c) (opening? c)))
-
 (defn paren-token? [{:keys [text lexer is-brace?] :as document}]
   (if (some? lexer)
-        (fn [offset]
-          (and (is-brace? lexer offset)
-               (paren? (-> text text/text->char-seq (nth offset)))))
-        (fn [offset]
-          (paren? (-> text text/text->char-seq (nth offset))))))
+    (fn [offset]
+      (is-brace? lexer offset))
+    (constantly true)))
 
-(defn- find-matching-paren [text paren-token? offset should-push? should-pop? advance]
+(defn- find-matching-paren [text lexer-paren? offset should-push? should-pop? advance]
   (when (and (<= 0 offset)
              (< offset (text/text-length text)))
     (let [t-cursor ^TransientCursor (cursor/transient (cursor/make-cursor text offset))
-          paren  (.getChar t-cursor)]
-      (when (and (paren-symbol? paren)
-                 (paren-token? offset))
+          paren (.getChar t-cursor)]
+      (when (and (paren? paren)
+                 (lexer-paren? offset))
         (loop [s '()]
           (advance t-cursor)
           (let [c (.getChar t-cursor)
                 o (.getOffset t-cursor)]
             (cond
               (.isExhausted t-cursor) nil
-              (not (paren-token? o)) (recur s)
+              (not (lexer-paren? o)) (recur s)
               (should-push? c) (recur (cons c s))
               (should-pop? c) (cond (= c (opposite (first s))) (recur (rest s))
-                                    (= c (opposite paren))     o
+                                    (= c (opposite paren)) o
                                     :else (recur s))
               :else (recur s))))))))
 
-(defn find-matching-paren-forward [text paren-token? offset]
-  (when-let [to (find-matching-paren text paren-token? offset opening? closing? #(.next! ^TransientCursor %))]
+(defn find-matching-paren-forward [text lexer-paren? offset]
+  (when-let [to (find-matching-paren text lexer-paren? offset opening? closing? #(.next! ^TransientCursor %))]
     [offset to]))
 
-(defn find-matching-paren-backward [text paren-token? offset]
-  (when-let [from (find-matching-paren text paren-token? offset closing? opening? #(.prev! ^TransientCursor %))]
+(defn find-matching-paren-backward [text lexer-paren? offset]
+  (when-let [from (find-matching-paren text lexer-paren? offset closing? opening? #(.prev! ^TransientCursor %))]
     [from offset]))
 
-(defn find-unbalanced-paren [text paren-token? offset should-push? should-pop? advance]
+(defn find-unbalanced-paren [text lexer-paren? offset should-push? should-pop? advance]
   (when (and (<= 0 offset)
              (< offset (text/text-length text)))
     (let [t-cursor ^TransientCursor (cursor/transient (cursor/make-cursor text offset))]
@@ -62,19 +58,21 @@
           (let [c (.getChar t-cursor)
                 o (.getOffset t-cursor)]
             (cond
-              (not (paren-token? o)) (recur s)
+              (not (and (paren? c)
+                        (lexer-paren? o))) (recur s)
               (should-push? c) (recur (cons c s))
-              (should-pop? c) (cond (= c (opposite (first s))) (recur (rest s))
-                                    :else o)
+              (should-pop? c) (if (= c (opposite (first s)))
+                                (recur (rest s))
+                                o)
               :else (recur s))))))))
 
-(defn find-closing-paren [text paren-token? offset]
-  (find-unbalanced-paren text paren-token? offset opening? closing? #(.next! ^TransientCursor %)))
+(defn find-closing-paren [text lexer-paren? offset]
+  (find-unbalanced-paren text lexer-paren? offset opening? closing? #(.next! ^TransientCursor %)))
 
-(defn find-opening-paren [text paren-token? offset]
-  (find-unbalanced-paren text paren-token? offset closing? opening? #(.prev! ^TransientCursor %)))
+(defn find-opening-paren [text lexer-paren? offset]
+  (find-unbalanced-paren text lexer-paren? offset closing? opening? #(.prev! ^TransientCursor %)))
 
-(defn find-parens-pair [text paren-token? offset]
+(defn find-parens-pair [text lexer-paren? offset]
   (let [len (text/text-length text)]
     (when (< 0 len)
       (let [prev-offset (max (dec offset) 0)
@@ -82,16 +80,16 @@
             c0 (-> text (cursor/make-cursor prev-offset) (cursor/get-char))
             c1 (-> text (cursor/make-cursor offset) (cursor/get-char))]
         (cond
-          (closing? c0) (find-matching-paren-backward text paren-token? prev-offset)
-          (opening? c1) (find-matching-paren-forward text paren-token? offset)
+          (closing? c0) (find-matching-paren-backward text lexer-paren? prev-offset)
+          (opening? c1) (find-matching-paren-forward text lexer-paren? offset)
           :else         nil)))))
 
 (defn highlight-parens [{:keys [editor document marker-id-generator] :as state}]
   (let [caret-offset  (core/caret-offset state)
         text (:text document)
-        paren-token? (paren-token? document)
+        lexer-paren?  (paren-token? document)
         [p-from p-to] (find-parens-pair text
-                                        paren-token?
+                                        lexer-paren?
                                         caret-offset)
         old-paren-ids (:paren-ids editor)
         state (core/delete-markers state old-paren-ids)]
@@ -115,9 +113,9 @@
       state)))
 
 
-(defn enclosing-parens [text paren-token? offset]
-  (let [opening (find-opening-paren text paren-token? offset)
-        closing (find-closing-paren text paren-token? (dec offset))]
+(defn enclosing-parens [text lexer-paren? offset]
+  (let [opening (find-opening-paren text lexer-paren? offset)
+        closing (find-closing-paren text lexer-paren? (dec offset))]
     (when (some? (and opening closing))
       [opening closing])))
 
@@ -127,13 +125,13 @@
   (and (not (whitespace? c))
        (not (paren? c))))
 
-(defn find-next-form [text paren-token? offset]
+(defn find-next-form [text lexer-paren? offset]
   (when (< offset (text/text-length text))
     (let [cursor (cursor/make-cursor text offset)
           form-start-cursor (first (cursor/move-while cursor whitespace? :forward))
           form-start-offset (+ offset (cursor/distance cursor form-start-cursor))
           form-start-char   (cursor/get-char form-start-cursor)]
-      (cond (paren-symbol? form-start-char) (find-matching-paren-forward text paren-token? form-start-offset)
+      (cond (paren? form-start-char) (find-matching-paren-forward text lexer-paren? form-start-offset)
             (= \" form-start-char) [form-start-offset (+ form-start-offset 1 (cursor/count-matching (cursor/next form-start-cursor) #(not= \" %) :forward))]
             (= \; form-start-char) [form-start-offset (+ form-start-offset 1 (cursor/count-matching (cursor/next form-start-cursor) #(not= \newline %) :forward))]
             :else (let [[form-end-cursor end?] (cursor/move-while form-start-cursor not-whitespace-or-paren? :forward)
@@ -142,13 +140,13 @@
                                           (dec (cursor/offset form-end-cursor)))]
                     [form-start-offset form-end-offset])))))
 
-(defn find-prev-form [text paren-token? offset]
+(defn find-prev-form [text lexer-paren? offset]
   (when (<= 0 offset)
     (let [cursor          (cursor/make-cursor text offset)
           form-end-cursor (first (cursor/move-while cursor whitespace? :backward))
           form-end-offset (- offset (cursor/distance cursor form-end-cursor))
           form-end-char   (cursor/get-char form-end-cursor)]
-      (cond (paren-symbol? form-end-char) (find-matching-paren-backward text paren-token? form-end-offset)
+      (cond (paren? form-end-char) (find-matching-paren-backward text lexer-paren? form-end-offset)
             (= \" form-end-char) [(- form-end-offset 1 (cursor/count-matching (cursor/prev form-end-cursor) #(not= \" %) :backward)) form-end-offset]
             :else (let [[form-start-cursor end?] (cursor/move-while form-end-cursor not-whitespace-or-paren? :backward)
                         form-start-offset (if end?

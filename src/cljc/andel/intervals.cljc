@@ -385,11 +385,11 @@
 (defn xquery-intervals [loc ^long from ^long to]
   (let [from           (offset->tree-basis from)
         to             (offset->tree-basis to)
-        my-intersects? (by-intersect from to)
-        overscans?     (by-offset to)
+        overlaps?      (by-intersect from to)
+        overruns?      (by-offset to)
         stop?          (fn [acc metrics]
-                         (or (my-intersects? acc metrics)
-                             (overscans? acc metrics)))]
+                         (or (overlaps? acc metrics)
+                             (overruns? acc metrics)))]
     (tree/reducible
       (fn [f init]
         (loop [loc loc

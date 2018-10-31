@@ -11,16 +11,22 @@
                         ^long max-line-length
                         ^long newline-suffix-length])
 
-(defn metrics-to [^String str ^long to metric]
+(defn geom-metrics-pred [^long to]
+  (fn ^long [^long offset ^long geom-offset]
+    (if (<= to geom-offset) 1 0)))
+
+(defn offset-metrics-pred [^long to]
+  (fn ^long [^long offset ^long geom-offset]
+    (if (= to offset) 1 0)))
+
+(defn metrics-to [^String str ^clojure.lang.IFn$LLL pred]
   (loop [offset 0
          geometrics-offset 0
          lines-count 0
          prefix-length 0
          max-line-length 0
          prev-line-offset 0]
-    (if (if (= metric :offset)
-          (= offset to)
-          (<= to geometrics-offset))
+    (if (not= 0 (.invokePrim pred offset geometrics-offset))
       (let [suffix-length (cond-> (- offset prev-line-offset)
                             (not= 0 lines-count) dec)]
         (TextMetrics. offset
@@ -51,7 +57,7 @@
             prev-line-offset))))))
 
 (defn metrics [^String str]
-  (metrics-to str (.length str) :offset))
+  (metrics-to str (offset-metrics-pred (.length str))))
 
 (defn ^TextMetrics scan-r-f
   ([] (TextMetrics. 0 0 0 0 0 0))
@@ -246,7 +252,7 @@
       (let [o (node-offset offset-loc)
             s (.-data ^Leaf (tree/node offset-loc))
             a (.-acc ^ZipperLocation offset-loc)
-            offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s (- i o) :offset)))
+            offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s (offset-metrics-pred (- i o)))))
             next-node (tree/next-leaf offset-loc)]
         (if (and (at-the-right-border? offset-loc)
                  (not (tree/end? next-node)))
@@ -260,7 +266,7 @@
       (let [o (node-geom-offset offset-loc)
             s (.-data ^Leaf (tree/node offset-loc))
             a (.-acc ^ZipperLocation offset-loc)
-            offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s (- i o) :geom)))
+            offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s (geom-metrics-pred (- i o)))))
             next-node (tree/next-leaf offset-loc)]
         (if (and (at-the-right-border? offset-loc)
                  (not (tree/end? next-node)))
@@ -281,7 +287,7 @@
                                (- n l))
             s (.-data ^Leaf (tree/node nth-eol-loc))
             a (.-acc ^ZipperLocation nth-eol-loc)
-            prev-line-end (tree/assoc-o-acc nth-eol-loc (scan-r-f a (metrics-to s eol-idx :offset)))]
+            prev-line-end (tree/assoc-o-acc nth-eol-loc (scan-r-f a (metrics-to s (offset-metrics-pred eol-idx))))]
         (-> prev-line-end
             (retain 1))))))
 
