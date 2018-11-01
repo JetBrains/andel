@@ -223,7 +223,7 @@
                                           :starts-on-this-line? (<= start-offset (.-from marker) end-offset)))))
         tokens (if (some? lexer-state)
                  (intervals/lexemes lexer-state start-offset end-offset)
-                 (al/empty-array-list))]
+                 (al/array-list))]
     (transduce
      (comp
       (merge-tokens (al/into-array-list editor-markup))

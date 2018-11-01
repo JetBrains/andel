@@ -11,13 +11,19 @@
    (.addAll a xs)
    a)
 
-(defn empty-array-list [] (ArrayList.))
-
 (defn into-array-list
   ([coll]
    (into-array-list identity coll))
   ([xf coll]
    (transduce xf conj! (ArrayList.) coll)))
+
+(defn ^ArrayList array-list
+  ([] (ArrayList.))
+  ([e1] (doto ^ArrayList (array-list) (.add e1)))
+  ([e1 e2] (doto ^ArrayList (array-list e1) (.add e2)))
+  ([e1 e2 e3] (doto ^ArrayList (array-list e1 e2) (.add e3)))
+  ([e1 e2 e3 e4] (doto ^ArrayList (array-list e1 e2 e3) (.add e4)))
+  ([e1 e2 e3 e4 & es] (reduce conj! (array-list e1 e2 e3 e4) es)))
 
 (defn array-list? [x]
    (instance? ArrayList x))

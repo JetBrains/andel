@@ -26,7 +26,7 @@
          prefix-length 0
          max-line-length 0
          prev-line-offset 0]
-    (if (not= 0 (.invokePrim pred offset geometrics-offset))
+    (if (not= 0 ^long (.invokePrim pred offset geometrics-offset))
       (let [suffix-length (cond-> (- offset prev-line-offset)
                             (not= 0 lines-count) dec)]
         (TextMetrics. offset
@@ -304,7 +304,7 @@
     (if (tree/end? loc)
       (throw (ex-info "Length is out of bounds" {:l l}))
       (if (tree/branch? loc)
-        (recur (tree/down loc) l)
+        (recur (tree/down-forward loc) l)
         (let [i (offset loc)
               text (.-data ^Leaf (tree/node loc))
               base-offset (metrics-offset (tree/loc-acc loc))
@@ -339,7 +339,7 @@
 
 (defn insert [loc s]
   (if (tree/branch? loc)
-    (recur (tree/down loc) s)
+    (recur (tree/down-forward loc) s)
     (let [i (offset loc)
           chunk-offset (metrics-offset (tree/loc-acc loc))
           rel-offset (- i chunk-offset)]
@@ -351,7 +351,7 @@
 
 (defn delete [loc ^long l]
   (if (tree/branch? loc)
-    (recur (tree/down loc) l)
+    (recur (tree/down-forward loc) l)
     (let [i (offset loc)
           chunk-offset (metrics-offset (tree/loc-acc loc))
           rel-offset (- i chunk-offset)

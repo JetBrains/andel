@@ -310,7 +310,7 @@
           from        (+ node-offset rightest)
           to          (+ from length)]
       (or
-       (<= from offset to)
+       (and (<= from offset) (<= offset to))
        (< offset (+ (.-offset metrics) (.-rightest metrics)))))))
 
 (defn type-in [itree offset size]
