@@ -446,7 +446,7 @@
   (if (end? loc)
     loc
     (or
-     (and (branch? loc) (down-backward loc :direction :backward))
+     (and (branch? loc) (down-backward loc))
      (left loc)
      (loop [^ZipperLocation p loc]
        (if-let [u (up p)]
