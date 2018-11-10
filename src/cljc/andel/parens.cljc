@@ -14,7 +14,7 @@
 
 (def opposite {\( \) \) \( \[ \] \] \[ \{ \} \} \{})
 
-(defn paren-token? [{:keys [text lexer is-brace?] :as document}]
+(defn paren-token? [{:keys [lexer is-brace?]}]
   (if (some? lexer)
     (fn [offset]
       (is-brace? lexer offset))
@@ -33,7 +33,7 @@
                 o (.getOffset t-cursor)]
             (cond
               (.isExhausted t-cursor) nil
-              (not (lexer-paren? o)) (recur s)
+              (not (and (paren? paren) (lexer-paren? o))) (recur s)
               (should-push? c) (recur (cons c s))
               (should-pop? c) (cond (= c (opposite (first s))) (recur (rest s))
                                     (= c (opposite paren)) o
