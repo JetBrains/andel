@@ -327,11 +327,11 @@
     0))
 
 (defn text [loc l]
-  (loop [s ""
-         lt (lazy-text loc l)]
-    (if-let [f (first lt)]
-      (recur (str s f) (rest lt))
-      s)))
+  (.toString
+    (reduce (fn [^StringBuilder s t]
+              (.append s t))
+            (StringBuilder.)
+            (lazy-text loc l))))
 
 (defn as-string [text-tree]
   (text (zipper text-tree)
