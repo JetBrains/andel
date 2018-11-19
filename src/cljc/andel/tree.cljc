@@ -569,5 +569,9 @@
       (if (or (stop? (loc-acc z1) (metrics (node z1)))
               (and (end? z1) (end? z2)))
         true
-        (recur (next z1) (next z2)))
-      false)))
+        (recur (skip z1) (skip z2)))
+      (if (and (end? z1) (end? z2))
+        false
+        (if (stop? (loc-acc z1) (metrics (node z1)))
+          (recur (next z1) (next z2))
+          false)))))
