@@ -120,7 +120,7 @@
 (defn tree-basis->offset [^long offset]
   (dec offset))
 
-(defn loc->Marker [loc]
+(defn loc->Marker ^Marker [loc]
   (let [^Leaf node (tree/node loc)
         ^Data metrics (tree/metrics node)
         ^Data data (.-data node)
@@ -474,9 +474,10 @@
                 (recur loc' (long bias))))))
 
 (defn by-id [^long id]
-  (fn [acc m]
+  (fn [acc ^Data m]
     (or (contains? (.-marker-ids m) id)
-        (= id (some-> m .-attrs .-id)))))
+        (when-let [attrs (.-attrs m)]
+          (= id (.-id ^Attrs attrs))))))
 
 (defn- find-marker-loc [itree id]
   (let [loc (tree/scan (zipper itree) (by-id id))]
@@ -509,7 +510,7 @@
           ;; Because of prev-leaf acc might be broken which can cause
           ;; wrong from-to values in marker returned by loc->Marker.
           ;; Getting a proper marker required additional scan from root.
-          (find-marker-by-id itree (.-id (.-attrs marker)))
+          (find-marker-by-id itree (.-id ^Attrs (.-attrs marker)))
           (recur (tree/prev-leaf loc)))))))
 
 (defn update-marker-attrs [itree id f]
