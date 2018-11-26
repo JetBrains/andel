@@ -7,7 +7,6 @@
             [clojure.test :refer :all]
             [clojure.data.int-map :as i]))
 
-
 (defn compare-intervals [a b]
   (< (:from a) (:from b)))
 
@@ -23,11 +22,12 @@
                     g-r? (g/vector g/boolean cnt)
                     ids (g/return (vec (range cnt)))]
               (sort-intervals (mapv (fn [a b g-l? g-r? id]
-                                      (>Marker :from (min a b)
+                                      (>Marker :id id
+                                               :from (min a b)
                                                :to (max a b)
                                                :greedy-left? g-l?
                                                :greedy-right? g-r?
-                                               :attrs (>Attrs :id id)))
+                                               :attrs (>Attrs)))
                                     a b g-l? g-r? ids))))))
 
 (deftest bulk-insertion
