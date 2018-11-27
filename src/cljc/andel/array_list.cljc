@@ -1,5 +1,5 @@
 (ns andel.array-list
-  (:refer-clojure :exclude (get set assoc insert remove assoc! conj!))
+  (:refer-clojure :exclude (get set assoc remove assoc! conj!))
   (:import [java.util ArrayList Collection]))
 
 (defn conj!

@@ -365,6 +365,12 @@
                                           intervals))]
     (root (reduce insert-one (zipper itree') intervals'))))
 
+(defn scan-to-range-start [loc ^long from ^long to]
+  (let [intersects? (by-intersect from to)
+        overscans? (by-offset to)
+        marker-zipper-pred (fn [acc metrics] (or (intersects? acc metrics) (overscans? acc metrics)))]
+    (tree/scan loc marker-zipper-pred)))
+
 (defn xquery-all [tree]
   (tree/reducible
       (fn [f init]
@@ -377,8 +383,6 @@
               (cond (= start 0) (recur next-loc acc)
                     (tree/end? next-loc) acc ;; skip sentinel
                     :else (recur next-loc (f acc (loc->Marker loc))))))))))
-
-(defn tree->intervals [tree] (into [] (xquery-all tree)))
 
 (defn xquery-intervals [loc ^long from ^long to]
   (let [from           (offset->tree-basis from)
@@ -410,7 +414,6 @@
 
 (defn query-intervals [loc from to]
   (into [] (xquery-intervals loc from to)))
-
 
 (defn- gc-leafs [^ZipperLocation loc ^long bias deleted?]
   (let [children (tree/children loc)

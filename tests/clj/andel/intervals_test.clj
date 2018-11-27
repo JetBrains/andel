@@ -12,6 +12,7 @@
 
 (def sort-intervals (partial sort (comparator compare-intervals)))
 
+(defn tree->intervals [tree] (into [] (xquery-all tree)))
 
 (def intervals-bulk-gen
   (g/bind (g/large-integer* {:min 1 :max 1000})
