@@ -327,7 +327,7 @@
     0))
 
 (defn text [loc l]
-  (.toString
+  (.toString ^StringBuilder
     (reduce (fn [^StringBuilder s t]
               (.append s t))
             (StringBuilder.)
@@ -385,7 +385,7 @@
   (let [loc (scan-to-line-start (zipper t) i)]
     (text loc (distance-to-EOL loc))))
 
-(defn text-range [tree from to]
+(defn text-range [tree ^long from ^long to]
   (assert (<= from to) {:from from :to to})
   (if (= from to)
     ""
@@ -408,7 +408,7 @@
         delta (distance-to-EOL loc)]
     (scan-to-offset loc (+ offset delta))))
 
-(defn skip-columns [loc cols]
+(defn skip-columns [loc ^long cols]
   (let [geom (geom-offset loc)
         cur-line (line loc)
         loc' (scan-to-geom-offset loc (+ geom cols))]

@@ -9,36 +9,30 @@
   #?(:cljs 1000000000.0 #_js/Number.POSITIVE_INFINITY
      :clj Integer/MAX_VALUE #_100000 #_Double/POSITIVE_INFINITY))
 
-
-(defrecord Attrs [^long id attrs-keys ^long layer])
-
-(defmacro >Attrs [& {:keys [id attrs-keys layer] :or {layer 0}}]
-  `(Attrs. ~id
-           ~attrs-keys
-           ~layer))
-
 (defrecord Data
   [^long offset
    ^long length
    ^long rightest
-
+   ^long id
    marker-ids
    ^boolean greedy-left?
    ^boolean greedy-right?
-   ^Attrs attrs])
+   attrs])
 
-(defmacro >Data [& {:keys [offset length rightest marker-ids greedy-left? greedy-right? attrs]}]
-  `(Data. ~offset ~length ~rightest ~marker-ids ~greedy-left? ~greedy-right? ~attrs))
+(defmacro >Data [& {:keys [offset length rightest marker-ids greedy-left? greedy-right? attrs id]}]
+  `(Data. ~offset ~length ~rightest ~id ~marker-ids ~greedy-left? ~greedy-right? ~attrs))
 
 (defrecord Marker
-  [^long from
+  [^long id
+   ^long from
    ^long to
    ^boolean greedy-left?
    ^boolean greedy-right?
-   ^Attrs attrs])
+   attrs])
 
-(defmacro >Marker [& {:keys [from to greedy-left? greedy-right? attrs]}]
-  `(Marker. ~from
+(defmacro >Marker [& {:keys [from to greedy-left? greedy-right? attrs id]}]
+  `(Marker. ~id
+            ~from
             ~to
             ~greedy-left?
             ~greedy-right?
@@ -57,7 +51,8 @@
             :marker-ids nil
             :greedy-left? false
             :greedy-right? false
-            :attrs nil))))
+            :attrs nil
+            :id -5))))
 
 (defn location-from ^long [^ZipperLocation loc]
   (let [^Data acc  (tree/loc-acc loc)
@@ -72,8 +67,8 @@
      (.-length ^Data (tree/metrics (tree/node loc)))))
 
 (def tree-config
-  {:reducing-fn      reducing-fn
-   :metrics-fn       identity
+  {:reducing-fn reducing-fn
+   :metrics-fn identity
    :make-node (fn [children]
                 (if (empty? children)
                   (tree/->Node (>Data :offset 0
@@ -82,14 +77,15 @@
                                       :marker-ids nil
                                       :greedy-left? false
                                       :greedy-right? false
-                                      :attrs nil) [])
+                                      :attrs nil
+                                      :id -1) [])
                   (let [marker-ids (if (tree/node? (first children))
                                      (transduce (map (fn [c] (.-marker-ids ^Data (tree/metrics c))))
                                                 (completing i/union)
                                                 (i/int-set)
                                                 children)
                                      (into (i/int-set)
-                                           (map (fn [^Leaf c] (.-id ^Attrs (.-attrs ^Data (.-data c)))))
+                                           (map (fn [^Leaf c] (.-id ^Data (.-data c))))
                                            children))
                         ^Data data (reduce (fn [acc x] (reducing-fn acc (tree/metrics x))) (reducing-fn) children)]
                     (tree/->Node (>Data :offset (.-offset data)
@@ -98,10 +94,11 @@
                                         :marker-ids marker-ids
                                         :greedy-left? false
                                         :greedy-right? false
-                                        :attrs nil)
+                                        :attrs nil
+                                        :id -1)
                                  children))))
-   :leaf-overflown?  (constantly false)
-   :split-thresh     32
+   :leaf-overflown? (constantly false)
+   :split-thresh 32
    :leaf-underflown? (constantly false)})
 
 (defn zipper [it]
@@ -120,17 +117,18 @@
 (defn tree-basis->offset [^long offset]
   (dec offset))
 
-(defn loc->Marker [loc]
+(defn loc->Marker ^Marker [loc]
   (let [^Leaf node (tree/node loc)
         ^Data metrics (tree/metrics node)
         ^Data data (.-data node)
         length (.-length metrics)
         from (location-from loc)]
-    (Marker. (tree-basis->offset from)
-             (tree-basis->offset (+ from length))
-             (.-greedy-left? data)
-             (.-greedy-right? data)
-             (.-attrs data))))
+    (>Marker :id (.-id data)
+             :from (tree-basis->offset from)
+             :to (tree-basis->offset (+ from length))
+             :greedy-left? (.-greedy-left? data)
+             :greedy-right? (.-greedy-right? data)
+             :attrs (.-attrs data))))
 
 (defn loc->tree-marker
   "Same as loc->Marker but offsets are in tree basis"
@@ -140,12 +138,12 @@
         ^Data data (.-data node)
         length (.-length metrics)
         from (location-from loc)]
-    (Marker. from
-             (+ from length)
-             (.-greedy-left? data)
-             (.-greedy-right? data)
-             (.-attrs data))))
-
+    (>Marker :id (.-id data)
+             :from from
+             :to (+ from length)
+             :greedy-left? (.-greedy-left? data)
+             :greedy-right? (.-greedy-right? data)
+             :attrs (.-attrs data))))
 
 (defn update-leaf [^ZipperLocation loc f]
   (assert (tree/leaf? (tree/node loc)) "update-leaf should recieve leaf")
@@ -164,7 +162,8 @@
                         :marker-ids (.-marker-ids data)
                         :greedy-left? (.-greedy-left? data)
                         :greedy-right? (.-greedy-right? data)
-                        :attrs (.-attrs data)))))
+                        :attrs (.-attrs data)
+                        :id (.-id data)))))
 
 (defn update-leaf-length [loc f]
   (update-leaf loc
@@ -175,7 +174,8 @@
                         :marker-ids (.-marker-ids data)
                         :greedy-left? (.-greedy-left? data)
                         :greedy-right? (.-greedy-right? data)
-                        :attrs (.-attrs data)))))
+                        :attrs (.-attrs data)
+                        :id (.-id data)))))
 
 (defn intersects? [^long from1 ^long to1 ^long from2 ^long to2]
   (let [to-fst (if (< from1 from2) to1 to2)
@@ -200,17 +200,8 @@
           loc-to   (+ loc-from length)]
       (intersects-inclusive? loc-from loc-to from to))))
 
-(defn make-leaf [offset length greedy-left? greedy-right? attrs]
-  (tree/make-leaf (>Data :offset offset
-                         :length length
-                         :rightest 0
-                         :marker-ids nil
-                         :greedy-left? greedy-left?
-                         :greedy-right? greedy-right?
-                         :attrs attrs) tree-config))
-
 (defn insert-one
-  ([loc from to greedy-left? greedy-right? attrs]
+  ([loc id from to greedy-left? greedy-right? attrs]
    (let [from (long from)
          to (long to)
          r-sibling-loc    (tree/scan loc (by-offset from))
@@ -222,7 +213,15 @@
          new-r-offset     (- r-from from)
          offset           (- r-offset new-r-offset)]
      (-> r-sibling-loc
-         (tree/insert-left (make-leaf offset len greedy-left? greedy-right? attrs))
+         (tree/insert-left (tree/make-leaf
+                            (>Data :id id
+                                   :offset offset
+                                   :length len
+                                   :rightest 0
+                                   :marker-ids nil
+                                   :greedy-left? greedy-left?
+                                   :greedy-right? greedy-right?
+                                   :attrs attrs) tree-config))
          (update-leaf-offset (constantly new-r-offset)))))
   ([loc ^Marker marker]
    (let [from             (.-from marker)
@@ -230,13 +229,14 @@
          greedy-left?     (.-greedy-left? marker)
          greedy-right?    (.-greedy-right? marker)
          attrs            (.-attrs marker)]
-     (insert-one loc from to greedy-left? greedy-right? attrs))))
+     (insert-one loc (.-id marker) from to greedy-left? greedy-right? attrs))))
 
 (defn add-markers [itree markers]
   (root
     (reduce
       (fn [loc ^Marker m]
         (insert-one loc
+                    (.-id m)
                     (offset->tree-basis (.-from m))
                     (offset->tree-basis (.-to m))
                     (.-greedy-left? m)
@@ -272,12 +272,12 @@
             [(tree/root (update-leaf-offset new-loc (fn [^long x] (+ x delta)))) (persistent! acc)]
             (recur (remove-leaf new-loc) (conj! acc (loc->tree-marker new-loc)))))))))
 
-(defn process-single-interval-typing [^Marker marker ^long offset ^long size]
+(defn update-marker-with-typing [^Marker marker ^long offset ^long size]
   (let [from          (.-from marker)
         to            (.-to marker)
         greedy-left?  (.-greedy-left? marker)
         greedy-right? (.-greedy-right? marker)
-        [from to] (cond
+        new-range (cond
                     (and greedy-left?
                          (= offset from))
                     [from (+ to size)]
@@ -293,13 +293,15 @@
                     (<= offset from)
                     [(+ from size) (+ to size)]
 
-                    :else
-                    [from to])]
-    (Marker. from
-             to
-             greedy-left?
-             greedy-right?
-             (.-attrs marker))))
+                    :else nil)]
+    (if-let [[from to] new-range]
+      (>Marker :id (.-id marker)
+               :from from
+               :to to
+               :greedy-left? greedy-left?
+               :greedy-right? greedy-right?
+               :attrs (.-attrs marker))
+      marker)))
 
 (defn contains-offset-pred [^long offset]
   (fn [^Data acc-metrics ^Data node-metrics]
@@ -316,11 +318,8 @@
 (defn type-in [itree offset size]
   (let [offset             (offset->tree-basis offset)
         [itree' intervals] (collect-with-remove itree offset size (contains-offset-pred offset))
-        intervals'         (sort-by :from (map #(process-single-interval-typing % offset size) intervals))]
-    
-    (->> intervals'
-         (reduce insert-one (zipper itree'))
-         root)))
+        intervals'         (sort-by #(.-from ^Marker %) (map #(update-marker-with-typing % offset size) intervals))]
+    (root (reduce insert-one (zipper itree') intervals'))))
 
 (defn intersects-pred [^long i-from ^long i-to]
   (fn [^Data acc-metrics ^Data node-metrics]
@@ -335,37 +334,42 @@
        (<= i-from from i-to)
        (< i-to (+ (.-offset metrics) (.-rightest metrics)))))))
 
-(defn- update-point ^long [^long point ^long offset ^long length]
-  (if (< offset point)
-    (max offset (- point length))
-    point))
+(defn- shift-offset ^long [^long offset ^long edit-offset ^long length]
+  (if (< edit-offset offset)
+    (max edit-offset (- offset length))
+    offset))
 
 (defn process-single-interval-deletion [^Marker marker ^long offset ^long length]
   (let [from         (.-from marker)
         to           (.-to marker)
         g-l?         (.-greedy-left? marker)
-        g-r?         (.-greedy-right? marker)        
-        from' (update-point from offset length)
-        to' (update-point to offset length)]
+        g-r?         (.-greedy-right? marker)
+        from' (shift-offset from offset length)
+        to' (shift-offset to offset length)]
     (when (or (< 0 (- to' from')) g-l? g-r?)
-      (Marker. from'
-               to'
-               g-l?
-               g-r?
-               (.-attrs marker)))))
+      (>Marker :id (.-id marker)
+               :from from'
+               :to to'
+               :greedy-left? g-l?
+               :greedy-right? g-r?
+               :attrs (.-attrs marker)))))
 
 (defn delete-range [itree ^long offset ^long size]
   (let [offset             (offset->tree-basis offset)
         [itree' intervals] (collect-with-remove itree (+ offset size) (- size) (intersects-pred offset (+ offset size)))
-        intervals'         (sort-by :from
+        intervals'         (sort-by #(.-from ^Marker %)
                                     (into []
                                           (comp
                                            (map #(process-single-interval-deletion % offset size))
                                            (filter some?))
                                           intervals))]
-    (->> intervals'
-         (reduce insert-one (zipper itree'))
-         root)))
+    (root (reduce insert-one (zipper itree') intervals'))))
+
+(defn scan-to-range-start [loc ^long from ^long to]
+  (let [intersects? (by-intersect from to)
+        overscans? (by-offset to)
+        marker-zipper-pred (fn [acc metrics] (or (intersects? acc metrics) (overscans? acc metrics)))]
+    (tree/scan loc marker-zipper-pred)))
 
 (defn xquery-all [tree]
   (tree/reducible
@@ -379,8 +383,6 @@
               (cond (= start 0) (recur next-loc acc)
                     (tree/end? next-loc) acc ;; skip sentinel
                     :else (recur next-loc (f acc (loc->Marker loc))))))))))
-
-(defn tree->intervals [tree] (into [] (xquery-all tree)))
 
 (defn xquery-intervals [loc ^long from ^long to]
   (let [from           (offset->tree-basis from)
@@ -413,7 +415,6 @@
 (defn query-intervals [loc from to]
   (into [] (xquery-intervals loc from to)))
 
-
 (defn- gc-leafs [^ZipperLocation loc ^long bias deleted?]
   (let [children (tree/children loc)
         len (count children)
@@ -427,7 +428,7 @@
         (let [^Leaf n (al/get children i)
               ^Data data (.-data n)]
           (cond
-            (deleted? (.-id ^Attrs (.-attrs data)))
+            (deleted? (.-id data))
             (recur (+ bias (-> data (.-offset)))
                    (inc i)
                    true
@@ -438,7 +439,8 @@
                    (inc i)
                    true
                    (al/conj! res (tree/make-leaf
-                                  (>Data :offset (+ (.-offset data) bias)
+                                  (>Data :id (.-id data)
+                                         :offset (+ (.-offset data) bias)
                                          :length (.-length data)
                                          :rightest (.-rightest data)
                                          :marker-ids (.-marker-ids data)
@@ -474,9 +476,9 @@
                 (recur loc' (long bias))))))
 
 (defn by-id [^long id]
-  (fn [acc m]
+  (fn [acc ^Data m]
     (or (contains? (.-marker-ids m) id)
-        (= id (some-> m .-attrs .-id)))))
+        (= id (.-id m)))))
 
 (defn- find-marker-loc [itree id]
   (let [loc (tree/scan (zipper itree) (by-id id))]
@@ -488,28 +490,28 @@
   (some-> (find-marker-loc itree id)
           loc->Marker))
 
-(defn find-marker-linear-forward [pred itree from-offset]
+(defn find-marker-linear-forward ^Marker [pred itree from-offset]
   (loop [loc (tree/scan (zipper itree)
                         (by-offset from-offset))]
     (when-not (tree/end? loc)
       (assert (tree/leaf? (andel.tree/node loc)))
       (let [marker (loc->Marker loc)]
-        (if (pred (.-attrs marker))
+        (if (pred marker)
           marker
           (recur (tree/next-leaf loc)))))))
 
-(defn find-marker-linear-backward [pred itree from-offset]
+(defn find-marker-linear-backward ^Marker [pred itree from-offset]
   (loop [loc (tree/prev-leaf
               (tree/scan (zipper itree)
                          (by-offset from-offset)))]
     (when-not (tree/end? loc)
       (assert (tree/leaf? (andel.tree/node loc)))
       (let [marker (loc->Marker loc)]
-        (if (pred (.-attrs marker))
+        (if (pred marker)
           ;; Because of prev-leaf acc might be broken which can cause
           ;; wrong from-to values in marker returned by loc->Marker.
           ;; Getting a proper marker required additional scan from root.
-          (find-marker-by-id itree (.-id (.-attrs marker)))
+          (find-marker-by-id itree (.-id marker))
           (recur (tree/prev-leaf loc)))))))
 
 (defn update-marker-attrs [itree id f]
@@ -528,18 +530,21 @@
 (defmulti create-lexer (constantly :idea))
 (defmethod create-lexer :default [& args] nil)
 
-(defonce empty-tree (let [sentinels [(tree/make-leaf (>Data :offset 0
-                                                            :length 0
-                                                            :rightest 0
-                                                            :marker-ids nil
-                                                            :greedy-left? false
-                                                            :greedy-right? false
-                                                            :attrs (>Attrs :id -1)) tree-config)
-                                     (tree/make-leaf (>Data :offset plus-infinity
-                                                            :length 0
-                                                            :rightest 0
-                                                            :marker-ids nil
-                                                            :greedy-left? false
-                                                            :greedy-right? false
-                                                            :attrs (>Attrs :id -2)) tree-config)]]
-                      (tree/make-node sentinels tree-config)))
+(defonce empty-tree
+  (let [sentinels [(tree/make-leaf (>Data :id -1
+                                          :offset 0
+                                          :length 0
+                                          :rightest 0
+                                          :marker-ids nil
+                                          :greedy-left? false
+                                          :greedy-right? false
+                                          :attrs nil) tree-config)
+                   (tree/make-leaf (>Data :id -1
+                                          :offset plus-infinity
+                                          :length 0
+                                          :rightest 0
+                                          :marker-ids nil
+                                          :greedy-left? false
+                                          :greedy-right? false
+                                          :attrs nil) tree-config)]]
+    (tree/make-node sentinels tree-config)))

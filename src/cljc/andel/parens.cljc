@@ -84,7 +84,7 @@
           (opening? c1) (find-matching-paren-forward text lexer-paren? offset)
           :else         nil)))))
 
-(defn highlight-parens [{:keys [editor document marker-id-generator] :as state}]
+(defn highlight-parens [{:keys [editor document marker-id-generator] :as state} paren-attrs]
   (let [caret-offset  (core/caret-offset state)
         text (:text document)
         lexer-paren?  (paren-token? document)
@@ -97,21 +97,20 @@
       (let [from-id (marker-id-generator)
             to-id   (marker-id-generator)]
         (-> state
-            (core/insert-markers [(intervals/>Marker :from p-from
+            (core/insert-markers [(intervals/>Marker :id from-id
+                                                     :from p-from
                                                      :to (inc p-from)
                                                      :greedy-right? false
                                                      :greedy-left? false
-                                                     :attrs (intervals/>Attrs :id from-id
-                                                                              :attrs-keys ["MATCHED_BRACE_ATTRIBUTES"]))
-                                  (intervals/>Marker :from p-to
+                                                     :attrs paren-attrs)
+                                  (intervals/>Marker :id to-id
+                                                     :from p-to
                                                      :to (inc p-to)
                                                      :greedy-right? false
                                                      :greedy-left? false
-                                                     :attrs (intervals/>Attrs :id to-id
-                                                                              :attrs-keys ["MATCHED_BRACE_ATTRIBUTES"]))])
+                                                     :attrs paren-attrs)])
             (assoc-in [:editor :paren-ids] (i/int-set [from-id to-id]))))
       state)))
-
 
 (defn enclosing-parens [text lexer-paren? offset]
   (let [opening (find-opening-paren text lexer-paren? offset)

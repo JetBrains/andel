@@ -1,11 +1,11 @@
 (ns andel.cursor
-  (:refer-clojure :exclude (next transient persistent!))
+  (:refer-clojure :exclude [next transient persistent!])
   (:require [andel.tree :as tree]
             [andel.text :as text]
             [andel.array-list :as al])
   #?(:clj (:import [andel.tree ZipperLocation Leaf])))
 
-(defn- get-leaf-length [^ZipperLocation loc]
+(defn- get-leaf-length ^long [^ZipperLocation loc]
   (assert (tree/leaf? (tree/node loc))
           "calling leaf-length on non-leaf")
   (let [^Leaf leaf (tree/node loc)
@@ -18,7 +18,8 @@
   (let [^Leaf leaf (tree/node loc)]
     (.charAt ^String (.-data leaf) offset)))
 
-(defrecord Cursor [zipper node-offset text-length inner-offset leaf-length])
+
+(defrecord Cursor [zipper ^long node-offset ^long text-length ^long inner-offset ^long leaf-length])
 
 #?(:clj
    (defmacro ->cursor [{:keys [zipper node-offset
@@ -100,18 +101,10 @@
 
       :else nil)))
 
-(defn offset [^Cursor cursor]
+(defn offset ^long [^Cursor cursor]
   (let [node-offset  (.-node-offset cursor)
         inner-offset (.-inner-offset cursor)]
     (+ node-offset inner-offset)))
-
-#?(:clj
-   (defmacro ->trainsient-cursor [{:keys [zipper node-offset
-                                          text-length inner-offset
-                                          leaf-length]}]
-     `(->TransientCursor ~zipper ~node-offset
-                         ~text-length ~inner-offset
-                         ~leaf-length)))
 
 (defprotocol MutableCursor
   (next! ^MutableCursor [this])
@@ -119,16 +112,16 @@
   (isExhausted [this])
   (getChar [this])
   (getZipper [this])
-  (getOffset [this])
-  (getNodeOffset [this])
-  (getInnerOffset [this])
-  (getLeafLength [this]))
+  (getOffset ^long [this])
+  (getNodeOffset ^long [this])
+  (getInnerOffset ^long [this])
+  (getLeafLength ^long [this]))
 
 (deftype TransientCursor [^{:volatile-mutable true} zipper
-                          ^{:volatile-mutable true} node-offset
-                          text-length
-                          ^{:volatile-mutable true} inner-offset
-                          ^{:volatile-mutable true} leaf-length
+                          ^{:volatile-mutable true :tag long} node-offset
+                          ^long text-length
+                          ^{:volatile-mutable true :tag long} inner-offset
+                          ^{:volatile-mutable true :tag long} leaf-length
                           ^{:volatile-mutable true} exhausted?]
   MutableCursor
   (next! ^TransientCursor [this]
@@ -151,7 +144,6 @@
 
       :else (do (set! exhausted? true)
                 this)))
-
   (prev! ^TransientCursor [this]
     (cond
       (< 0 inner-offset)
@@ -173,7 +165,6 @@
 
       :else (do (set! exhausted? true)
                 this)))
-
   (isExhausted [_] exhausted?)
   (getZipper [_] zipper)
   (getOffset [_] (+ node-offset inner-offset))
@@ -210,7 +201,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;; util ;;;;;;;;;;;;;;;;;;;;;
 
-(defn set-to-offset! [^TransientCursor t-cursor offset]
+(defn set-to-offset! [^TransientCursor t-cursor ^long offset]
   (cond (= offset (.getOffset t-cursor)) t-cursor
         (< offset (.getOffset t-cursor)) (while (< offset (.getOffset t-cursor))
                                            (prev! t-cursor))
@@ -238,30 +229,3 @@
 
 (defn count-matching [cursor pred direction]
   (distance cursor (first (move-while cursor pred direction))))
-
-
-
-(comment
-
-  (def my-cursor (-> "01234567890"
-                     text/make-text
-                     (make-cursor 4)))
-
-  (def my-transient-cursor (transient my-cursor))
-
-  (.getOffset my-transient-cursor)
-
-  (set-to-offset! my-transient-cursor 9)
-
-  (.getChar my-transient-cursor)
-  (.next! my-transient-cursor)
-
-  (def my-persistent-cursor (persistent! my-transient-cursor))
-
-  (get-char my-persistent-cursor)
-
-  (count-matching my-cursor (fn [c] (< (Character/digit c 10) 20)) :forward)
-
-  (set!)
-
-  )
