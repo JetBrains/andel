@@ -445,7 +445,7 @@
                       (set! loc new-loc)
                       (.charAt text (- absolute-index base)))
 
-                    :else (assert "No way"))))
+                    :else (throw (ex-info "No way" {:from from :to to :index index})))))
   (^CharSequence subSequence [this ^int from' ^int to']
                              (assert (<= from' (- to from)) "From index out of range")
                              (assert (<= to' (- to from)) "To index out of range")

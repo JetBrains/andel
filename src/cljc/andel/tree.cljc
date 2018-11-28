@@ -10,7 +10,7 @@
 ;;   see Huet
 
 (ns andel.tree
-  (:refer-clojure :exclude (replace remove next skip transient))
+  (:refer-clojure :exclude (replace remove next transient))
   (:require [andel.array-list :as al]
             [clojure.pprint :as pp])
   #?(:cljs (:require-macros [andel.tree :refer [->zipper z-merge]])))

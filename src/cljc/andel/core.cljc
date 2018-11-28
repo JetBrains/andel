@@ -56,10 +56,12 @@
   (let [[sel-from sel-to] (get editor :selection)
         caret-offset (get-in editor [:caret :offset])
         markup (:markup editor)
-        error-stripes (:error-stripes editor)]
+        error-stripes (:error-stripes editor)
+        line-markers (:line-markers editor)]
     (cond-> editor
       (some? markup) (assoc :markup (intervals/type-in markup offset length))
       (some? error-stripes) (assoc :error-stripes (intervals/type-in error-stripes offset length))
+      (some? line-markers) (assoc :line-markers (intervals/type-in line-markers offset length))
       (and (some? sel-from)     (<= offset sel-from)) (assoc-in [:selection 0] (+ sel-from length))
       (and (some? sel-to)       (<= offset sel-to)) (assoc-in [:selection 1] (+ sel-to length))
       (and (some? caret-offset) (<= offset caret-offset)) (assoc-in [:caret :offset] (+ caret-offset length)))))
@@ -68,15 +70,18 @@
   (let [[sel-from sel-to] (get editor :selection)
         caret-offset (get-in editor [:caret :offset])
         markup (:markup editor)
-        error-stripes (:error-stripes editor)]
+        error-stripes (:error-stripes editor)
+        line-markers (:line-markers editor)]
     (cond-> editor
       (some? markup) (assoc :markup (intervals/delete-range markup offset length))
       (some? error-stripes) (assoc :error-stripes (intervals/delete-range error-stripes offset length))
+      (some? line-markers) (assoc :line-markers (intervals/delete-range line-markers offset length))
       (and (some? sel-from)     (<= offset sel-from)) (assoc-in [:selection 0] (max offset (- sel-from length)))
       (and (some? sel-to)       (<= offset sel-to)) (assoc-in [:selection 1] (max offset (- sel-to length)))
       (and (some? caret-offset) (<= offset caret-offset)) (assoc-in [:caret :offset] (max offset (- caret-offset length))))))
 
 (defn insert-at-offset [state offset insertion]
+  (def state state)
   (let [length      (count insertion)
         text-length (-> state :document :text text/text-length)]
     (-> state
@@ -86,6 +91,7 @@
                               (some? lexer) (assoc :lexer (intervals/update-text lexer (text/text->char-seq text) offset length)))))
         (update-in [:document :markup] intervals/type-in offset (count insertion))
         (update-in [:document :error-stripes] intervals/type-in offset (count insertion))
+        (update-in [:document :line-markers] intervals/type-in offset (count insertion))
         (cond->
           (some? (:editor state))
           (update :editor insert-at-editor {:offset offset :length length})
@@ -111,6 +117,7 @@
                                     (update :lexer intervals/update-text (text/text->char-seq text) offset (- length)))))
         (update-in [:document :markup] intervals/delete-range offset length)
         (update-in [:document :error-stripes] intervals/delete-range offset length)
+        (update-in [:document :line-markers] intervals/delete-range offset length)
         (cond->
           (some? (:editor state))
           (update :editor delete-at-editor {:offset offset :length length})
