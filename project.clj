@@ -12,7 +12,6 @@
                  [reagent-utils "0.2.1"]                                  
                  [org.clojure/clojurescript "1.9.908" :scope "provided"]
                  [cljs-http "0.1.43"]
-                 [garden "1.3.2"]
                  [org.clojure/core.async "0.3.443"]
                  [cljsjs/element-resize-detector "1.1.9-0"]]
 
