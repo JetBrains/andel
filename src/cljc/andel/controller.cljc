@@ -133,7 +133,8 @@
         caret-line (utils/offset->line (core/caret-offset state) text)]
     (set-caret-at-grid-pos state {:line caret-line :col Integer/MAX_VALUE} selection?)))
 
-(def whitespace? #{\newline \space \tab})
+(def tab-or-space? #{\space \tab})
+(def whitespace? (into tab-or-space? #{\newline}))
 (def stop-symbol? (into whitespace? #{\( \) \{ \} \[ \] \; \: \> \< \. \, \\ \- \+ \* \/ \= \& \| \@ \# \^}))
 
 (defn next-word-delta [state]
@@ -169,10 +170,11 @@
                (not (whitespace? char)))
           -1
           :else
-          (let [[word-end-cursor end1?] (cursor/move-while cursor whitespace? :backward)
+          (let [[word-end-cursor end1?] (cursor/move-while cursor tab-or-space? :backward)
+                found-newline? (= \newline (cursor/get-char word-end-cursor))
                 [word-begin-cursor end2?] (cursor/move-while word-end-cursor (complement stop-symbol?) :backward)
                 delta (- (cursor/distance cursor word-begin-cursor))]
-            (cond-> delta (or end1? end2?) dec))))
+            (cond-> delta (or end1? end2? found-newline?) dec))))
       0)))
 
 (defn delete-word-forward [state]
