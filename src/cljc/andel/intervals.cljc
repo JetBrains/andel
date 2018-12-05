@@ -396,7 +396,7 @@
   (remove [this]
     (throw (java.lang.UnsupportedOperationException.))))
 
-(defn iterate [loc ^long from ^long to]
+(defn iterator [loc ^long from ^long to]
   (assert (<= from to))
   (let [from (offset->tree-basis from)
         to (offset->tree-basis to)
@@ -414,7 +414,7 @@
 (defn xquery-intervals [loc ^long from ^long to]
   (tree/reducible
     (fn [f init]
-      (let [^java.util.Iterator iterator (iterate loc from to)]
+      (let [^java.util.Iterator iterator (iterator loc from to)]
         (loop [s init]
           (cond
             (reduced? s) @s
