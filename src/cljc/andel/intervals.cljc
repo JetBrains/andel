@@ -384,33 +384,42 @@
                     (tree/end? next-loc) acc ;; skip sentinel
                     :else (recur next-loc (f acc (loc->Marker loc))))))))))
 
+(deftype IntervalsIterator [^:volatile-mutable loc ^long from ^long to stop?]
+  java.util.Iterator
+  (hasNext [this]
+    (boolean (and (not (tree/end? loc)) (not (< to (location-from loc))))))
+  (next [this]
+    (let [current (loc->Marker loc)
+          loc' (tree/scan (tree/next loc) stop?)]
+      (set! loc loc')
+      current))
+  (remove [this]
+    (throw (java.lang.UnsupportedOperationException.))))
+
+(defn iterate [loc ^long from ^long to]
+  (assert (<= from to))
+  (let [from (offset->tree-basis from)
+        to (offset->tree-basis to)
+        overlaps? (by-intersect from to)
+        overruns? (by-offset to)
+        stop? (fn [acc metrics]
+                (or (overlaps? acc metrics)
+                    (overruns? acc metrics)))
+        start-loc (if (and (tree/leaf? loc)
+                           (intersects-inclusive? (location-from loc) (location-to loc) from to))
+                    loc
+                    (tree/scan loc stop?))]
+    (IntervalsIterator. start-loc from to stop?)))
+
 (defn xquery-intervals [loc ^long from ^long to]
-  (let [from           (offset->tree-basis from)
-        to             (offset->tree-basis to)
-        overlaps?      (by-intersect from to)
-        overruns?      (by-offset to)
-        stop?          (fn [acc metrics]
-                         (or (overlaps? acc metrics)
-                             (overruns? acc metrics)))]
-    (tree/reducible
-      (fn [f init]
-        (loop [loc loc
-               s   init]
+  (tree/reducible
+    (fn [f init]
+      (let [^java.util.Iterator iterator (iterate loc from to)]
+        (loop [s init]
           (cond
-            (reduced? s) s
-            
-            (or (tree/end? loc) (< to (location-from loc)))
-            s
-
-            (tree/leaf? (tree/node loc))
-            (recur (tree/scan (tree/next loc) stop?)
-                   (if (intersects-inclusive? (location-from loc) (location-to loc)
-                                              from to)
-                     (f s (loc->Marker loc))
-                     s))
-
-            :else
-            (recur (tree/scan loc stop?) s)))))))
+            (reduced? s) @s
+            (.hasNext iterator) (recur (f s (.next iterator)))
+            :else s))))))
 
 (defn query-intervals [loc from to]
   (into [] (xquery-intervals loc from to)))

@@ -12,7 +12,7 @@
   [[^long x ^long y] metrics]
   (let [line-height (line-height metrics)
         line (int (Math/floor (/ (double y) line-height)))
-        col (int (Math/round (/ (double (max 0 (- x ^double (:gutter-width metrics))))
+        col (int (Math/round (/ (double (max 0 x))
                                 ^double (:width metrics))))]
     {:line line :col col}))
 

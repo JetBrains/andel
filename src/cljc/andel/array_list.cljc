@@ -12,9 +12,9 @@
    a)
 
 (defn into-array-list
-  ([coll]
+  (^ArrayList [coll]
    (into-array-list identity coll))
-  ([xf coll]
+  (^ArrayList [xf coll]
    (transduce xf conj! (ArrayList.) coll)))
 
 (defn ^ArrayList array-list

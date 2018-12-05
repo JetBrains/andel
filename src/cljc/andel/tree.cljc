@@ -563,15 +563,19 @@
                           :acc nil})))))))
 
 (defn compare-zippers [z1 z2 stop?]
-  (loop [z1 z1
-         z2 z2]
-    (if (identical? (node z1) (node z2))
-      (if (or (stop? (loc-acc z1) (metrics (node z1)))
-              (and (end? z1) (end? z2)))
-        true
-        (recur (skip z1) (skip z2)))
-      (if (and (end? z1) (end? z2))
-        false
-        (if (stop? (loc-acc z1) (metrics (node z1)))
-          (recur (next z1) (next z2))
-          false)))))
+  (let [stop? (fn [z]
+                (or (end? z) (stop? (loc-acc z) (metrics (node z)))))]
+    (loop [z1 z1
+           z2 z2]
+      (if (identical? (node z1) (node z2))
+        (if (and (stop? z1) (stop? z2))
+          true
+          (recur (skip z1) (skip z2)))
+        (if (or (leaf? (node z1))
+                (leaf? (node z2))
+                (end? z1)
+                (end? z2))
+          false
+          (if (and (stop? z1) (stop? z2))
+            (recur (next z1) (next z2))
+            false))))))
