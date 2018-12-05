@@ -19,6 +19,19 @@
   (fn ^long [^long offset ^long geom-offset]
     (if (= to offset) 1 0)))
 
+(defn geom-map ^ints [^String str]
+  (let [l (.length str)
+        m (int-array (inc l))]
+    (aset m 0 0)
+    (loop [i 0
+           o 0]
+      (if (< i l)
+        (let [c (.charAt str i)
+              o' (if (= c \tab) (+ o 4) (inc o))]
+          (aset m (inc i) o')
+          (recur (inc i) o'))
+        m))))
+
 (defn metrics-to [^String str ^clojure.lang.IFn$LLL pred]
   (loop [offset 0
          geometrics-offset 0
@@ -299,23 +312,6 @@
       len
       (dec len))))
 
-(defn lazy-text [loc ^long l]
-  (when (< 0 l)
-    (if (tree/end? loc)
-      (throw (ex-info "Length is out of bounds" {:l l}))
-      (if (tree/branch? loc)
-        (recur (tree/down-forward loc) l)
-        (let [i (offset loc)
-              text (.-data ^Leaf (tree/node loc))
-              base-offset (metrics-offset (tree/loc-acc loc))
-              start (- i base-offset)
-              end (min (count text) (+ start l))
-              s (subs text start end)
-              s-len (count s)]
-          (if (< s-len l)
-            (cons s (lazy-seq (lazy-text (tree/next (forget-acc loc)) (- l s-len))))
-            (list s)))))))
-
 (defn lines-count [t]
   (if t
     (inc (.-lines-count ^TextMetrics (tree/metrics t)))
@@ -326,12 +322,26 @@
     (metrics-offset (tree/metrics t))
     0))
 
-(defn text [loc l]
-  (.toString ^StringBuilder
-    (reduce (fn [^StringBuilder s t]
-              (.append s t))
-            (StringBuilder.)
-            (lazy-text loc l))))
+(defn text [loc ^long l]
+  (loop [loc loc
+         l l
+         sb (StringBuilder.)]
+    (if (< 0 l)
+      (if (tree/end? loc)
+        (throw (ex-info "Length is out of bounds" {:l l}))
+        (if (tree/branch? loc)
+          (recur (tree/down-forward loc) l sb)
+          (let [i (offset loc)
+                text (.-data ^Leaf (tree/node loc))
+                base-offset (metrics-offset (tree/loc-acc loc))
+                start (- i base-offset)
+                end (min (count text) (+ start l))
+                s-len (- end start)]
+            (recur (tree/next (forget-acc loc))
+              (- l s-len)
+              (doto sb
+                    (.append ^java.lang.CharSequence text start end))))))
+      (.toString sb))))
 
 (defn as-string [text-tree]
   (text (zipper text-tree)
