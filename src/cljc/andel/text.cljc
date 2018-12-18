@@ -2,11 +2,13 @@
   (:require [andel.tree :as tree])
   (:require [andel.array-list :as al])
   #?(:clj (:import [andel.tree ZipperLocation Leaf]
+                   [andel Text]
                    [java.lang CharSequence])))
 
-(defrecord TextMetrics [^long length
+(defrecord TextMetrics [^long length ;; in codepoints
                         ^long geometric-length
                         ^long lines-count
+                        ^long chars-count
                         ^long newline-prefix-length
                         ^long max-line-length
                         ^long newline-suffix-length])
@@ -33,57 +35,32 @@
         m))))
 
 (defn metrics-to [^String str ^clojure.lang.IFn$LLL pred]
-  (loop [offset 0
-         geometrics-offset 0
-         lines-count 0
-         prefix-length 0
-         max-line-length 0
-         prev-line-offset 0]
-    (if (not= 0 ^long (.invokePrim pred offset geometrics-offset))
-      (let [suffix-length (cond-> (- offset prev-line-offset)
-                            (not= 0 lines-count) dec)]
-        (TextMetrics. offset
-                      geometrics-offset
-                      lines-count
-                      (if (= 0 lines-count) offset prefix-length)
-                      (max max-line-length suffix-length)
-                      suffix-length))
-      (let [c (.charAt str offset)]
-        (if (= c \newline)
-          (recur
-            (inc offset)
-            (inc geometrics-offset)
-            (inc lines-count)
-            (if (= lines-count 0)
-              offset
-              prefix-length)
-            (max max-line-length (- offset prev-line-offset) prefix-length)
-            offset)
-          (recur
-            (inc offset)
-            (if (= c \tab)
-              (+ geometrics-offset 4)
-              (+ geometrics-offset 1))
-            lines-count
-            prefix-length
-            max-line-length
-            prev-line-offset))))))
+  (let [metrics (Text/metricsTo str pred)]
+    (TextMetrics.
+      (.-length metrics)
+      (.-geometricLength metrics)
+      (.-linesCount metrics)
+      (.-charsCount metrics)
+      (.-newlinePrefixLength metrics)
+      (.-maxLineLength metrics)
+      (.-newlineSuffixLength metrics))))
 
 (defn metrics [^String str]
-  (metrics-to str (offset-metrics-pred (.length str))))
+  (metrics-to str (offset-metrics-pred (.codePointCount str 0 (.length str)))))
 
 (defn ^TextMetrics scan-r-f
-  ([] (TextMetrics. 0 0 0 0 0 0))
+  ([] (TextMetrics. 0 0 0 0 0 0 0))
   ([^TextMetrics acc ^TextMetrics metrics]
    (TextMetrics. (+ (.-length acc) (.-length metrics))
                  (+ (.-geometric-length acc) (.-geometric-length metrics))
                  (+ (.-lines-count acc) (.-lines-count metrics))
+                 (+ (.-chars-count acc) (.-chars-count metrics))
                  0
                  0
                  0)))
 
 (defn build-r-f
-  ([] (TextMetrics. 0 0 0 0 0 0))
+  ([] (TextMetrics. 0 0 0 0 0 0 0))
   ([^TextMetrics acc ^TextMetrics metrics]
    (let [l-length (.-length acc)
          l-lines-count (.-lines-count acc)
@@ -98,6 +75,7 @@
      (TextMetrics. (+ (.-length acc) (.-length metrics))
                    (+ (.-geometric-length acc) (.-geometric-length metrics))
                    (+ (.-lines-count acc) (.-lines-count metrics))
+                   (+ (.-chars-count acc) (.-chars-count metrics))
                    (if (= l-lines-count 0)
                      (+ l-prefix r-prefix)
                      l-prefix)
