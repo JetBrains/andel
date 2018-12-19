@@ -34,7 +34,7 @@
         text-length (text/text-length text)]
     (assert (and (<= 0 offset)
                  (< offset text-length))
-            "OUT OF BOUNDS")
+            (str "OUT OF BOUNDS: " 0 " <= " offset " < " text-length))
     (->cursor
        {:zipper zipper
         :node-offset  node-offset

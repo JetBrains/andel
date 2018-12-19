@@ -6,20 +6,20 @@
                    [java.lang CharSequence])))
 
 (defrecord TextMetrics [^long length ;; in codepoints
-                        ^long geometric-length
+                        ^double geometric-length
                         ^long lines-count
                         ^long chars-count
                         ^long newline-prefix-length
                         ^long max-line-length
                         ^long newline-suffix-length])
 
-(defn geom-metrics-pred [^long to]
-  (fn ^long [^long offset ^long geom-offset]
+(defn geom-metrics-pred [^double to]
+  (fn ^long [^long offset ^double geom-offset]
     (if (<= to geom-offset) 1 0)))
 
 (defn offset-metrics-pred [^long to]
-  (fn ^long [^long offset ^long geom-offset]
-    (if (= to offset) 1 0)))
+  (fn ^long [^long offset ^double geom-offset]
+    (if (<= to offset) 1 0)))
 
 (defn geom-map ^ints [^String str]
   (let [l (.length str)
@@ -34,7 +34,7 @@
           (recur (inc i) o'))
         m))))
 
-(defn metrics-to [^String str ^clojure.lang.IFn$LLL pred]
+(defn metrics-to [^String str ^clojure.lang.IFn$LDL pred]
   (let [metrics (Text/metricsTo str pred)]
     (TextMetrics.
       (.-length metrics)
@@ -153,7 +153,7 @@
 (defn metrics-offset ^long [^TextMetrics m]
   (.-length m))
 
-(defn metrics-geom-offset ^long [^TextMetrics m]
+(defn metrics-geom-offset ^double [^TextMetrics m]
   (.-geometric-length m))
 
 (defn metrics-line ^long [^TextMetrics m]
@@ -165,7 +165,7 @@
   (metrics-offset (tree/acc loc)))
 
 (defn node-geom-offset
-  ^long [loc]
+  ^double [loc]
   (metrics-geom-offset (tree/acc loc)))
 
 (defn by-offset [^long i]
@@ -187,7 +187,7 @@
     (.-acc loc) (metrics-offset (.-acc loc))
     :else 0))
 
-(defn geom-offset ^long [^ZipperLocation loc]
+(defn geom-offset ^double [^ZipperLocation loc]
   (cond
     (tree/end? loc) (metrics-geom-offset (tree/metrics (tree/node loc)))
     (.-o-acc loc) (metrics-geom-offset (.-o-acc loc))
@@ -396,15 +396,15 @@
         delta (distance-to-EOL loc)]
     (scan-to-offset loc (+ offset delta))))
 
-(defn skip-columns [loc ^long cols]
+(defn skip-columns [loc ^double x]
   (let [geom (geom-offset loc)
         cur-line (line loc)
-        loc' (scan-to-geom-offset loc (+ geom cols))]
+        loc' (scan-to-geom-offset loc (+ geom x))]
     (if (= cur-line (line loc'))
       loc'
       (skip-to-line-end loc))))
 
-(defn column ^long [^ZipperLocation loc]
+(defn column ^double [^ZipperLocation loc]
   (let [cur-line (line loc)
         start-loc (scan-to-line-start (zipper (root loc)) cur-line)]
     (- (geom-offset loc) (geom-offset start-loc))))

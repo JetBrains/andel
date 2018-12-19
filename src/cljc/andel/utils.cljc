@@ -16,7 +16,7 @@
                                 ^double (:width metrics))))]
     {:line line :col col}))
 
-(defn offset->geom-offset ^long [zipper ^long offset]
+(defn offset->geom-offset ^double [zipper ^long offset]
   (-> zipper
       (text/scan-to-offset offset)
       (text/geom-offset)))
