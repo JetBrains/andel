@@ -41,8 +41,7 @@
         drop-virtual-position)))
 
 (defn type-in [{:keys [editor] :as state} insertion]
-  (let [str-len (count insertion)
-        selection (core/selection state)
+  (let [selection (core/selection state)
         selection-len (selection-length selection)]
     (-> state
         (cond-> (< 0 selection-len)

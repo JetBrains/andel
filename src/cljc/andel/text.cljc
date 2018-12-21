@@ -5,6 +5,15 @@
                    [andel Text]
                    [java.lang CharSequence])))
 
+(defn count-codepoints ^long [^String s]
+  (.codePointCount s 0 (.length s)))
+
+(defn chars->codepoints [^String s chars-offset]
+  (count-codepoints (subs s 0 chars-offset)))
+
+(defn codepoints->chars [^String s codepoints-offset]
+  (.offsetByCodePoints s 0 codepoints-offset))
+
 (defrecord TextMetrics [^long length ;; in codepoints
                         ^double geometric-length
                         ^long lines-count
@@ -98,8 +107,9 @@
 (def ^{:tag 'long} string-merge-thresh (quot string-thresh 2))
 
 (defn split-string [x]
-  (assert (<= string-thresh (count x)))
-  (map (fn [[i j]] (subs x i j)) (split-count 0 (count x) string-thresh)))
+  (assert (<= string-thresh (count-codepoints x)))
+  (map (fn [[i j]] (subs x (codepoints->chars x i) (codepoints->chars x j)))
+       (split-count 0 (count-codepoints x) string-thresh)))
 
 (def tree-config {:make-node (fn [children]
                                (tree/->Node (reduce (fn [acc x] (build-r-f acc (tree/metrics x)))
@@ -107,14 +117,14 @@
                                             children))
                   :reducing-fn build-r-f
                   :metrics-fn metrics
-                  :leaf-overflown? (fn [x] (<= string-thresh (count x)))
+                  :leaf-overflown? (fn [x] (<= string-thresh (count-codepoints x)))
                   :split-thresh 32
                   :split-leaf split-string
-                  :leaf-underflown? (fn [s] (< (count s) string-merge-thresh))
+                  :leaf-underflown? (fn [s] (< (count-codepoints s) string-merge-thresh))
                   :merge-leafs (fn [s1 s2] (str s1 s2))})
 
 (defn- reduce-string [^String s]
-  (let [last-idx (.length s)
+  (let [last-idx (count-codepoints s)
         leaf-vec (if (= last-idx 0)
                    [(tree/make-leaf "" tree-config)]
                    (let [leaf-vec (transient [])]
@@ -122,7 +132,9 @@
                        (if (= idx last-idx)
                          (persistent! leaf-vec)
                          (let [idx' (min (+ idx string-thresh) last-idx)]
-                           (conj! leaf-vec (tree/make-leaf (subs s idx idx') tree-config))
+                           (conj! leaf-vec (tree/make-leaf (subs s
+                                                                 (codepoints->chars s idx)
+                                                                 (codepoints->chars s idx')) tree-config))
                            (recur idx'))))))]
     leaf-vec))
 
@@ -206,25 +218,17 @@
   ^long [loc]
   (metrics-line (tree/acc loc)))
 
-(defn count-of ^long [s c ^long from ^long to]
-  (loop [res 0
-         from from]
-    (if-let [i (clojure.string/index-of s c from)]
-      (if (< (long i) to)
-        (recur (inc res) (inc (long i)))
-        res)
-      res)))
-
 (defn nth-index [s c ^long n]
   (if (= n 0)
     0
-    (loop [from 0
+    (chars->codepoints s
+     (loop [from 0
            n n]
       (let [i (clojure.string/index-of s c from)]
         (if (= n 1)
           i
           (when (some? i)
-            (recur (inc (long i)) (dec n))))))))
+            (recur (inc (long i)) (dec n)))))))))
 
 (defn forget-acc [loc]
   (tree/assoc-o-acc loc nil))
@@ -234,7 +238,7 @@
         o (offset loc)
         loc-offset (metrics-offset (tree/loc-acc loc))
         rel-offset (- o loc-offset)]
-    (= rel-offset (count s))))
+    (= rel-offset (count-codepoints s))))
 
 (defn scan-to-offset [loc ^long i]
   (let [offset-loc (tree/scan loc (by-offset i))]
@@ -273,7 +277,8 @@
       nth-eol-loc
       (let [o (node-offset nth-eol-loc)
             l (node-line nth-eol-loc)
-            eol-idx (nth-index (.-data ^Leaf (tree/node nth-eol-loc))
+            data (.-data ^Leaf (tree/node nth-eol-loc))
+            eol-idx (nth-index data
                                \newline
                                (- n l))
             s (.-data ^Leaf (tree/node nth-eol-loc))
@@ -300,6 +305,11 @@
     (metrics-offset (tree/metrics t))
     0))
 
+(defn chars-count [t]
+  (if t
+    (.-chars-count ^TextMetrics (tree/metrics t))
+    0))
+
 (defn text [loc ^long l]
   (loop [loc loc
          l l
@@ -313,19 +323,20 @@
                 text (.-data ^Leaf (tree/node loc))
                 base-offset (metrics-offset (tree/loc-acc loc))
                 start (- i base-offset)
-                end (min (count text) (+ start l))
-                s-len (- end start)]
+                end (min (count-codepoints text) (+ start l))
+                s-len (- end start)
+                chars-start (codepoints->chars text start)
+                chars-end (codepoints->chars text end)]
             (recur (tree/next (forget-acc loc))
               (- l s-len)
-              (doto sb
-                    (.append ^java.lang.CharSequence text start end))))))
+              (.append sb ^java.lang.CharSequence text chars-start chars-end)))))
       (.toString sb))))
 
 (defn as-string [text-tree]
   (text (zipper text-tree)
              (text-length text-tree)))
 
-(defn insert [loc s]
+(defn insert [loc ^String s]
   (if (tree/branch? loc)
     (recur (tree/down-forward loc) s)
     (let [i (offset loc)
@@ -333,9 +344,13 @@
           rel-offset (- i chunk-offset)]
       (-> loc
           (tree/edit (fn [^Leaf node]
-                       (let [data (or (some-> node (.-data)) "")]
-                         (tree/make-leaf (str (subs data 0 rel-offset) s (subs data rel-offset)) tree-config))))
-          (retain (count s))))))
+                       (let [data (or (some-> node (.-data)) "")
+                             rel-char-offset (codepoints->chars data rel-offset)]
+                         (def data data)
+                         (tree/make-leaf (str (subs data 0 rel-char-offset)
+                                              s
+                                              (subs data rel-char-offset)) tree-config))))
+          (retain (count-codepoints s))))))
 
 (defn delete [loc ^long l]
   (if (tree/branch? loc)
@@ -343,14 +358,17 @@
     (let [i (offset loc)
           chunk-offset (metrics-offset (tree/loc-acc loc))
           rel-offset (- i chunk-offset)
-          chunk-l (count (.-data ^Leaf (tree/node loc)))
+          chunk-l (count-codepoints (.-data ^Leaf (tree/node loc)))
           end (min chunk-l (+ rel-offset l))
           next-loc  (if (and (= rel-offset 0) (= end chunk-l))
                       (tree/remove (forget-acc loc))
                       (-> loc
                           (tree/edit (fn [node]
                                        (let [s (.-data ^Leaf node)]
-                                         (tree/make-leaf (str (subs s 0 rel-offset) (subs s end)) tree-config))))
+                                         (tree/make-leaf
+                                          (str (subs s 0 (codepoints->chars s rel-offset))
+                                               (subs s (codepoints->chars s end)))
+                                          tree-config))))
                           (scan-to-offset i)))
           deleted-c (- end rel-offset)]
       (if (< deleted-c l)
@@ -364,7 +382,7 @@
                   (case code
                     :retain (retain loc arg)
                     :insert (insert loc arg)
-                    :delete (delete loc (if (string? arg) (count arg) arg))))
+                    :delete (delete loc (if (string? arg) (count-codepoints arg) arg))))
                 (zipper t)
                 operation)))
 
@@ -404,11 +422,12 @@
       loc'
       (skip-to-line-end loc))))
 
-(defn column ^double [^ZipperLocation loc]
+(defn column ^double [^ZipperLocation loc] ;; todo this doesn't work anymore?
   (let [cur-line (line loc)
         start-loc (scan-to-line-start (zipper (root loc)) cur-line)]
     (- (geom-offset loc) (geom-offset start-loc))))
 
+;; todo this is fucked
 (deftype TextSequence [t ^{:volatile-mutable true} loc ^long from ^long to]
   CharSequence
   (^int length [this]

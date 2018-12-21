@@ -45,7 +45,7 @@
     offset))
 
 (defn line->offset ^long [line text]
-  (grid-pos->offset {:line line :col 0} text))
+  (text/offset (text/scan-to-line-start (text/zipper text) line)))
 
 (defn line->from-to-offsets [^long line text]
   (let [from (line->offset line text)
@@ -63,7 +63,7 @@
 
 (defn offset->line-col [^long offset text]
   (let [line (offset->line offset text)
-        line-offset (grid-pos->offset {:line line :col 0} text)
+        line-offset (line->offset line text)
         col (- offset line-offset)]
     {:line line
      :col col}))

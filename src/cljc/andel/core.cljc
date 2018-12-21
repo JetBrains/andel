@@ -17,7 +17,9 @@
 
 (defn make-editor-state []
   {:document {:text (text/make-text "")
-              :markup intervals/empty-tree}
+              :markup intervals/empty-tree
+              :error-stripes intervals/empty-tree
+              :line-markers intervals/empty-tree}
    :editor {:caret {:offset 0 :v-col 0}
             :selection [0 0]
             :widgets {}
@@ -81,17 +83,16 @@
       (and (some? caret-offset) (<= offset caret-offset)) (assoc-in [:caret :offset] (max offset (- caret-offset length))))))
 
 (defn insert-at-offset [state offset insertion]
-  (def state state)
-  (let [length      (count insertion)
+  (let [length      (text/count-codepoints insertion)
         text-length (-> state :document :text text/text-length)]
     (-> state
         (edit-at-offset offset #(text/insert % insertion))
         (update :document (fn [{:keys [text lexer] :as document}]
                             (cond-> document
                               (some? lexer) (assoc :lexer (intervals/update-text lexer (text/text->char-seq text) offset length)))))
-        (update-in [:document :markup] intervals/type-in offset (count insertion))
-        (update-in [:document :error-stripes] intervals/type-in offset (count insertion))
-        (update-in [:document :line-markers] intervals/type-in offset (count insertion))
+        (update-in [:document :markup] intervals/type-in offset length)
+        (update-in [:document :error-stripes] intervals/type-in offset length)
+        (update-in [:document :line-markers] intervals/type-in offset length)
         (cond->
           (some? (:editor state))
           (update :editor insert-at-editor {:offset offset :length length})
