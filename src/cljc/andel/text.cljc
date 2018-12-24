@@ -18,9 +18,9 @@
                         ^double geometric-length
                         ^long lines-count
                         ^long chars-count
-                        ^long newline-prefix-length
-                        ^long max-line-length
-                        ^long newline-suffix-length])
+                        ^double newline-prefix-length
+                        ^double max-line-length
+                        ^double newline-suffix-length])
 
 (defn geom-metrics-pred [^double to]
   (fn ^long [^long offset ^double geom-offset]
@@ -50,9 +50,9 @@
       (.-geometricLength metrics)
       (.-linesCount metrics)
       (.-charsCount metrics)
-      (.-newlinePrefixLength metrics)
+      (.-newlinePrefixGeomLength metrics)
       (.-maxLineLength metrics)
-      (.-newlineSuffixLength metrics))))
+      (.-newlineSuffixGeomLength metrics))))
 
 (defn metrics [^String str]
   (metrics-to str (offset-metrics-pred (.codePointCount str 0 (.length str)))))
@@ -399,7 +399,7 @@
         (scan-to-offset from)
         (text (- to from)))))
 
-(defn max-line-length ^long [text]
+(defn max-line-length ^double [text]
   (.-max-line-length ^TextMetrics (tree/metrics text)))
 
 (defn leaf->text [loc]
