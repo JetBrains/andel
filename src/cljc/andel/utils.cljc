@@ -6,15 +6,14 @@
 (defn line-height ^double [{:keys [^double height ^double spacing] :as metrics}]
   (+ height spacing))
 
-(defn pixels->grid-position
-  "transforms absolute position in pixels into absolute [line col] value
-   CAUTION! col might be bigger, than length of line."
-  [[^long x ^long y] metrics]
-  (let [line-height (line-height metrics)
-        line (int (Math/floor (/ (double y) line-height)))
-        col (int (Math/round (/ (double (max 0 x))
-                                ^double (:width metrics))))]
-    {:line line :col col}))
+(defn pixels->line-col [[^long x ^long y] text metrics]
+  (let [line (int (Math/floor (/ (double y) (line-height metrics))))
+        line-zipper (-> (text/zipper text)
+                        (text/scan-to-line-start line))
+        avg-width (Math/round (:width metrics))
+        col-zipper (text/skip-columns line-zipper (- x (/ avg-width 2)))]
+    {:line line
+     :col (- (text/offset col-zipper) (text/offset line-zipper))}))
 
 (defn offset->geom-offset ^double [zipper ^long offset]
   (-> zipper
@@ -33,28 +32,25 @@
                      line-start-geom))]
     [from-geom to-geom]))
 
-(defn grid-pos->offset ^long [{:keys [^long line ^long col]} text]
-  (-> (text/zipper text)
-      (text/scan-to-line-start line)
-      (text/skip-columns col)
-      (text/offset)))
-
 (defn line->offset ^long [line text]
   (text/offset (text/scan-to-line-start (text/zipper text) line)))
 
+(defn line-col->offset ^long [{:keys [^long line ^long col]} text]
+  (+ (line->offset line text) col))
+
+(defn line-length ^long [line text]
+  (text/distance-to-EOL (text/scan-to-line-start (text/zipper text) line)))
+
 (defn line->from-to-offsets [^long line text]
   (let [from (line->offset line text)
-        to (dec (line->offset (inc line) text))]
-    [from to]))
+        length (line-length line text)]
+    [from (+ from length)]))
 
 (defn offset->line ^long [offset text]
   (-> text
       (text/zipper)
       (text/scan-to-offset offset)
       (text/line)))
-
-(defn line-length ^long [line text]
-  (text/distance-to-EOL (text/scan-to-line-start (text/zipper text) line)))
 
 (defn offset->line-col [^long offset text]
   (let [line (offset->line offset text)

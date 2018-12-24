@@ -82,13 +82,14 @@
         line-len (utils/line-length to-line text)
         new-v-col (if (some? v-col) (max v-col col) col)
         new-col (min line-len new-v-col)]
-    {:offset (utils/grid-pos->offset {:line to-line :col new-col} text)
+    {:offset (utils/line-col->offset {:line to-line :col new-col} text)
      :v-col new-v-col}))
 
-(defn set-caret-at-grid-pos [{:keys [editor document] :as state} grid-pos selection?]
+(defn set-caret-at-line-col [{:keys [editor document] :as state} {:keys [line col]} selection?]
   (let [{:keys [caret selection]} editor
         {:keys [text]} document
-        caret-offset' (utils/grid-pos->offset grid-pos text)
+        line-offset (utils/line->offset line text)
+        caret-offset' (+ line-offset col)
         caret' {:offset caret-offset' :v-col 0}
         selection' (if selection?
                      (update-selection selection caret caret')
@@ -129,8 +130,9 @@
 
 (defn end [state selection?]
   (let [text (-> state :document :text)
-        caret-line (utils/offset->line (core/caret-offset state) text)]
-    (set-caret-at-grid-pos state {:line caret-line :col Integer/MAX_VALUE} selection?)))
+        caret-line (utils/offset->line (core/caret-offset state) text)
+        line-length (utils/line-length caret-line text)]
+    (set-caret-at-line-col state {:line caret-line :col line-length} selection?)))
 
 (def tab-or-space? #{\space \tab})
 (def whitespace? (into tab-or-space? #{\newline}))
