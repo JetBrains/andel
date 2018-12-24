@@ -34,15 +34,10 @@
     [from-geom to-geom]))
 
 (defn grid-pos->offset ^long [{:keys [^long line ^long col]} text]
-  (let [line-loc (text/scan-to-line-start (text/zipper text) line)
-        line-len (text/distance-to-EOL line-loc)
-        line-offset (text/offset line-loc)
-        line-geom-offset (text/geom-offset line-loc)
-        col-loc (text/scan-to-geom-offset line-loc (+ col line-geom-offset))
-        col-offset (text/offset col-loc)
-        text-length (text/text-length text)
-        offset (min text-length (max 0 (min col-offset (+ line-offset line-len))))]
-    offset))
+  (-> (text/zipper text)
+      (text/scan-to-line-start line)
+      (text/skip-columns col)
+      (text/offset)))
 
 (defn line->offset ^long [line text]
   (text/offset (text/scan-to-line-start (text/zipper text) line)))
