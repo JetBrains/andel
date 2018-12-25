@@ -1,6 +1,6 @@
 package andel;
 
-import clojure.lang.IFn.LDL;
+import clojure.lang.IFn.LDLL;
 import java.awt.Font;
 import java.awt.geom.AffineTransform;
 import java.awt.font.FontRenderContext;
@@ -21,11 +21,11 @@ public class Text {
     public double maxLineLength = 0;
   }
 
-  public static TextMetrics metricsTo(String str, LDL pred) {
+  public static TextMetrics metricsTo(String str, LDLL pred) {
     TextMetrics metrics = new TextMetrics();
     double prevLineGeomOffset = 0;
 
-    while (pred.invokePrim(metrics.length, metrics.geometricLength) == 0) {
+    while (pred.invokePrim(metrics.length, metrics.geometricLength, metrics.charsCount) == 0) {
       int codepoint = str.codePointAt((int) metrics.charsCount);
 
       double width = defaultWidth;

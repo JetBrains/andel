@@ -23,12 +23,16 @@
                         ^double newline-suffix-length])
 
 (defn geom-metrics-pred [^double to]
-  (fn ^long [^long offset ^double geom-offset]
+  (fn ^long [^long offset ^double geom-offset ^long char-offset]
     (if (<= to geom-offset) 1 0)))
 
 (defn offset-metrics-pred [^long to]
-  (fn ^long [^long offset ^double geom-offset]
+  (fn ^long [^long offset ^double geom-offset ^long char-offset]
     (if (<= to offset) 1 0)))
+
+(defn char-metrics-pred [^long to]
+  (fn ^long [^long offset ^double geom-offset ^long char-offset]
+    (if (<= to char-offset) 1 0)))
 
 (defn geom-map ^ints [^String str]
   (let [l (.length str)
@@ -43,7 +47,7 @@
           (recur (inc i) o'))
         m))))
 
-(defn metrics-to [^String str ^clojure.lang.IFn$LDL pred]
+(defn metrics-to [^String str ^clojure.lang.IFn$LDLL pred]
   (let [metrics (Text/metricsTo str pred)]
     (TextMetrics.
       (.-length metrics)
@@ -168,6 +172,9 @@
 (defn metrics-geom-offset ^double [^TextMetrics m]
   (.-geometric-length m))
 
+(defn metrics-char-offset ^long [^TextMetrics m]
+  (.-chars-count m))
+
 (defn metrics-line ^long [^TextMetrics m]
   (.-lines-count m))
 
@@ -180,11 +187,18 @@
   ^double [loc]
   (metrics-geom-offset (tree/acc loc)))
 
+(defn node-char-offset
+  ^long [loc]
+  (metrics-char-offset (tree/acc loc)))
+
 (defn by-offset [^long i]
   (fn [acc m] (<= i (metrics-offset (scan-r-f acc m)))))
 
-(defn by-geom-offset [^long i]
+(defn by-geom-offset [^double i]
   (fn [acc m] (<= i (metrics-geom-offset (scan-r-f acc m)))))
+
+(defn by-char-offset [^long i]
+  (fn [acc m] (<= i (metrics-char-offset (scan-r-f acc m)))))
 
 (defn by-offset-exclusive [^long i]
   (fn [acc m] (< i (metrics-offset (scan-r-f acc m)))))
@@ -211,6 +225,13 @@
     (tree/end? loc) (metrics-line (tree/metrics (tree/node loc)))
     (.-o-acc loc) (metrics-line (.-o-acc loc))
     (.-acc loc) (metrics-line (.-acc loc))
+    :else 0))
+
+(defn char-offset ^long [^ZipperLocation loc]
+  (cond
+    (tree/end? loc) (metrics-char-offset (tree/metrics (tree/node loc)))
+    (.-o-acc loc) (metrics-char-offset (.-o-acc loc))
+    (.-acc loc) (metrics-char-offset (.-acc loc))
     :else 0))
 
 (defn node-line
@@ -254,7 +275,7 @@
           next-node
           offset-loc)))))
 
-(defn scan-to-geom-offset [loc ^long i]
+(defn scan-to-geom-offset [loc ^double i]
   (let [offset-loc (tree/scan loc (by-geom-offset i))]
     (if (tree/end? offset-loc)
       offset-loc
@@ -262,6 +283,20 @@
             s (.-data ^Leaf (tree/node offset-loc))
             a (.-acc ^ZipperLocation offset-loc)
             offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s (geom-metrics-pred (- i o)))))
+            next-node (tree/next-leaf offset-loc)]
+        (if (and (at-the-right-border? offset-loc)
+                 (not (tree/end? next-node)))
+          next-node
+          offset-loc)))))
+
+(defn scan-to-char-offset [loc ^long i]
+  (let [offset-loc (tree/scan loc (by-char-offset i))]
+    (if (tree/end? offset-loc)
+      offset-loc
+      (let [o (node-char-offset offset-loc)
+            s (.-data ^Leaf (tree/node offset-loc))
+            a (.-acc ^ZipperLocation offset-loc)
+            offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s (char-metrics-pred (- i o)))))
             next-node (tree/next-leaf offset-loc)]
         (if (and (at-the-right-border? offset-loc)
                  (not (tree/end? next-node)))
@@ -307,7 +342,7 @@
 
 (defn chars-count [t]
   (if t
-    (.-chars-count ^TextMetrics (tree/metrics t))
+    (metrics-char-offset (tree/metrics t))
     0))
 
 (defn text [loc ^long l]
@@ -370,6 +405,26 @@
                                                (subs s (codepoints->chars s end)))
                                           tree-config))))
                           (scan-to-offset i)))
+          deleted-c (- end rel-offset)]
+      (if (< deleted-c l)
+        (recur next-loc (- l deleted-c))
+        next-loc))))
+
+(defn delete-chars [loc ^long l]
+  (if (tree/branch? loc)
+    (recur (tree/down-forward loc) l)
+    (let [i (char-offset loc)
+          chunk-offset (metrics-char-offset (tree/loc-acc loc))
+          rel-offset (- i chunk-offset)
+          chunk-l (count (.-data ^Leaf (tree/node loc)))
+          end (min chunk-l (+ rel-offset l))
+          next-loc  (if (and (= rel-offset 0) (= end chunk-l))
+                      (tree/remove (forget-acc loc))
+                      (-> loc
+                          (tree/edit (fn [node]
+                                       (let [s (.-data ^Leaf node)]
+                                         (tree/make-leaf (str (subs s 0 rel-offset) (subs s end)) tree-config))))
+                          (scan-to-char-offset i)))
           deleted-c (- end rel-offset)]
       (if (< deleted-c l)
         (recur next-loc (- l deleted-c))
