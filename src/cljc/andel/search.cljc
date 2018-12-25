@@ -49,8 +49,8 @@
         pl (count pattern)
         tl (text/text-length text)
         p #^ints (make-array Integer/TYPE tl)]
-    (let [i-cursor ^TransientCursor (cursor/make-transient-cursor text 1)
-          j-cursor ^TransientCursor (cursor/make-transient-cursor text 0)]
+    (let [i-cursor ^TransientCursor (cursor/transient (cursor/make-cursor text 1))
+          j-cursor ^TransientCursor (cursor/transient (cursor/make-cursor text 0))]
       (binding [j 0]
         (doall
          (for [i (range 1 tl)]

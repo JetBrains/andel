@@ -94,14 +94,20 @@
         selection' (if selection?
                      (update-selection selection caret caret')
                      [caret-offset' caret-offset'])]
-    (-> state
-        (assoc-in [:editor :caret] caret')
-        (assoc-in [:editor :selection] selection'))))
+    (update state :editor assoc
+            :caret caret'
+            :selection selection')))
 
-(defn set-caret-at-offset [{:keys [document] :as state} caret-offset' selection?]
+(defn set-caret-at-offset [{:keys [document editor] :as state} caret-offset' selection?]
   (let [text (:text document)
-        caret (-> state :editor :caret)
-        caret' {:offset caret-offset' :v-col 0}]
+        {:keys [caret selection]} editor
+        caret' {:offset caret-offset' :v-col 0}
+        selection' (if selection?
+                     (update-selection selection caret caret')
+                     [caret-offset' caret-offset'])]
+    (update state :editor assoc
+            :caret caret'
+            :selection selection')
     (-> state
         (cond-> selection?
           (update-in [:editor :selection] update-selection caret caret'))
@@ -109,18 +115,18 @@
           (assoc-in [:editor :selection] [caret-offset' caret-offset']))
         (assoc-in [:editor :caret] caret'))))
 
-(defn- move-cursor-at-line-start [cursor]
-  (let [[cursor' end?] (cursor/move-while cursor #(not= % \newline) :backward)]
+(defn- move-cursor-to-line-start [cursor]
+  (let [[cursor' end?] (cursor/backward-while cursor #(not= % \newline))]
     (if end? cursor' (cursor/next cursor'))))
 
 (defn home [state selection?]
   (let [text (-> state :document :text)
         caret-offset (max 0 (dec (core/caret-offset state)))
         cursor (cursor/make-cursor text caret-offset)
-        line-start-cursor (move-cursor-at-line-start cursor)
-        text-start-cursor (first (cursor/move-while line-start-cursor
-                                                    #(or (= % \space)
-                                                         (= % \tab)) :forward))
+        line-start-cursor (move-cursor-to-line-start cursor)
+        text-start-cursor (first (cursor/forward-while line-start-cursor
+                                                       #(or (= % \space)
+                                                         (= % \tab))))
         line-start-offset (cursor/offset line-start-cursor)
         text-start-offset (cursor/offset text-start-cursor)]
     (if (and (< line-start-offset caret-offset)
@@ -146,15 +152,15 @@
             char (cursor/get-char cursor)]
         (cond
           (whitespace? char)
-          (let [[word-begin-cursor end-of-text?] (cursor/move-while cursor whitespace? :forward)
+          (let [[word-begin-cursor end-of-text?] (cursor/forward-while cursor whitespace?)
                 delta (cursor/distance cursor word-begin-cursor)]
             (cond-> delta end-of-text? inc))
           (stop-symbol? char)
           1
           :else
-          (let [[word-begin-cursor end1?] (cursor/move-while cursor whitespace? :forward)
-                [word-end-cursor end2?] (cursor/move-while word-begin-cursor (complement stop-symbol?) :forward)
-                [next-word-start-cursor end3?] (cursor/move-while word-end-cursor whitespace? :forward)
+          (let [[word-begin-cursor end1?] (cursor/forward-while cursor whitespace?)
+                [word-end-cursor end2?] (cursor/forward-while word-begin-cursor (complement stop-symbol?))
+                [next-word-start-cursor end3?] (cursor/forward-while word-end-cursor whitespace?)
                 delta (cursor/distance cursor next-word-start-cursor)]
             (cond-> delta (or end1? end2? end3?) inc))))
       0)))
@@ -170,9 +176,9 @@
                (not (whitespace? char)))
           -1
           :else
-          (let [[word-end-cursor end1?] (cursor/move-while cursor tab-or-space? :backward)
+          (let [[word-end-cursor end1?] (cursor/backward-while cursor tab-or-space?)
                 found-newline? (= \newline (cursor/get-char word-end-cursor))
-                [word-begin-cursor end2?] (cursor/move-while word-end-cursor (complement stop-symbol?) :backward)
+                [word-begin-cursor end2?] (cursor/backward-while word-end-cursor (complement stop-symbol?))
                 delta (- (cursor/distance cursor word-begin-cursor))]
             (cond-> delta (or end1? end2? found-newline?) dec))))
       0)))

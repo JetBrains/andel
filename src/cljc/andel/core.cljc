@@ -81,7 +81,6 @@
       (and (some? caret-offset) (<= offset caret-offset)) (assoc-in [:caret :offset] (max offset (- caret-offset length))))))
 
 (defn insert-at-offset [state offset insertion]
-  (def state state)
   (let [length      (count insertion)
         text-length (-> state :document :text text/text-length)]
     (-> state

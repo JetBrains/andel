@@ -18,14 +18,11 @@
   (let [^Leaf leaf (tree/node loc)]
     (.charAt ^String (.-data leaf) offset)))
 
-
 (defrecord Cursor [zipper ^long node-offset ^long text-length ^long inner-offset ^long leaf-length])
 
 #?(:clj
-   (defmacro ->cursor [{:keys [zipper node-offset
-                               text-length inner-offset leaf-length]}]
-     `(->Cursor ~zipper ~node-offset
-                ~text-length ~inner-offset ~leaf-length)))
+   (defmacro ->cursor [{:keys [zipper node-offset text-length inner-offset leaf-length]}]
+     `(->Cursor ~zipper ~node-offset ~text-length ~inner-offset ~leaf-length)))
 
 (defn make-cursor [text offset]
   (let [zipper      (-> text text/zipper (text/scan-to-offset offset))
@@ -111,6 +108,7 @@
   (prev! ^MutableCursor [this])
   (isExhausted [this])
   (getChar [this])
+
   (getZipper [this])
   (getOffset ^long [this])
   (getNodeOffset ^long [this])
@@ -179,7 +177,7 @@
      `(->TransientCursor ~zipper ~node-offset ~text-length
                          ~inner-offset ~leaf-length ~exhausted)))
 
-(defn transient [^Cursor cursor]
+(defn transient ^TransientCursor [^Cursor cursor]
   (->transient-cursor
    {:zipper       (.-zipper cursor)
     :node-offset  (.-node-offset cursor)
@@ -196,9 +194,6 @@
     :inner-offset (.getInnerOffset cursor)
     :leaf-length  (.getLeafLength cursor)}))
 
-(def make-transient-cursor
-  (comp transient make-cursor))
-
 ;;;;;;;;;;;;;;;;;;;;;; util ;;;;;;;;;;;;;;;;;;;;;
 
 (defn set-to-offset! [^TransientCursor t-cursor ^long offset]
@@ -209,23 +204,24 @@
                                            (next! t-cursor)))
   t-cursor)
 
-(defn move-while [^Cursor cursor pred direction]
-  (let [advance (case direction
-                       :forward  #(.next! ^TransientCursor %)
-                       :backward #(.prev! ^TransientCursor %))
-        t-cursor ^TransientCursor (transient cursor)]
-    (loop []
-      (cond (not (pred (.getChar t-cursor)))
-            [(persistent! t-cursor) false]
+(defn forward-while [^Cursor cursor pred]
+  (loop [^TransientCursor tc (transient cursor)]
+    (cond
+      (.isExhausted tc) [(persistent! tc) true]
+      (not (pred (.getChar tc))) [(persistent! tc) false]
+      :else (recur (.next! tc)))))
 
-            (.isExhausted ^TransientCursor (advance t-cursor))
-            [(persistent! t-cursor) true]
-
-            :else
-            (recur)))))
+(defn backward-while [^Cursor cursor pred]
+  (loop [^TransientCursor tc (transient cursor)]
+    (cond
+      (.isExhausted tc) [(persistent! tc) true]
+      (not (pred (.getChar tc))) [(persistent! tc) false]
+      :else (recur (.prev! tc)))))
 
 (defn distance [^Cursor from ^Cursor to]
   (Math/abs ^Integer (- (offset to) (offset from))))
 
 (defn count-matching [cursor pred direction]
-  (distance cursor (first (move-while cursor pred direction))))
+  (distance cursor (first (case direction
+                            :backward (backward-while cursor pred)
+                            :forward (forward-while cursor pred)))))
