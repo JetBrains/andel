@@ -516,3 +516,13 @@
 
 (defn ^CharSequence text->char-seq [t]
   (TextSequence. t (scan-by-offset-exclusive (zipper t) 0) 0 (text-length t)))
+
+(defn offset->char-offset [text offset]
+  (-> (zipper text)
+      (scan-to-offset offset)
+      (char-offset)))
+
+(defn char-offset->offset [text char-offset]
+  (-> (zipper text)
+      (scan-to-char-offset char-offset)
+      (offset)))
