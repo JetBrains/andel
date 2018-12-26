@@ -54,14 +54,9 @@
   (let [caret-offset  (core/caret->offset old-caret)
         caret-offset' (core/caret->offset new-caret)]
     (cond
-      (= caret-offset from)
-      [(min caret-offset' to) (max caret-offset' to)]
-
-      (= caret-offset to)
-      [(min from caret-offset') (max from caret-offset')]
-
-      :else
-      [(min caret-offset caret-offset') (max caret-offset' caret-offset')])))
+      (< from caret-offset to) [(min caret-offset' from) (max caret-offset' to)]
+      (<= caret-offset from) [(min caret-offset' to) (max caret-offset' to)]
+      (<= caret-offset to) [(min from caret-offset') (max from caret-offset')])))
 
 (defn drop-selection-on-esc [state]
   (let [caret-offset (core/caret-offset state)]
