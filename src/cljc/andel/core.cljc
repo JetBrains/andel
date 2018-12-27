@@ -168,8 +168,9 @@
                                     [id (delete-at-editor editor {:offset offset :length length})])) sibs)))))))
 
 (defn text-at-offset [text offset length]
-  (let [char-seq (text/text->char-seq text)]
-    (.subSequence char-seq offset (+ offset length))))
+  (-> (text/zipper text)
+      (text/scan-to-offset offset)
+      (text/text length)))
 
 (defn play-operation [widget operation]
   (loop [i 0
