@@ -91,9 +91,9 @@
         chars-count (text/chars-count text)]
     (-> state
         (edit-at-offset offset #(text/insert % insertion))
-        (update :document (fn [{:keys [text lexer] :as document}]
-                            (cond-> document
-                              (some? lexer) (assoc :lexer (intervals/update-text lexer (text/text->char-seq text) offset length)))))
+        (update :document (fn [{:keys [text] :as document}]
+                            (cond-> document (some? (:lexer document))
+                                    (update :lexer intervals/update-text text offset))))
         (update-in [:document :markup] intervals/type-in offset length)
         (update-in [:document :error-stripes] intervals/type-in offset length)
         (update-in [:document :line-markers] intervals/type-in offset length)
@@ -121,7 +121,7 @@
         (edit-at-offset offset #(text/delete % length))
         (update :document (fn [{:keys [text] :as document}]
                             (cond-> document (some? (:lexer document))
-                                    (update :lexer intervals/update-text (text/text->char-seq text) offset (- length)))))
+                                    (update :lexer intervals/update-text text offset))))
         (update-in [:document :markup] intervals/delete-range offset length)
         (update-in [:document :error-stripes] intervals/delete-range offset length)
         (update-in [:document :line-markers] intervals/delete-range offset length)
@@ -153,7 +153,7 @@
         (edit-at-offset offset #(text/delete-chars % chars-length))
         (update :document (fn [{:keys [text] :as document}]
                             (cond-> document (some? (:lexer document))
-                              (update :lexer intervals/update-text (text/text->char-seq text) offset (- length)))))
+                              (update :lexer intervals/update-text text offset))))
         (update-in [:document :markup] intervals/delete-range offset length)
         (update-in [:document :error-stripes] intervals/delete-range offset length)
         (update-in [:document :line-markers] intervals/delete-range offset length)

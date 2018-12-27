@@ -533,7 +533,7 @@
 (defprotocol Lexer
   (lexemes [this from to])
   (lexemes-hash [this from to])
-  (update-text [this new-text offset length-delta])
+  (update-text [this text-tree offset])
   (token-type [this offset]))
 
 (defmulti create-lexer (constantly :idea))

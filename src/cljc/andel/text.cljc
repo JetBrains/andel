@@ -200,8 +200,8 @@
 (defn by-char-offset [^long i]
   (fn [acc m] (<= i (metrics-char-offset (scan-r-f acc m)))))
 
-(defn by-offset-exclusive [^long i]
-  (fn [acc m] (< i (metrics-offset (scan-r-f acc m)))))
+(defn by-char-offset-exclusive [^long i]
+  (fn [acc m] (< i (metrics-char-offset (scan-r-f acc m)))))
 
 (defn by-line [^long i]
   (fn [acc m] (<= i (metrics-line (scan-r-f acc m)))))
@@ -254,7 +254,7 @@
 (defn forget-acc [loc]
   (tree/assoc-o-acc loc nil))
 
-(defn- at-the-right-border? [loc]
+(defn- at-the-right-codepoint-border? [loc]
   (let [s (.-data ^Leaf (tree/node loc))
         o (offset loc)
         loc-offset (metrics-offset (tree/loc-acc loc))
@@ -270,7 +270,7 @@
             a (.-acc ^ZipperLocation offset-loc)
             offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s (offset-metrics-pred (- i o)))))
             next-node (tree/next-leaf offset-loc)]
-        (if (and (at-the-right-border? offset-loc)
+        (if (and (at-the-right-codepoint-border? offset-loc)
                  (not (tree/end? next-node)))
           next-node
           offset-loc)))))
@@ -284,10 +284,17 @@
             a (.-acc ^ZipperLocation offset-loc)
             offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s (geom-metrics-pred (- i o)))))
             next-node (tree/next-leaf offset-loc)]
-        (if (and (at-the-right-border? offset-loc)
+        (if (and (at-the-right-codepoint-border? offset-loc)
                  (not (tree/end? next-node)))
           next-node
           offset-loc)))))
+
+(defn- at-the-right-char-border? [loc]
+  (let [s (.-data ^Leaf (tree/node loc))
+        o (char-offset loc)
+        loc-offset (metrics-char-offset (tree/loc-acc loc))
+        rel-offset (- o loc-offset)]
+    (= rel-offset (count s))))
 
 (defn scan-to-char-offset [loc ^long i]
   (let [offset-loc (tree/scan loc (by-char-offset i))]
@@ -298,7 +305,7 @@
             a (.-acc ^ZipperLocation offset-loc)
             offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s (char-metrics-pred (- i o)))))
             next-node (tree/next-leaf offset-loc)]
-        (if (and (at-the-right-border? offset-loc)
+        (if (and (at-the-right-char-border? offset-loc)
                  (not (tree/end? next-node)))
           next-node
           offset-loc)))))
@@ -365,6 +372,26 @@
             (recur (tree/next (forget-acc loc))
               (- l s-len)
               (.append sb ^java.lang.CharSequence text chars-start chars-end)))))
+      (.toString sb))))
+
+(defn text-up-to-char [loc ^long l]
+  (loop [loc loc
+         l l
+         sb (StringBuilder.)]
+    (if (< 0 l)
+      (if (tree/end? loc)
+        (throw (ex-info "Length is out of bounds" {:l l}))
+        (if (tree/branch? loc)
+          (recur (tree/down-forward loc) l sb)
+          (let [i (char-offset loc)
+                text (.-data ^Leaf (tree/node loc))
+                base-offset (metrics-char-offset (tree/loc-acc loc))
+                start (- i base-offset)
+                end (min (count text) (+ start l))
+                s-len (- end start)]
+            (recur (tree/next (forget-acc loc))
+              (- l s-len)
+              (.append sb ^java.lang.CharSequence text start end)))))
       (.toString sb))))
 
 (defn as-string [text-tree]
@@ -458,11 +485,11 @@
   (.-max-line-length ^TextMetrics (tree/metrics text)))
 
 (defn leaf->text [loc]
-  {:base (metrics-offset (tree/loc-acc loc))
+  {:base (metrics-char-offset (tree/loc-acc loc))
    :text (.-data ^Leaf (tree/node loc))})
 
-(defn scan-by-offset-exclusive [loc i]
-  (tree/scan loc (by-offset-exclusive i)))
+(defn- scan-by-char-offset-exclusive [loc i]
+  (tree/scan loc (by-char-offset-exclusive i)))
 
 (defn skip-to-line-end [loc]
   (let [offset (offset loc)
@@ -482,18 +509,17 @@
         start-loc (scan-to-line-start (zipper (root loc)) cur-line)]
     (- (geom-offset loc) (geom-offset start-loc))))
 
-;; todo this is fucked
-(deftype TextSequence [t ^{:volatile-mutable true} loc ^long from ^long to]
+(deftype TextSequence [t ^{:volatile-mutable true} loc ^long from-char ^long to-char]
   CharSequence
   (^int length [this]
-               (- to from))
-  (^char charAt [this ^int index]
-                (assert (< index (- to from)) "Index out of range")
-                (let [absolute-index (+ index from)
+               (- to-char from-char))
+  (^char charAt [this ^int char-index]
+                (assert (< char-index (- to-char from-char)) "Index out of range")
+                (let [absolute-index (+ char-index from-char)
                       {:keys [^long base ^String text]} (leaf->text loc)]
                   (cond
                     (< absolute-index base)
-                    (let [new-loc (scan-by-offset-exclusive (zipper t) absolute-index)
+                    (let [new-loc (scan-by-char-offset-exclusive (zipper t) absolute-index)
                           {:keys [^int base ^String text]} (leaf->text new-loc)]
                       (set! loc new-loc)
                       (.charAt text (- absolute-index base)))
@@ -502,27 +528,27 @@
                     (.charAt text (- absolute-index base))
 
                     (<= (+ base (count text)) absolute-index)
-                    (let [new-loc (scan-by-offset-exclusive loc absolute-index)
+                    (let [new-loc (scan-by-char-offset-exclusive loc absolute-index)
                           {:keys [^long base ^String text]} (leaf->text new-loc)]
                       (set! loc new-loc)
                       (.charAt text (- absolute-index base)))
 
-                    :else (throw (ex-info "No way" {:from from :to to :index index})))))
+                    :else (throw (ex-info "No way" {:from from-char :to to-char :index char-index})))))
   (^CharSequence subSequence [this ^int from' ^int to']
-                             (assert (<= from' (- to from)) "From index out of range")
-                             (assert (<= to' (- to from)) "To index out of range")
-                             (TextSequence. t (scan-by-offset-exclusive (zipper t) 0) (+ from from') (+ from to')))
-  (^String toString [this] (text (scan-to-offset (zipper t) from) (- to from))))
+                             (assert (<= from' (- to-char from-char)) "From index out of range")
+                             (assert (<= to' (- to-char from-char)) "To index out of range")
+                             (TextSequence. t (scan-by-char-offset-exclusive (zipper t) 0) (+ from-char from') (+ from-char to')))
+  (^String toString [this] (text-up-to-char (scan-to-char-offset (zipper t) from-char) (- to-char from-char))))
 
 (defn ^CharSequence text->char-seq [t]
-  (TextSequence. t (scan-by-offset-exclusive (zipper t) 0) 0 (text-length t)))
+  (TextSequence. t (scan-by-char-offset-exclusive (zipper t) 0) 0 (chars-count t)))
 
-(defn offset->char-offset [text offset]
+(defn offset->char-offset ^long [text offset]
   (-> (zipper text)
       (scan-to-offset offset)
       (char-offset)))
 
-(defn char-offset->offset [text char-offset]
+(defn char-offset->offset ^long [text char-offset]
   (-> (zipper text)
       (scan-to-char-offset char-offset)
       (offset)))
