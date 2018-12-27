@@ -10,13 +10,14 @@
           "calling leaf-length on non-leaf")
   (let [^Leaf leaf (tree/node loc)
         ^String s  (.-data leaf)]
-    (.length s)))
+    (text/count-codepoints s)))
 
-(defn- get-char-from-loc [^ZipperLocation loc offset]
+(defn- get-codepoint-from-loc [^ZipperLocation loc offset]
   (assert (tree/leaf? (tree/node loc))
           "calling get-char-from-loc on non-leaf")
   (let [^Leaf leaf (tree/node loc)]
-    (.charAt ^String (.-data leaf) offset)))
+    (let [text (.-data leaf)]
+      (.charAt ^String text (text/codepoints->chars text offset)))))
 
 (defrecord Cursor [zipper ^long node-offset ^long text-length ^long inner-offset ^long leaf-length])
 
@@ -43,7 +44,7 @@
   (when cursor
     (let [zipper       (.-zipper cursor)
           inner-offset (.-inner-offset cursor)]
-      (get-char-from-loc zipper inner-offset))))
+      (get-codepoint-from-loc zipper inner-offset))))
 
 (defn next [^Cursor cursor]
   (let [zipper       (.-zipper cursor)
@@ -169,7 +170,7 @@
   (getNodeOffset [_] node-offset)
   (getInnerOffset [_] inner-offset)
   (getLeafLength [_] leaf-length)
-  (getChar [_] (when (not exhausted?) (get-char-from-loc zipper inner-offset))))
+  (getChar [_] (when (not exhausted?) (get-codepoint-from-loc zipper inner-offset))))
 
 #?(:clj
    (defmacro ->transient-cursor [{:keys [zipper node-offset text-length
