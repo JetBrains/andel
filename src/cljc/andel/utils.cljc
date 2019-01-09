@@ -6,16 +6,15 @@
 (defn line-height ^double [{:keys [^double height ^double spacing] :as metrics}]
   (+ height spacing))
 
-(defn pixels->line-col [[^long x ^long y] text metrics]
-  (let [line (int (Math/floor (/ (double y) (line-height metrics))))
+(defn pixels->line-col [[^double x ^double y] text metrics]
+  (let [line (int (Math/floor (/ y (line-height metrics))))
         line-zipper (-> (text/zipper text)
                         (text/scan-to-line-start line))
-        avg-width (Math/round (:width metrics))
-        col-zipper (text/skip-columns line-zipper (- x (/ avg-width 2)))]
+        col-zipper (text/skip-columns line-zipper (int (Math/round (/ x (:width metrics)))))]
     {:line line
      :col (- (text/offset col-zipper) (text/offset line-zipper))}))
 
-(defn offset->geom-offset ^double [zipper ^long offset]
+(defn offset->geom-offset ^long [zipper ^long offset]
   (-> zipper
       (text/scan-to-offset offset)
       (text/geom-offset)))

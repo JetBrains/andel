@@ -9,29 +9,29 @@
   (.codePointCount s 0 (.length s)))
 
 (defn chars->codepoints [^String s chars-offset]
-  (count-codepoints (subs s 0 chars-offset)))
+  (.codePointCount s 0 chars-offset))
 
 (defn codepoints->chars [^String s codepoints-offset]
   (.offsetByCodePoints s 0 codepoints-offset))
 
 (defrecord TextMetrics [^long length ;; in codepoints
-                        ^double geometric-length
+                        ^long geometric-length
                         ^long lines-count
                         ^long chars-count
-                        ^double newline-prefix-length
-                        ^double max-line-length
-                        ^double newline-suffix-length])
+                        ^long newline-prefix-length
+                        ^long max-line-length
+                        ^long newline-suffix-length])
 
-(defn geom-metrics-pred [^double to]
-  (fn ^long [^long offset ^double geom-offset ^long char-offset]
+(defn geom-metrics-pred [^long to]
+  (fn ^long [^long offset ^long geom-offset ^long char-offset]
     (if (<= to geom-offset) 1 0)))
 
 (defn offset-metrics-pred [^long to]
-  (fn ^long [^long offset ^double geom-offset ^long char-offset]
+  (fn ^long [^long offset ^long geom-offset ^long char-offset]
     (if (<= to offset) 1 0)))
 
 (defn char-metrics-pred [^long to]
-  (fn ^long [^long offset ^double geom-offset ^long char-offset]
+  (fn ^long [^long offset ^long geom-offset ^long char-offset]
     (if (<= to char-offset) 1 0)))
 
 (defn geom-map ^ints [^String str]
@@ -47,7 +47,7 @@
           (recur (inc i) o'))
         m))))
 
-(defn metrics-to [^String str ^clojure.lang.IFn$LDLL pred]
+(defn metrics-to [^String str ^clojure.lang.IFn$LLLL pred]
   (let [metrics (Text/metricsTo str pred)]
     (TextMetrics.
       (.-length metrics)
@@ -169,7 +169,7 @@
 (defn metrics-offset ^long [^TextMetrics m]
   (.-length m))
 
-(defn metrics-geom-offset ^double [^TextMetrics m]
+(defn metrics-geom-offset ^long [^TextMetrics m]
   (.-geometric-length m))
 
 (defn metrics-char-offset ^long [^TextMetrics m]
@@ -184,7 +184,7 @@
   (metrics-offset (tree/acc loc)))
 
 (defn node-geom-offset
-  ^double [loc]
+  ^long [loc]
   (metrics-geom-offset (tree/acc loc)))
 
 (defn node-char-offset
@@ -194,7 +194,7 @@
 (defn by-offset [^long i]
   (fn [acc m] (<= i (metrics-offset (scan-r-f acc m)))))
 
-(defn by-geom-offset [^double i]
+(defn by-geom-offset [^long i]
   (fn [acc m] (<= i (metrics-geom-offset (scan-r-f acc m)))))
 
 (defn by-char-offset [^long i]
@@ -213,7 +213,7 @@
     (.-acc loc) (metrics-offset (.-acc loc))
     :else 0))
 
-(defn geom-offset ^double [^ZipperLocation loc]
+(defn geom-offset ^long [^ZipperLocation loc]
   (cond
     (tree/end? loc) (metrics-geom-offset (tree/metrics (tree/node loc)))
     (.-o-acc loc) (metrics-geom-offset (.-o-acc loc))
@@ -275,7 +275,7 @@
           next-node
           offset-loc)))))
 
-(defn scan-to-geom-offset [loc ^double i]
+(defn scan-to-geom-offset [loc ^long i]
   (let [offset-loc (tree/scan loc (by-geom-offset i))]
     (if (tree/end? offset-loc)
       offset-loc
@@ -481,22 +481,19 @@
         (scan-to-offset from)
         (text (- to from)))))
 
-(defn max-line-length ^double [text]
+(defn max-line-length ^long [text]
   (.-max-line-length ^TextMetrics (tree/metrics text)))
 
 (defn leaf->text [loc]
   {:base (metrics-char-offset (tree/loc-acc loc))
    :text (.-data ^Leaf (tree/node loc))})
 
-(defn- scan-by-char-offset-exclusive [loc i]
-  (tree/scan loc (by-char-offset-exclusive i)))
-
 (defn skip-to-line-end [loc]
   (let [offset (offset loc)
         delta (distance-to-EOL loc)]
     (scan-to-offset loc (+ offset delta))))
 
-(defn skip-columns [loc ^double x]
+(defn skip-columns [loc ^long x]
   (let [geom (geom-offset loc)
         cur-line (line loc)
         loc' (scan-to-geom-offset loc (+ geom x))]
@@ -504,7 +501,7 @@
       loc'
       (skip-to-line-end loc))))
 
-(defn column ^double [^ZipperLocation loc] ;; todo this doesn't work anymore?
+(defn column ^long [^ZipperLocation loc]
   (let [cur-line (line loc)
         start-loc (scan-to-line-start (zipper (root loc)) cur-line)]
     (- (geom-offset loc) (geom-offset start-loc))))
@@ -519,7 +516,7 @@
                       {:keys [^long base ^String text]} (leaf->text loc)]
                   (cond
                     (< absolute-index base)
-                    (let [new-loc (scan-by-char-offset-exclusive (zipper t) absolute-index)
+                    (let [new-loc (tree/scan (zipper t) (by-char-offset-exclusive absolute-index))
                           {:keys [^int base ^String text]} (leaf->text new-loc)]
                       (set! loc new-loc)
                       (.charAt text (- absolute-index base)))
@@ -528,7 +525,7 @@
                     (.charAt text (- absolute-index base))
 
                     (<= (+ base (count text)) absolute-index)
-                    (let [new-loc (scan-by-char-offset-exclusive loc absolute-index)
+                    (let [new-loc (tree/scan loc (by-char-offset-exclusive absolute-index))
                           {:keys [^long base ^String text]} (leaf->text new-loc)]
                       (set! loc new-loc)
                       (.charAt text (- absolute-index base)))
@@ -537,11 +534,11 @@
   (^CharSequence subSequence [this ^int from' ^int to']
                              (assert (<= from' (- to-char from-char)) "From index out of range")
                              (assert (<= to' (- to-char from-char)) "To index out of range")
-                             (TextSequence. t (scan-by-char-offset-exclusive (zipper t) 0) (+ from-char from') (+ from-char to')))
+                             (TextSequence. t (tree/scan (zipper t) (by-char-offset-exclusive 0)) (+ from-char from') (+ from-char to')))
   (^String toString [this] (text-up-to-char (scan-to-char-offset (zipper t) from-char) (- to-char from-char))))
 
 (defn ^CharSequence text->char-seq [t]
-  (TextSequence. t (scan-by-char-offset-exclusive (zipper t) 0) 0 (chars-count t)))
+  (TextSequence. t (tree/scan (zipper t) (by-char-offset-exclusive 0)) 0 (chars-count t)))
 
 (defn offset->char-offset ^long [text offset]
   (-> (zipper text)
