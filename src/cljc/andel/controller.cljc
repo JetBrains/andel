@@ -71,8 +71,8 @@
                            (restrict-to-text-length text))))
 
 (defn translate-caret-verticaly [{v-col :v-col :as caret} text delta-line]
-  (let [carret-offset (core/caret->offset caret)
-        {:keys [line col]} (utils/offset->line-col carret-offset text)
+  (let [caret-offset (core/caret->offset caret)
+        {:keys [line col]} (utils/offset->line-col caret-offset text)
         to-line (+ line delta-line)
         line-len (utils/line-length to-line text)
         new-v-col (if (some? v-col) (max v-col col) col)
