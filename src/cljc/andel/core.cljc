@@ -83,12 +83,7 @@
       (and (some? caret-offset) (<= offset caret-offset)) (assoc-in [:caret :offset] (max offset (- caret-offset length))))))
 
 (defn insert-at-offset [state offset insertion]
-  (let [length      (text/count-codepoints insertion)
-        text        (:text (:document state))
-        char-offset (-> (text/zipper text)
-                        (text/scan-to-offset offset)
-                        (text/char-offset))
-        chars-count (text/chars-count text)]
+  (let [length      (text/count-codepoints insertion)]
     (-> state
         (edit-at-offset offset #(text/insert % insertion))
         (update :document (fn [{:keys [text] :as document}]
@@ -107,16 +102,13 @@
                     (into {} (map (fn [[id editor]]
                                     [id (insert-at-editor editor {:offset offset :length length})])) sibs))))
         (update :log (fn [l]
-                       (conj (or l []) [[:retain char-offset] [:insert insertion] [:retain (- chars-count char-offset)]]))))))
+                       (let [text        (:text (:document state))
+                             char-offset (text/offset->char-offset text offset)
+                             chars-count (text/chars-count text)]
+                         (conj (or l []) [[:retain char-offset] [:insert insertion] [:retain (- chars-count char-offset)]])))))))
 
 (defn delete-at-offset [state offset length]
-  (let [text (-> state :document :text)
-        from-loc (-> (text/zipper text)
-                     (text/scan-to-offset offset))
-        to-loc   (text/scan-to-offset from-loc (+ offset length))
-        old-text (text/text from-loc length)
-        total-chars-count (text/chars-count text)
-        [from-char to-char] [(text/char-offset from-loc) (text/char-offset to-loc)]]
+  (let [text (-> state :document :text)]
     (-> state
         (edit-at-offset offset #(text/delete % length))
         (update :document (fn [{:keys [text] :as document}]
@@ -135,7 +127,13 @@
                     (into {} (map (fn [[id editor]]
                                     [id (delete-at-editor editor {:offset offset :length length})])) sibs))))
         (update :log (fn [l]
-                       (conj (or l []) [[:retain from-char] [:delete old-text] [:retain (- total-chars-count from-char (- to-char from-char))]]))))))
+                       (let [from-loc (-> (text/zipper text)
+                                          (text/scan-to-offset offset))
+                             to-loc   (text/scan-to-offset from-loc (+ offset length))
+                             old-text (text/text from-loc length)
+                             total-chars-count (text/chars-count text)
+                             [from-char to-char] [(text/char-offset from-loc) (text/char-offset to-loc)]]
+                         (conj (or l []) [[:retain from-char] [:delete old-text] [:retain (- total-chars-count from-char (- to-char from-char))]])))))))
 
 (defn- insert-at-char-offset [state char-offset insertion]
   (let [offset (-> (text/zipper (:text (:document state)))
