@@ -111,7 +111,7 @@
         (assoc-in [:editor :caret] caret'))))
 
 (defn- move-cursor-to-line-start [cursor]
-  (let [[cursor' end?] (cursor/backward-while cursor #(not= % \newline))]
+  (let [[cursor' end?] (cursor/backward-while cursor #(not= % (int \newline)))]
     (if end? cursor' (cursor/next cursor'))))
 
 (defn home [state selection?]
@@ -120,8 +120,8 @@
         cursor (cursor/make-cursor text caret-offset)
         line-start-cursor (move-cursor-to-line-start cursor)
         text-start-cursor (first (cursor/forward-while line-start-cursor
-                                                       #(or (= % \space)
-                                                         (= % \tab))))
+                                                       #(or (= % (int \space))
+                                                         (= % (int \tab)))))
         line-start-offset (cursor/offset line-start-cursor)
         text-start-offset (cursor/offset text-start-cursor)]
     (if (and (< line-start-offset caret-offset)
@@ -135,15 +135,15 @@
         line-length (utils/line-length caret-line text)]
     (set-caret-at-line-col state {:line caret-line :col line-length} selection?)))
 
-(def tab-or-space? #{\space \tab})
-(def whitespace? (into tab-or-space? #{\newline}))
-(def stop-symbol? (into whitespace? #{\( \) \{ \} \[ \] \; \: \> \< \. \, \\ \- \+ \* \/ \= \& \| \@ \# \^}))
+(def tab-or-space? #{(int \space) (int \tab)})
+(def whitespace? (into tab-or-space? #{(int \newline)}))
+(def stop-symbol? (into whitespace? (map int) #{\( \) \{ \} \[ \] \; \: \> \< \. \, \\ \- \+ \* \/ \= \& \| \@ \# \^}))
 
 (defn next-word-delta [state]
   (let [text (-> state :document :text)
         text-len (text/text-length text)
         caret-offset (core/caret-offset state)]
-    (if (< caret-offset text-len)
+    (if (not= caret-offset text-len)
       (let [cursor (cursor/make-cursor text caret-offset)
             char (cursor/get-char cursor)]
         (cond

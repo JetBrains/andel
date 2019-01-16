@@ -10,14 +10,12 @@
           "calling leaf-length on non-leaf")
   (let [^Leaf leaf (tree/node loc)
         ^String s  (.-data leaf)]
-    (text/count-codepoints s)))
+    (text/codepoints-count s)))
 
 (defn- get-codepoint-from-loc [^ZipperLocation loc offset]
-  (assert (tree/leaf? (tree/node loc))
-          "calling get-char-from-loc on non-leaf")
   (let [^Leaf leaf (tree/node loc)]
     (let [text (.-data leaf)]
-      (.charAt ^String text (text/codepoints->chars text offset)))))
+      (.codePointAt ^String text (text/codepoints->chars text offset)))))
 
 (defrecord Cursor [zipper ^long node-offset ^long text-length ^long inner-offset ^long leaf-length])
 
@@ -40,7 +38,7 @@
         :inner-offset (- offset node-offset)
         :leaf-length  (get-leaf-length zipper)})))
 
-(defn get-char [^Cursor cursor]
+(defn get-char ^long [^Cursor cursor]
   (when cursor
     (let [zipper       (.-zipper cursor)
           inner-offset (.-inner-offset cursor)]
@@ -107,8 +105,8 @@
 (defprotocol MutableCursor
   (next! ^MutableCursor [this])
   (prev! ^MutableCursor [this])
-  (isExhausted [this])
-  (getChar [this])
+  (isExhausted ^boolean [this])
+  (getChar ^int [this])
 
   (getZipper [this])
   (getOffset ^long [this])
@@ -164,10 +162,10 @@
 
       :else (do (set! exhausted? true)
                 this)))
-  (isExhausted [_] exhausted?)
+  (isExhausted ^boolean [_] exhausted?)
   (getZipper [_] zipper)
-  (getOffset [_] (+ node-offset inner-offset))
-  (getNodeOffset [_] node-offset)
+  (getOffset ^long [_] (+ node-offset inner-offset))
+  (getNodeOffset ^long [_] node-offset)
   (getInnerOffset [_] inner-offset)
   (getLeafLength [_] leaf-length)
   (getChar [_] (when (not exhausted?) (get-codepoint-from-loc zipper inner-offset))))

@@ -5,7 +5,7 @@
                    [andel Text]
                    [java.lang CharSequence])))
 
-(defn count-codepoints ^long [^String s]
+(defn codepoints-count ^long [^String s]
   (.codePointCount s 0 (.length s)))
 
 (defn chars->codepoints [^String s chars-offset]
@@ -111,9 +111,10 @@
 (def ^{:tag 'long} string-merge-thresh (quot string-thresh 2))
 
 (defn split-string [x]
-  (assert (<= string-thresh (count-codepoints x)))
+  ;; TODO codepoints->chars is linear, maybe it will be a problem on large strings
+  (assert (<= string-thresh (codepoints-count x)))
   (map (fn [[i j]] (subs x (codepoints->chars x i) (codepoints->chars x j)))
-       (split-count 0 (count-codepoints x) string-thresh)))
+       (split-count 0 (codepoints-count x) string-thresh)))
 
 (def tree-config {:make-node (fn [children]
                                (tree/->Node (reduce (fn [acc x] (build-r-f acc (tree/metrics x)))
@@ -121,14 +122,14 @@
                                             children))
                   :reducing-fn build-r-f
                   :metrics-fn metrics
-                  :leaf-overflown? (fn [x] (<= string-thresh (count-codepoints x)))
+                  :leaf-overflown? (fn [x] (<= string-thresh (codepoints-count x)))
                   :split-thresh 32
                   :split-leaf split-string
-                  :leaf-underflown? (fn [s] (< (count-codepoints s) string-merge-thresh))
+                  :leaf-underflown? (fn [s] (< (codepoints-count s) string-merge-thresh))
                   :merge-leafs (fn [s1 s2] (str s1 s2))})
 
 (defn- reduce-string [^String s]
-  (let [last-idx (count-codepoints s)
+  (let [last-idx (codepoints-count s)
         leaf-vec (if (= last-idx 0)
                    [(tree/make-leaf "" tree-config)]
                    (let [leaf-vec (transient [])]
@@ -254,12 +255,12 @@
 (defn forget-acc [loc]
   (tree/assoc-o-acc loc nil))
 
-(defn- at-the-right-codepoint-border? [loc]
+(defn- at-the-right-border? [loc]
   (let [s (.-data ^Leaf (tree/node loc))
-        o (offset loc)
-        loc-offset (metrics-offset (tree/loc-acc loc))
+        o (char-offset loc)
+        loc-offset (node-char-offset loc)
         rel-offset (- o loc-offset)]
-    (= rel-offset (count-codepoints s))))
+    (= rel-offset (count s))))
 
 (defn scan-to-offset [loc ^long i]
   (let [offset-loc (tree/scan loc (by-offset i))]
@@ -270,7 +271,7 @@
             a (.-acc ^ZipperLocation offset-loc)
             offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s (offset-metrics-pred (- i o)))))
             next-node (tree/next-leaf offset-loc)]
-        (if (and (at-the-right-codepoint-border? offset-loc)
+        (if (and (at-the-right-border? offset-loc)
                  (not (tree/end? next-node)))
           next-node
           offset-loc)))))
@@ -284,17 +285,10 @@
             a (.-acc ^ZipperLocation offset-loc)
             offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s (geom-metrics-pred (- i o)))))
             next-node (tree/next-leaf offset-loc)]
-        (if (and (at-the-right-codepoint-border? offset-loc)
+        (if (and (at-the-right-border? offset-loc)
                  (not (tree/end? next-node)))
           next-node
           offset-loc)))))
-
-(defn- at-the-right-char-border? [loc]
-  (let [s (.-data ^Leaf (tree/node loc))
-        o (char-offset loc)
-        loc-offset (metrics-char-offset (tree/loc-acc loc))
-        rel-offset (- o loc-offset)]
-    (= rel-offset (count s))))
 
 (defn scan-to-char-offset [loc ^long i]
   (let [offset-loc (tree/scan loc (by-char-offset i))]
@@ -305,7 +299,7 @@
             a (.-acc ^ZipperLocation offset-loc)
             offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s (char-metrics-pred (- i o)))))
             next-node (tree/next-leaf offset-loc)]
-        (if (and (at-the-right-char-border? offset-loc)
+        (if (and (at-the-right-border? offset-loc)
                  (not (tree/end? next-node)))
           next-node
           offset-loc)))))
@@ -365,33 +359,13 @@
                 text (.-data ^Leaf (tree/node loc))
                 base-offset (metrics-offset (tree/loc-acc loc))
                 start (- i base-offset)
-                end (min (count-codepoints text) (+ start l))
+                end (min (codepoints-count text) (+ start l))
                 s-len (- end start)
                 chars-start (codepoints->chars text start)
                 chars-end (codepoints->chars text end)]
             (recur (tree/next (forget-acc loc))
               (- l s-len)
               (.append sb ^java.lang.CharSequence text chars-start chars-end)))))
-      (.toString sb))))
-
-(defn text-up-to-char [loc ^long l]
-  (loop [loc loc
-         l l
-         sb (StringBuilder.)]
-    (if (< 0 l)
-      (if (tree/end? loc)
-        (throw (ex-info "Length is out of bounds" {:l l}))
-        (if (tree/branch? loc)
-          (recur (tree/down-forward loc) l sb)
-          (let [i (char-offset loc)
-                text (.-data ^Leaf (tree/node loc))
-                base-offset (metrics-char-offset (tree/loc-acc loc))
-                start (- i base-offset)
-                end (min (count text) (+ start l))
-                s-len (- end start)]
-            (recur (tree/next (forget-acc loc))
-              (- l s-len)
-              (.append sb ^java.lang.CharSequence text start end)))))
       (.toString sb))))
 
 (defn as-string [text-tree]
@@ -401,26 +375,21 @@
 (defn insert [loc ^String s]
   (if (tree/branch? loc)
     (recur (tree/down-forward loc) s)
-    (let [i (offset loc)
-          chunk-offset (metrics-offset (tree/loc-acc loc))
-          rel-offset (- i chunk-offset)]
+    (let [rel-char-offset (- (char-offset loc) (node-char-offset loc))]
       (-> loc
           (tree/edit (fn [^Leaf node]
-                       (let [data (or (some-> node (.-data)) "")
-                             rel-char-offset (codepoints->chars data rel-offset)]
-                         (def data data)
+                       (let [data (or (some-> node (.-data)) "")]
                          (tree/make-leaf (str (subs data 0 rel-char-offset)
                                               s
                                               (subs data rel-char-offset)) tree-config))))
-          (retain (count-codepoints s))))))
+          (retain (codepoints-count s))))))
 
 (defn delete [loc ^long l]
   (if (tree/branch? loc)
     (recur (tree/down-forward loc) l)
     (let [i (offset loc)
-          chunk-offset (metrics-offset (tree/loc-acc loc))
-          rel-offset (- i chunk-offset)
-          chunk-l (count-codepoints (.-data ^Leaf (tree/node loc)))
+          rel-offset (- i (node-offset loc))
+          chunk-l (codepoints-count (.-data ^Leaf (tree/node loc)))
           end (min chunk-l (+ rel-offset l))
           next-loc  (if (and (= rel-offset 0) (= end chunk-l))
                       (tree/remove (forget-acc loc))
@@ -437,26 +406,6 @@
         (recur next-loc (- l deleted-c))
         next-loc))))
 
-(defn delete-chars [loc ^long l]
-  (if (tree/branch? loc)
-    (recur (tree/down-forward loc) l)
-    (let [i (char-offset loc)
-          chunk-offset (metrics-char-offset (tree/loc-acc loc))
-          rel-offset (- i chunk-offset)
-          chunk-l (count (.-data ^Leaf (tree/node loc)))
-          end (min chunk-l (+ rel-offset l))
-          next-loc  (if (and (= rel-offset 0) (= end chunk-l))
-                      (tree/remove (forget-acc loc))
-                      (-> loc
-                          (tree/edit (fn [node]
-                                       (let [s (.-data ^Leaf node)]
-                                         (tree/make-leaf (str (subs s 0 rel-offset) (subs s end)) tree-config))))
-                          (scan-to-char-offset i)))
-          deleted-c (- end rel-offset)]
-      (if (< deleted-c l)
-        (recur next-loc (- l deleted-c))
-        next-loc))))
-
 (def reset tree/reset)
 
 (defn play [t operation]
@@ -464,7 +413,7 @@
                   (case code
                     :retain (retain loc arg)
                     :insert (insert loc arg)
-                    :delete (delete loc (if (string? arg) (count-codepoints arg) arg))))
+                    :delete (delete loc (if (string? arg) (codepoints-count arg) arg))))
                 (zipper t)
                 operation)))
 
@@ -484,19 +433,18 @@
 (defn max-line-length ^long [text]
   (.-max-line-length ^TextMetrics (tree/metrics text)))
 
-(defn leaf->text [loc]
-  {:base (metrics-char-offset (tree/loc-acc loc))
-   :text (.-data ^Leaf (tree/node loc))})
+(defn- leaf-data ^String [loc]
+  (.-data ^Leaf (tree/node loc)))
 
 (defn skip-to-line-end [loc]
   (let [offset (offset loc)
         delta (distance-to-EOL loc)]
     (scan-to-offset loc (+ offset delta))))
 
-(defn skip-columns [loc ^long x]
+(defn skip-columns [loc ^long cols]
   (let [geom (geom-offset loc)
         cur-line (line loc)
-        loc' (scan-to-geom-offset loc (+ geom x))]
+        loc' (scan-to-geom-offset loc (+ geom cols))]
     (if (= cur-line (line loc'))
       loc'
       (skip-to-line-end loc))))
@@ -513,11 +461,13 @@
   (^char charAt [this ^int char-index]
                 (assert (< char-index (- to-char from-char)) "Index out of range")
                 (let [absolute-index (+ char-index from-char)
-                      {:keys [^long base ^String text]} (leaf->text loc)]
+                      base (node-char-offset loc)
+                      text (leaf-data loc)]
                   (cond
                     (< absolute-index base)
                     (let [new-loc (tree/scan (zipper t) (by-char-offset-exclusive absolute-index))
-                          {:keys [^int base ^String text]} (leaf->text new-loc)]
+                          base (node-char-offset new-loc)
+                          text (leaf-data new-loc)]
                       (set! loc new-loc)
                       (.charAt text (- absolute-index base)))
 
@@ -526,7 +476,8 @@
 
                     (<= (+ base (count text)) absolute-index)
                     (let [new-loc (tree/scan loc (by-char-offset-exclusive absolute-index))
-                          {:keys [^long base ^String text]} (leaf->text new-loc)]
+                          base (node-char-offset new-loc)
+                          text (leaf-data new-loc)]
                       (set! loc new-loc)
                       (.charAt text (- absolute-index base)))
 
@@ -535,17 +486,20 @@
                              (assert (<= from' (- to-char from-char)) "From index out of range")
                              (assert (<= to' (- to-char from-char)) "To index out of range")
                              (TextSequence. t (tree/scan (zipper t) (by-char-offset-exclusive 0)) (+ from-char from') (+ from-char to')))
-  (^String toString [this] (text-up-to-char (scan-to-char-offset (zipper t) from-char) (- to-char from-char))))
+  (^String toString [this]
+    (let [from-loc (scan-to-char-offset (zipper t) from-char)
+          to-loc (scan-to-char-offset from-loc to-char)]
+      (text from-loc (- (offset to-loc) (offset from-loc))))))
 
 (defn ^CharSequence text->char-seq [t]
   (TextSequence. t (tree/scan (zipper t) (by-char-offset-exclusive 0)) 0 (chars-count t)))
 
-(defn offset->char-offset ^long [text offset]
+(defn offset->char-offset ^long [text ^long offset]
   (-> (zipper text)
       (scan-to-offset offset)
       (char-offset)))
 
-(defn char-offset->offset ^long [text char-offset]
+(defn char-offset->offset ^long [text ^long char-offset]
   (-> (zipper text)
       (scan-to-char-offset char-offset)
       (offset)))

@@ -82,8 +82,8 @@
       (and (some? sel-to)       (<= offset sel-to)) (assoc-in [:selection 1] (max offset (- sel-to length)))
       (and (some? caret-offset) (<= offset caret-offset)) (assoc-in [:caret :offset] (max offset (- caret-offset length))))))
 
-(defn insert-at-offset [state offset insertion]
-  (let [length      (text/count-codepoints insertion)]
+(defn insert-at-offset [state ^long offset insertion]
+  (let [length      (text/codepoints-count insertion)]
     (-> state
         (edit-at-offset offset #(text/insert % insertion))
         (update :document (fn [{:keys [text] :as document}]
@@ -107,7 +107,7 @@
                              chars-count (text/chars-count text)]
                          (conj (or l []) [[:retain char-offset] [:insert insertion] [:retain (- chars-count char-offset)]])))))))
 
-(defn delete-at-offset [state offset length]
+(defn delete-at-offset [state ^long offset length]
   (let [text (-> state :document :text)]
     (-> state
         (edit-at-offset offset #(text/delete % length))
@@ -129,41 +129,10 @@
         (update :log (fn [l]
                        (let [from-loc (-> (text/zipper text)
                                           (text/scan-to-offset offset))
-                             to-loc   (text/scan-to-offset from-loc (+ offset length))
                              old-text (text/text from-loc length)
                              total-chars-count (text/chars-count text)
-                             [from-char to-char] [(text/char-offset from-loc) (text/char-offset to-loc)]]
-                         (conj (or l []) [[:retain from-char] [:delete old-text] [:retain (- total-chars-count from-char (- to-char from-char))]])))))))
-
-(defn- insert-at-char-offset [state char-offset insertion]
-  (let [offset (-> (text/zipper (:text (:document state)))
-                   (text/scan-to-char-offset char-offset)
-                   (text/offset))]
-    (insert-at-offset state offset insertion)))
-
-(defn- delete-at-char-offset [state char-offset deleted-text]
-  (let [offset (-> (text/zipper (:text (:document state)))
-                   (text/scan-to-char-offset char-offset)
-                   (text/offset))
-        chars-length (count deleted-text)
-        length (text/count-codepoints deleted-text)]
-    (-> state
-        (edit-at-offset offset #(text/delete-chars % chars-length))
-        (update :document (fn [{:keys [text] :as document}]
-                            (cond-> document (some? (:lexer document))
-                              (update :lexer intervals/update-text text offset))))
-        (update-in [:document :markup] intervals/delete-range offset length)
-        (update-in [:document :error-stripes] intervals/delete-range offset length)
-        (update-in [:document :line-markers] intervals/delete-range offset length)
-        (cond->
-          (some? (:editor state))
-          (update :editor delete-at-editor {:offset offset :length length})
-
-          (some? (:sibling-editors state))
-          (update :sibling-editors
-                  (fn [sibs]
-                    (into {} (map (fn [[id editor]]
-                                    [id (delete-at-editor editor {:offset offset :length length})])) sibs)))))))
+                             from-char (text/char-offset from-loc)]
+                         (conj (or l []) [[:retain from-char] [:delete old-text] [:retain (- total-chars-count from-char (count old-text))]])))))))
 
 (defn text-at-offset [text offset length]
   (-> (text/zipper text)
@@ -171,12 +140,13 @@
       (text/text length)))
 
 (defn play-operation [widget operation]
-  (loop [i 0
-         [[type x] & rest] operation
-         widget widget]
-    (if (some? type)
-      (case type
-        :insert (recur (+ i (count x)) rest (insert-at-char-offset widget i x))
-        :retain (recur (+ i ^long x) rest widget)
-        :delete (recur i rest (delete-at-char-offset widget i x)))
-      widget)))
+  (let [text (:text (:document widget))]
+    (loop [i 0
+           [[type x] & rest] operation
+           widget widget]
+      (if (some? type)
+        (case type
+          :insert (recur (+ i (count x)) rest (insert-at-offset widget (text/char-offset->offset text i) x))
+          :retain (recur (+ i ^long x) rest widget)
+          :delete (recur i rest (delete-at-offset widget (text/char-offset->offset text i) (text/codepoints-count x))))
+        widget))))

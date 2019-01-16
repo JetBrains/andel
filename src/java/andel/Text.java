@@ -5,43 +5,68 @@ import clojure.lang.IFn.LLLL;
 public class Text {
 
   public static class TextMetrics {
-    public long length = 0;
-    public long geometricLength = 0;
-    public long linesCount = 0;
-    public long charsCount = 0;
-    public long newlinePrefixGeomLength = 0;
-    public long newlineSuffixGeomLength = 0;
-    public long maxLineLength = 0;
+
+    public final long length;
+    public final long geometricLength;
+    public final long linesCount;
+    public final long charsCount;
+    public final long newlinePrefixGeomLength;
+    public final long newlineSuffixGeomLength;
+    public final long maxLineLength;
+
+    public TextMetrics(long length,
+                       long geometricLength,
+                       long linesCount,
+                       long charsCount,
+                       long newlinePrefixGeomLength,
+                       long newlineSuffixGeomLength,
+                       long maxLineLength) {
+      this.length = length;
+      this.geometricLength = geometricLength;
+      this.linesCount = linesCount;
+      this.charsCount = charsCount;
+      this.newlinePrefixGeomLength = newlinePrefixGeomLength;
+      this.newlineSuffixGeomLength = newlineSuffixGeomLength;
+      this.maxLineLength = maxLineLength;
+    }
   }
 
   public static TextMetrics metricsTo(String str, LLLL pred) {
-    TextMetrics metrics = new TextMetrics();
     long prevLineGeomOffset = 0;
+    long maxLineLength = 0;
+    long newlinePrefixGeomLength = 0;
+    long codePointsCount = 0;
+    int charsCount = 0;
+    long geometricLength = 0;
+    long linesCount = 0;
 
-    while (pred.invokePrim(metrics.length, metrics.geometricLength, metrics.charsCount) == 0) {
-      int codepoint = str.codePointAt((int) metrics.charsCount);
+    while (pred.invokePrim(codePointsCount, geometricLength, charsCount) == 0) {
+      int codepoint = str.codePointAt(charsCount);
 
       if (codepoint == '\n') {
-        metrics.maxLineLength = Math.max(Math.max(metrics.maxLineLength,
-                                                  metrics.newlinePrefixGeomLength),
-                                         metrics.length - prevLineGeomOffset);
-        metrics.newlinePrefixGeomLength = metrics.linesCount == 0 ? metrics.geometricLength : metrics.newlinePrefixGeomLength;
-        prevLineGeomOffset = metrics.geometricLength;
+        maxLineLength = Math.max(Math.max(maxLineLength, newlinePrefixGeomLength), codePointsCount - prevLineGeomOffset);
+        newlinePrefixGeomLength = linesCount == 0 ? geometricLength : newlinePrefixGeomLength;
+        prevLineGeomOffset = geometricLength;
+        linesCount += 1;
       }
 
-      metrics.length += 1;
-      metrics.geometricLength += codepoint == '\t' ? 4 : 1;
-      metrics.linesCount += codepoint == '\n' ? 1 : 0;
-      metrics.charsCount += Character.charCount(codepoint);
+      codePointsCount += 1;
+      geometricLength += codepoint == '\t' ? 4 : 1;
+
+      charsCount += Character.charCount(codepoint);
     }
 
-    long newlineSuffixGeomLength = metrics.geometricLength - prevLineGeomOffset - (metrics.linesCount == 0 ? 1 : 0);
+    long newlineSuffixGeomLength = geometricLength - prevLineGeomOffset - (linesCount == 0 ? 1 : 0);
 
-    metrics.newlinePrefixGeomLength = metrics.linesCount == 0 ? metrics.length : metrics.newlinePrefixGeomLength;
-    metrics.maxLineLength = Math.max(metrics.maxLineLength, newlineSuffixGeomLength);
-    metrics.newlineSuffixGeomLength = newlineSuffixGeomLength;
+    newlinePrefixGeomLength = linesCount == 0 ? codePointsCount : newlinePrefixGeomLength;
+    maxLineLength = Math.max(maxLineLength, newlineSuffixGeomLength);
 
-    return metrics;
+    return new TextMetrics(codePointsCount,
+                           geometricLength,
+                           linesCount,
+                           charsCount,
+                           newlinePrefixGeomLength,
+                           newlineSuffixGeomLength,
+                           maxLineLength);
   }
-
 }
