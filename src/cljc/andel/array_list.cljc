@@ -11,6 +11,10 @@
    (.addAll a xs)
    a)
 
+(defn empty
+  ([] (ArrayList.))
+  ([^long capacity] (ArrayList. capacity)))
+
 (defn into-array-list
   (^ArrayList [coll]
    (into-array-list identity coll))

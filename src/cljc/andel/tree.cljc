@@ -213,6 +213,7 @@
   (let [leaf-overflown? (.-leaf-overflown? config)
         split-leaf (.-split-leaf config)
         split-thresh (.-split-thresh config)
+        merge-thresh (quot split-thresh 2)
         make-node-fn (.-make-node config)]
     (if (split-needed? children config)
       (reduce
@@ -229,7 +230,7 @@
                (reduce al/conj! result (map #(make-leaf % config) (split-leaf (.-data ^Leaf node))))
 
                :else (al/conj! result node)))
-       (al/into-array-list [])
+       (al/empty merge-thresh)
        children)
       children)))
 
@@ -248,39 +249,39 @@
         leaf-overflown? (.-leaf-overflown? config)
         split-leaf (.-split-leaf config)
         split-thresh (.-split-thresh config)
+        merge-thresh (quot split-thresh 2)
         make-node-fn (.-make-node config)]
     (if (merge-needed? children config)
       (if (nodes? children)
-        (let [merge-thresh (quot split-thresh 2)]
-          (loop [i 1
-                 result (al/into-array-list [])
-                 ^Node left (al/get children 0)]
-            (if (< i (al/length children))
-              (let [^Node right (al/get children i)
-                    left-children (.-children left)
-                    right-children (.-children right)
-                    left-c (al/length left-children)
-                    right-c (al/length right-children)]
-                (if (or (< left-c merge-thresh) (< right-c merge-thresh))
-                  (if (<= split-thresh (+ left-c right-c))
-                    (let [n (quot (+ left-c right-c) 2)
-                          s (as-> (al/into-array-list []) al
-                                  (reduce al/conj! al left-children)
-                                  (reduce al/conj! al right-children))
-                          children-left (al/sublist s 0 n)
-                          children-right (al/sublist s n (al/length s))]
-                      (recur (inc i)
-                             (al/conj! result (make-node-fn (merge-children children-left config)))
-                             (make-node-fn children-right)))
-                    (recur (inc i)
-                           result
-                           (make-node-fn (merge-children (as-> (al/into-array-list []) a
-                                                            (reduce al/conj! a left-children)
-                                                            (reduce al/conj! a right-children)) config))))
-                  (recur (inc i) (al/conj! result left) right)))
-              (al/conj! result left))))
         (loop [i 1
-               result (al/into-array-list [])
+               result (al/empty merge-thresh)
+               ^Node left (al/get children 0)]
+          (if (< i (al/length children))
+            (let [^Node right (al/get children i)
+                  left-children (.-children left)
+                  right-children (.-children right)
+                  left-c (al/length left-children)
+                  right-c (al/length right-children)]
+              (if (or (< left-c merge-thresh) (< right-c merge-thresh))
+                (if (<= split-thresh (+ left-c right-c))
+                  (let [n (quot (+ left-c right-c) 2)
+                        s (as-> (al/empty merge-thresh) al
+                                (reduce al/conj! al left-children)
+                                (reduce al/conj! al right-children))
+                        children-left (al/sublist s 0 n)
+                        children-right (al/sublist s n (al/length s))]
+                    (recur (inc i)
+                      (al/conj! result (make-node-fn (merge-children children-left config)))
+                      (make-node-fn children-right)))
+                  (recur (inc i)
+                    result
+                    (make-node-fn (merge-children (as-> (al/empty merge-thresh) a
+                                                        (reduce al/conj! a left-children)
+                                                        (reduce al/conj! a right-children)) config))))
+                (recur (inc i) (al/conj! result left) right)))
+            (al/conj! result left)))
+        (loop [i 1
+               result (al/empty merge-thresh)
                left-data (.-data ^Leaf (al/get children 0))]
           (if (< i (al/length children))
             (let [^Leaf right (al/get children i)]
