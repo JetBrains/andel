@@ -8,10 +8,10 @@
 (defn codepoints-count ^long [^String s]
   (.codePointCount s 0 (.length s)))
 
-(defn chars->codepoints [^String s chars-offset]
+(defn chars->codepoints ^long [^String s ^long chars-offset]
   (.codePointCount s 0 chars-offset))
 
-(defn codepoints->chars [^String s codepoints-offset]
+(defn codepoints->chars ^long [^String s ^long codepoints-offset]
   (.offsetByCodePoints s 0 codepoints-offset))
 
 (defrecord TextMetrics [^long length ;; in codepoints
