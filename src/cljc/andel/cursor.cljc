@@ -137,7 +137,6 @@
 (defn prev! [cursor]
   (.prev ^MutableCursor cursor))
 
-(onair.dev/decompile
 (deftype TransientCursor [^{:volatile-mutable true} zipper
                           ^{:volatile-mutable true :tag long} node-char-offset
                           ^long text-length
@@ -146,7 +145,7 @@
                           ^{:volatile-mutable true :tag long} offset]
   Cursor
   (getChar [this]
-     (.codePointAt (leaf-text zipper) inner-char-offset))
+    (.codePointAt (leaf-text zipper) inner-char-offset))
   (getOffset [this] offset)
   (getCharOffset [this]
     (+ node-char-offset inner-char-offset))
@@ -201,7 +200,7 @@
   (getZipper [_] zipper)
   (getNodeCharOffset [_] node-char-offset)
   (getInnerCharOffset [_] inner-char-offset)
-  (getLeafCharLength [_] leaf-char-length)))
+  (getLeafCharLength [_] leaf-char-length))
 
 (defmacro ->transient-cursor [& {:keys [zipper node-char-offset text-length inner-char-offset
                                         offset leaf-char-length]}]
