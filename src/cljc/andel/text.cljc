@@ -184,12 +184,10 @@
   ^long [loc]
   (metrics-offset (tree/acc loc)))
 
-(defn node-geom-offset
-  ^long [loc]
+(defn node-geom-offset ^long [loc]
   (metrics-geom-offset (tree/acc loc)))
 
-(defn node-char-offset
-  ^long [loc]
+(defn node-char-offset ^long [loc]
   (metrics-char-offset (tree/acc loc)))
 
 (defn by-offset [^long i]
@@ -346,7 +344,7 @@
     (metrics-char-offset (tree/metrics t))
     0))
 
-(defn text [loc ^long l]
+(defn text ^String [loc ^long l]
   (loop [loc loc
          l l
          sb (StringBuilder.)]

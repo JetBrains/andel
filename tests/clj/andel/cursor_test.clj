@@ -29,11 +29,17 @@
   (let [text-length (text/text-length t)]
     (case op
       :next (if (< (inc offset) text-length)
-              (let [c (nth (text/text->char-seq t) (inc offset))]
+              (let [c (-> (text/zipper t)
+                          (text/scan-to-offset (inc offset))
+                          (text/text 1)
+                          (.codePointAt 0))]
                 [c [t (inc offset)]])
               [nil [t offset]])
       :prev (if (<= 0 (dec offset))
-              (let [c (nth (text/text->char-seq t) (dec offset))]
+              (let [c (-> (text/zipper t)
+                          (text/scan-to-offset (dec offset))
+                          (text/text 1)
+                          (.codePointAt 0))]
                 [c [t (dec offset)]])
               [nil [t offset]]))))
 
@@ -48,10 +54,12 @@
 
 (defn play-transient-cursor [t-cursor op]
   (case op
-    :next (do (cursor/next! t-cursor)
-              [(.getChar t-cursor) t-cursor])
-    :prev (do (cursor/prev! t-cursor)
-              [(.getChar t-cursor) t-cursor])))
+    :next (if-let [next-cursor (cursor/next! t-cursor)]
+            [(cursor/get-char next-cursor) next-cursor]
+            [nil t-cursor])
+    :prev (if-let [prev-cursor (cursor/prev! t-cursor)]
+            [(cursor/get-char prev-cursor) prev-cursor]
+            [nil t-cursor])))
 
 (def cursor-test
   (prop/for-all

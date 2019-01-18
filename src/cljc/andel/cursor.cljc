@@ -3,222 +3,259 @@
   (:require [andel.tree :as tree]
             [andel.text :as text]
             [andel.array-list :as al])
-  #?(:clj (:import [andel.tree ZipperLocation Leaf])))
+  (:import [andel.tree ZipperLocation Leaf]))
 
-(defn- get-leaf-length ^long [^ZipperLocation loc]
-  (assert (tree/leaf? (tree/node loc))
-          "calling leaf-length on non-leaf")
-  (let [^Leaf leaf (tree/node loc)
-        ^String s  (.-data leaf)]
-    (text/codepoints-count s)))
-
-(defn- get-codepoint-from-loc [^ZipperLocation loc offset]
+(defn- leaf-text ^String [^ZipperLocation loc]
   (let [^Leaf leaf (tree/node loc)]
-    (let [text (.-data leaf)]
-      (.codePointAt ^String text (text/codepoints->chars text offset)))))
+    (.-data leaf)))
 
-(defrecord Cursor [zipper ^long node-offset ^long text-length ^long inner-offset ^long leaf-length])
+(definterface Cursor
+  (^int getChar [])
+  ( ^long getOffset [])
+  ( ^long getCharOffset []))
 
-#?(:clj
-   (defmacro ->cursor [{:keys [zipper node-offset text-length inner-offset leaf-length]}]
-     `(->Cursor ~zipper ~node-offset ~text-length ~inner-offset ~leaf-length)))
+(defn get-char ^long [cursor]
+  (.getChar ^Cursor cursor))
 
-(defn make-cursor [text offset]
-  (let [zipper      (-> text text/zipper (text/scan-to-offset offset))
-        node-offset (text/node-offset zipper)
-        offset      (text/offset zipper)
-        text-length (text/text-length text)]
-    (assert (and (<= 0 offset)
-                 (< offset text-length))
-            (str "OUT OF BOUNDS: " 0 " <= " offset " < " text-length))
+(defn offset ^long [cursor]
+  (.getOffset ^Cursor cursor))
+
+(defn char-offset ^long [cursor]
+  (.getCharOffset ^Cursor cursor))
+
+(deftype ACursor [zipper ^long node-char-offset ^int inner-char-offset ^long offset ^long text-length ^int leaf-char-length]
+  Cursor
+  (getChar [this]
+    (.codePointAt (leaf-text zipper) inner-char-offset))
+  (getOffset [this]
+    offset)
+  (getCharOffset [this]
+    (+ node-char-offset inner-char-offset)))
+
+(defmacro ->cursor [& {:keys [zipper node-char-offset inner-char-offset offset text-length leaf-char-length]}]
+  `(ACursor. ~zipper ~node-char-offset ~inner-char-offset ~offset ~text-length ~leaf-char-length))
+
+(defn make-cursor [text ^long offset]
+  (let [zipper           (-> (text/zipper text)
+                             (text/scan-to-offset offset))
+        node-char-offset (text/node-char-offset zipper)
+        char-offset      (text/char-offset zipper)
+        text-length      (text/text-length text)]
+    (assert
+      (and (<= 0 offset)
+           (< offset text-length))
+      (str "OUT OF BOUNDS: " 0 " <= " offset " < " text-length))
     (->cursor
-       {:zipper zipper
-        :node-offset  node-offset
-        :text-length  text-length
-        :inner-offset (- offset node-offset)
-        :leaf-length  (get-leaf-length zipper)})))
+     :zipper            zipper
+     :node-char-offset  node-char-offset
+     :inner-char-offset (- char-offset node-char-offset)
+     :offset            offset
+     :text-length       text-length
+     :leaf-char-length  (.length (leaf-text zipper)))))
 
-(defn get-char ^long [^Cursor cursor]
-  (when cursor
-    (let [zipper       (.-zipper cursor)
-          inner-offset (.-inner-offset cursor)]
-      (get-codepoint-from-loc zipper inner-offset))))
-
-(defn next [^Cursor cursor]
-  (let [zipper       (.-zipper cursor)
-        node-offset  (.-node-offset cursor)
-        text-length  (.-text-length cursor)
-        inner-offset (.-inner-offset cursor)
-        leaf-length  (.-leaf-length cursor)]
+(defn next [^ACursor cursor]
+  (let [zipper                 (.-zipper cursor)
+        text-length            (.-text-length cursor)
+        offset                 (.-offset cursor)
+        inner-char-offset      (.-inner-char-offset cursor)
+        node-char-offset       (.-node-char-offset cursor)
+        leaf-char-length       (.-leaf-char-length cursor)
+        next-inner-char-offset (if (Character/isSupplementaryCodePoint (get-char cursor))
+                                 (+ 2 inner-char-offset)
+                                 (inc inner-char-offset))]
     (cond
-      (< (inc inner-offset) leaf-length)
+      (< next-inner-char-offset leaf-char-length)
       (->cursor
-       {:zipper       zipper
-        :node-offset  node-offset
-        :text-length  text-length
-        :inner-offset (inc inner-offset)
-        :leaf-length  leaf-length})
+       :zipper            zipper
+       :node-char-offset  node-char-offset
+       :inner-char-offset next-inner-char-offset
+       :offset            (inc offset)
+       :text-length       text-length
+       :leaf-char-length  leaf-char-length)
 
-      (< (inc (+ node-offset inner-offset)) text-length)
+      (< (inc offset) text-length)
       (let [next-leaf (tree/next-leaf zipper)]
         (->cursor
-         {:zipper       next-leaf
-          :node-offset  (+ node-offset leaf-length)
-          :text-length  text-length
-          :inner-offset 0
-          :leaf-length  (get-leaf-length next-leaf)}))
+         :zipper            next-leaf
+         :node-char-offset  (+ node-char-offset leaf-char-length)
+         :inner-char-offset 0
+         :offset            (inc offset)
+         :text-length       text-length
+         :leaf-char-length  (.length (leaf-text next-leaf))))
 
       :else nil)))
 
-(defn prev [^Cursor cursor]
-  (let [zipper       (.-zipper cursor)
-        node-offset  (.-node-offset cursor)
-        text-length  (.-text-length cursor)
-        inner-offset (.-inner-offset cursor)
-        leaf-length  (.-leaf-length cursor)]
+(defn prev [^ACursor cursor]
+  (let [zipper            (.-zipper cursor)
+        inner-char-offset (.-inner-char-offset cursor)
+        node-char-offset  (.-node-char-offset cursor)
+        offset            (.-offset cursor)
+        text-length       (.-text-length cursor)
+        leaf-char-length  (.-leaf-char-length cursor)]
     (cond
-      (< 0 inner-offset)
+      (< 0 inner-char-offset)
       (->cursor
-       {:zipper       zipper
-        :node-offset  node-offset
-        :text-length  text-length
-        :inner-offset (dec inner-offset)
-        :leaf-length  leaf-length})
+       :zipper           zipper
+       :node-char-offset node-char-offset
+       :inner-char-offset (if (Character/isHighSurrogate
+                               (.charAt (leaf-text zipper) (dec inner-char-offset)))
+                            (- inner-char-offset 2)
+                            (dec inner-char-offset))
+       :offset           (dec offset)
+       :text-length      text-length
+       :leaf-char-length leaf-char-length)
 
-      (< 0 (+ node-offset inner-offset))
-      (let [prev-leaf   (tree/prev-leaf zipper)
-            leaf-length (get-leaf-length prev-leaf)]
+      (< 0 offset)
+      (let [prev-leaf             (tree/prev-leaf zipper)
+            prev-leaf-text        (leaf-text prev-leaf)
+            prev-leaf-char-length (.length prev-leaf-text)]
         (->cursor
-         {:zipper       prev-leaf
-          :node-offset  (- node-offset leaf-length)
-          :text-length  text-length
-          :inner-offset (dec leaf-length)
-          :leaf-length  leaf-length}))
+         :zipper           prev-leaf
+         :offset           (dec offset)
+         :leaf-char-length prev-leaf-char-length
+         :node-char-offset (- node-char-offset prev-leaf-char-length)
+         :inner-char-offset
+                           (if (Character/isHighSurrogate (.charAt prev-leaf-text (dec prev-leaf-char-length)))
+                             (- prev-leaf-char-length 2)
+                             (dec prev-leaf-char-length))
+         :text-length      text-length))
 
       :else nil)))
 
-(defn offset ^long [^Cursor cursor]
-  (let [node-offset  (.-node-offset cursor)
-        inner-offset (.-inner-offset cursor)]
-    (+ node-offset inner-offset)))
+(definterface MutableCursor
+  (^Object next [])
+  (^Object prev [])
 
-(defprotocol MutableCursor
-  (next! ^MutableCursor [this])
-  (prev! ^MutableCursor [this])
-  (isExhausted ^boolean [this])
-  (getChar ^int [this])
+  (^Object getZipper [])
+  (^long getNodeCharOffset [])
+  (^int getInnerCharOffset [])
+  (^int getLeafCharLength []))
 
-  (getZipper [this])
-  (getOffset ^long [this])
-  (getNodeOffset ^long [this])
-  (getInnerOffset ^long [this])
-  (getLeafLength ^long [this]))
+(defn next! [cursor]
+  (.next ^MutableCursor cursor))
 
+(defn prev! [cursor]
+  (.prev ^MutableCursor cursor))
+
+(onair.dev/decompile
 (deftype TransientCursor [^{:volatile-mutable true} zipper
-                          ^{:volatile-mutable true :tag long} node-offset
+                          ^{:volatile-mutable true :tag long} node-char-offset
                           ^long text-length
-                          ^{:volatile-mutable true :tag long} inner-offset
-                          ^{:volatile-mutable true :tag long} leaf-length
-                          ^{:volatile-mutable true} exhausted?]
+                          ^{:volatile-mutable true :tag int} inner-char-offset
+                          ^{:volatile-mutable true :tag int} leaf-char-length
+                          ^{:volatile-mutable true :tag long} offset]
+  Cursor
+  (getChar [this]
+     (.codePointAt (leaf-text zipper) inner-char-offset))
+  (getOffset [this] offset)
+  (getCharOffset [this]
+    (+ node-char-offset inner-char-offset))
+
   MutableCursor
-  (next! ^TransientCursor [this]
-    (cond
-      (< (inc inner-offset) leaf-length)
-      (do (when exhausted?
-            (set! exhausted? false))
-          (set! inner-offset (inc inner-offset))
+  (next [this]
+    (let [next-inner-char-offset (if (Character/isSupplementaryCodePoint (get-char this))
+                                   (+ 2 inner-char-offset)
+                                   (inc inner-char-offset))]
+      (cond
+        (< next-inner-char-offset leaf-char-length)
+        (do
+          (set! offset (inc offset))
+          (set! inner-char-offset (int next-inner-char-offset))
           this)
 
-      (< (inc (+ node-offset inner-offset)) text-length)
-      (let [next-leaf (tree/next-leaf zipper)]
-        (when exhausted?
-          (set! exhausted? false))
-        (set! zipper       next-leaf)
-        (set! node-offset  (+ node-offset leaf-length))
-        (set! inner-offset 0)
-        (set! leaf-length  (get-leaf-length next-leaf))
+        (< (inc offset) text-length)
+        (let [next-leaf (tree/next-leaf zipper)]
+          (set! zipper next-leaf)
+          (set! node-char-offset (+ node-char-offset leaf-char-length))
+          (set! inner-char-offset (int 0))
+          (set! offset (inc offset))
+          (set! leaf-char-length (.length (leaf-text next-leaf)))
+          this)
+
+        :else nil)))
+  (prev  [this]
+    (cond
+      (< 0 inner-char-offset)
+      (do
+        (set! inner-char-offset (int (if (Character/isHighSurrogate
+                                          (.charAt (leaf-text zipper) (dec inner-char-offset)))
+                                       (- inner-char-offset 2)
+                                       (dec inner-char-offset))))
+        (set! offset (dec offset))
         this)
 
-      :else (do (set! exhausted? true)
-                this)))
-  (prev! ^TransientCursor [this]
-    (cond
-      (< 0 inner-offset)
-      (do (when exhausted?
-            (set! exhausted? false))
-          (set! inner-offset (dec inner-offset))
-          this)
-
-      (< 0 (+ node-offset inner-offset))
+      (< 0 offset)
       (let [prev-leaf    (tree/prev-leaf zipper)
-            leaf-length' (get-leaf-length prev-leaf)]
-        (when exhausted?
-          (set! exhausted? false))
-        (set! zipper       prev-leaf)
-        (set! node-offset  (- node-offset leaf-length'))
-        (set! inner-offset (dec leaf-length'))
-        (set! leaf-length  leaf-length')
+            prev-leaf-text (leaf-text prev-leaf)
+            prev-leaf-char-length (.length prev-leaf-text)]
+        (set! zipper prev-leaf)
+        (set! offset (dec offset))
+        (set! node-char-offset (- node-char-offset prev-leaf-char-length))
+        (set! leaf-char-length prev-leaf-char-length)
+        (set! inner-char-offset (int (if (Character/isHighSurrogate (.charAt prev-leaf-text (dec prev-leaf-char-length)))
+                                       (- prev-leaf-char-length 2)
+                                       (dec prev-leaf-char-length))))
         this)
 
-      :else (do (set! exhausted? true)
-                this)))
-  (isExhausted ^boolean [_] exhausted?)
+      :else nil))
   (getZipper [_] zipper)
-  (getOffset ^long [_] (+ node-offset inner-offset))
-  (getNodeOffset ^long [_] node-offset)
-  (getInnerOffset [_] inner-offset)
-  (getLeafLength [_] leaf-length)
-  (getChar [_] (when (not exhausted?) (get-codepoint-from-loc zipper inner-offset))))
+  (getNodeCharOffset [_] node-char-offset)
+  (getInnerCharOffset [_] inner-char-offset)
+  (getLeafCharLength [_] leaf-char-length)))
 
-#?(:clj
-   (defmacro ->transient-cursor [{:keys [zipper node-offset text-length
-                                         inner-offset leaf-length exhausted]}]
-     `(->TransientCursor ~zipper ~node-offset ~text-length
-                         ~inner-offset ~leaf-length ~exhausted)))
+(defmacro ->transient-cursor [& {:keys [zipper node-char-offset text-length inner-char-offset
+                                        offset leaf-char-length]}]
+  `(TransientCursor. ~zipper ~node-char-offset ~text-length
+    ~inner-char-offset ~leaf-char-length ~offset))
 
-(defn transient ^TransientCursor [^Cursor cursor]
+(defn transient ^TransientCursor [^ACursor cursor]
   (->transient-cursor
-   {:zipper       (.-zipper cursor)
-    :node-offset  (.-node-offset cursor)
-    :text-length  (.-text-length cursor)
-    :inner-offset (.-inner-offset cursor)
-    :leaf-length  (.-leaf-length cursor)
-    :exhausted? false}))
+   :zipper            (.-zipper cursor)
+   :node-char-offset  (.-node-char-offset cursor)
+   :inner-char-offset (.-inner-char-offset cursor)
+   :offset            (.-offset cursor)
+   :leaf-char-length  (.-leaf-char-length cursor)
+   :text-length       (.-text-length cursor)))
 
 (defn persistent! [^TransientCursor cursor]
   (->cursor
-   {:zipper       (.getZipper cursor)
-    :node-offset  (.getNodeOffset cursor)
-    :text-length  (.text-length cursor)
-    :inner-offset (.getInnerOffset cursor)
-    :leaf-length  (.getLeafLength cursor)}))
+   :zipper            (.getZipper cursor)
+   :node-char-offset  (.getNodeCharOffset cursor)
+   :inner-char-offset (.getInnerCharOffset cursor)
+   :offset            (.getOffset cursor)
+   :leaf-char-length  (.getLeafCharLength cursor)
+   :text-length       (.-text-length cursor)))
+
 
 ;;;;;;;;;;;;;;;;;;;;;; util ;;;;;;;;;;;;;;;;;;;;;
 
-(defn set-to-offset! [^TransientCursor t-cursor ^long offset]
-  (cond (= offset (.getOffset t-cursor)) t-cursor
-        (< offset (.getOffset t-cursor)) (while (< offset (.getOffset t-cursor))
-                                           (prev! t-cursor))
-        (> offset (.getOffset t-cursor)) (while (> offset (.getOffset t-cursor))
-                                           (next! t-cursor)))
+(defn set-to-offset! [^TransientCursor t-cursor ^long o]
+  (cond
+    (= o (offset t-cursor)) t-cursor
+    (< o (offset t-cursor)) (while (< o (offset t-cursor))
+                              (prev! t-cursor))
+    (> o (offset t-cursor)) (while (> o (offset t-cursor))
+                              (next! t-cursor)))
   t-cursor)
 
-(defn forward-while [^Cursor cursor pred]
-  (loop [^TransientCursor tc (transient cursor)]
-    (cond
-      (.isExhausted tc) [(persistent! tc) true]
-      (not (pred (.getChar tc))) [(persistent! tc) false]
-      :else (recur (.next! tc)))))
+(defn forward-while [cursor pred]
+  (loop [tc (transient cursor)]
+    (if (pred (get-char tc))
+      (if-let [tc' (next! tc)]
+        (recur tc')
+        [(persistent! tc) true])
+      [(persistent! tc) false])))
 
-(defn backward-while [^Cursor cursor pred]
-  (loop [^TransientCursor tc (transient cursor)]
-    (cond
-      (.isExhausted tc) [(persistent! tc) true]
-      (not (pred (.getChar tc))) [(persistent! tc) false]
-      :else (recur (.prev! tc)))))
+(defn backward-while [cursor pred]
+  (loop [tc (transient cursor)]
+    (if (pred (get-char tc))
+      (if-let [tc' (prev! tc)]
+        (recur tc')
+        [(persistent! tc) true])
+      [(persistent! tc) false])))
 
-(defn distance [^Cursor from ^Cursor to]
-  (Math/abs ^Integer (- (offset to) (offset from))))
+(defn distance [from to]
+  (Math/abs ^long (- (offset to) (offset from))))
 
 (defn count-matching [cursor pred direction]
   (distance cursor (first (case direction
