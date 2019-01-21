@@ -140,13 +140,13 @@
       (text/text length)))
 
 (defn play-operation [widget operation]
-  (let [text (:text (:document widget))]
-    (loop [i 0
-           [[type x] & rest] operation
-           widget widget]
-      (if (some? type)
+  (loop [i 0
+         [[type x] & rest] operation
+         widget widget]
+    (if (some? type)
+      (let [text (:text (:document widget))]
         (case type
           :insert (recur (+ i (count x)) rest (insert-at-offset widget (text/char-offset->offset text i) x))
           :retain (recur (+ i ^long x) rest widget)
-          :delete (recur i rest (delete-at-offset widget (text/char-offset->offset text i) (text/codepoints-count x))))
-        widget))))
+          :delete (recur i rest (delete-at-offset widget (text/char-offset->offset text i) (text/codepoints-count x)))))
+      widget)))
