@@ -455,35 +455,35 @@
 (deftype TextSequence [t ^{:volatile-mutable true} loc ^long from-char ^long to-char]
   CharSequence
   (^int length [this]
-               (- to-char from-char))
+    (- to-char from-char))
   (^char charAt [this ^int char-index]
-                (assert (< char-index (- to-char from-char)) "Index out of range")
-                (let [absolute-index (+ char-index from-char)
-                      base (node-char-offset loc)
-                      text (leaf-data loc)]
-                  (cond
-                    (< absolute-index base)
-                    (let [new-loc (tree/scan (zipper t) (by-char-offset-exclusive absolute-index))
-                          base (node-char-offset new-loc)
-                          text (leaf-data new-loc)]
-                      (set! loc new-loc)
-                      (.charAt text (- absolute-index base)))
+    (assert (< char-index (- to-char from-char)) "Index out of range")
+    (let [absolute-index (+ char-index from-char)
+          base (node-char-offset loc)
+          text (leaf-data loc)]
+      (cond
+        (< absolute-index base)
+        (let [new-loc (tree/scan (zipper t) (by-char-offset-exclusive absolute-index))
+              base (node-char-offset new-loc)
+              text (leaf-data new-loc)]
+          (set! loc new-loc)
+          (.charAt text (- absolute-index base)))
 
-                    (< absolute-index (+ base (count text)))
-                    (.charAt text (- absolute-index base))
+        (< absolute-index (+ base (count text)))
+        (.charAt text (- absolute-index base))
 
-                    (<= (+ base (count text)) absolute-index)
-                    (let [new-loc (tree/scan loc (by-char-offset-exclusive absolute-index))
-                          base (node-char-offset new-loc)
-                          text (leaf-data new-loc)]
-                      (set! loc new-loc)
-                      (.charAt text (- absolute-index base)))
+        (<= (+ base (count text)) absolute-index)
+        (let [new-loc (tree/scan loc (by-char-offset-exclusive absolute-index))
+              base (node-char-offset new-loc)
+              text (leaf-data new-loc)]
+          (set! loc new-loc)
+          (.charAt text (- absolute-index base)))
 
-                    :else (throw (ex-info "No way" {:from from-char :to to-char :index char-index})))))
+        :else (throw (ex-info "No way" {:from from-char :to to-char :index char-index})))))
   (^CharSequence subSequence [this ^int from' ^int to']
-                             (assert (<= from' (- to-char from-char)) "From index out of range")
-                             (assert (<= to' (- to-char from-char)) "To index out of range")
-                             (TextSequence. t (tree/scan (zipper t) (by-char-offset-exclusive 0)) (+ from-char from') (+ from-char to')))
+    (assert (<= from' (- to-char from-char)) "From index out of range")
+    (assert (<= to' (- to-char from-char)) "To index out of range")
+    (TextSequence. t (tree/scan (zipper t) (by-char-offset-exclusive 0)) (+ from-char from') (+ from-char to')))
   (^String toString [this]
     (let [from-loc (scan-to-char-offset (zipper t) from-char)
           to-loc (scan-to-char-offset from-loc to-char)]
