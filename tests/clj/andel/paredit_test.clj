@@ -111,4 +111,10 @@
   ;; so no need for many string literal tests here
   (andel-test delete "\"\"|" "\"\"|"))
 
+(deftest special-slurp-barf
+  (andel-test slurp-forward "(|) #{}" "(| #{})")
+  (andel-test slurp-forward "(|) #\"\"" "(| #\"\")")
+  (andel-test barf-forward "(| #{})" "()| #{}")
+  (andel-test barf-forward "(| #\"\")" "()| #\"\""))
+
 (comment (run-tests))

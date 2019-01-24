@@ -5,12 +5,6 @@
             [andel.intervals :as intervals]
             [andel.controller :as controller]))
 
-(defn get-char [text offset]
-  (let [max-offset (text/text-length text)]
-    (when (and (<= 0 offset)
-               (< offset max-offset))
-      (first (core/text-at-offset text offset 1)))))
-
 (defn slurp-forward [{:keys [editor document] :as state}]
   (let [{:keys [text]} document
         caret-offset (core/caret-offset state)
@@ -20,7 +14,7 @@
         (if-let [next-to (second (parens/find-next-form text paren-token? (inc cur-to)))]
           (-> state
               (core/delete-at-offset cur-to 1)
-              (core/insert-at-offset next-to (str (get-char text cur-to))))
+              (core/insert-at-offset next-to (str (parens/get-char text cur-to))))
           (recur (parens/enclosing-parens text paren-token? (inc cur-to))))
         state))))
 
@@ -33,7 +27,7 @@
         (if-let [prev-from (first (parens/find-prev-form text paren-token? (dec cur-from)))]
           (-> state
             (core/delete-at-offset cur-from 1)
-            (core/insert-at-offset prev-from (str (get-char text cur-from))))
+            (core/insert-at-offset prev-from (str (parens/get-char text cur-from))))
           (recur (parens/enclosing-parens text paren-token? cur-from)))
         state))))
 
@@ -44,7 +38,7 @@
     (if-let [[cur-from cur-to] (parens/enclosing-parens text paren-token? caret-offset)]
       (let [[_ first-to] (parens/find-next-form text paren-token? (inc cur-from))
             [second-from _] (parens/find-next-form text paren-token? (inc first-to))
-            paren-str (str (get-char text cur-from))]
+            paren-str (str (parens/get-char text cur-from))]
         (-> state
             (core/insert-at-offset (or second-from cur-to) paren-str)
             (core/delete-at-offset cur-from 1)))
@@ -57,7 +51,7 @@
     (if-let [[cur-from cur-to] (parens/enclosing-parens text paren-token? caret-offset)]
       (let [[last-from _] (parens/find-prev-form text paren-token? (dec cur-to))
             [_ prev-to] (parens/find-prev-form text paren-token? (dec last-from))
-            paren-str (str (get-char text cur-to))
+            paren-str (str (parens/get-char text cur-to))
             prev-to-inc (some-> prev-to inc)]
         (-> state
             (core/delete-at-offset cur-to 1)
@@ -100,26 +94,21 @@
             (core/delete-at-offset cur-from 1)))
       state)))
 
-(defn quoted? [text offset]
-  (if (= \\ (get-char text (dec offset)))
-    (not (quoted? text (dec offset)))
-    false))
-
 (defn- delete-aux [{:keys [document] :as state} offset op]
   (let [paren-token? (parens/paren-token? document)
         fallback (case op :delete controller/delete :backspace controller/backspace)
         text (:text document)
-        character (get-char text offset)]
+        character (parens/get-char text offset)]
     (if (not (and (parens/paren? (long character))
                   (paren-token? offset)))
       (cond
         (and (= character \")
-             (= \" (get-char text (dec offset)))
-             (not (quoted? text (dec offset))))
+             (= \" (parens/get-char text (dec offset)))
+             (not (parens/quoted? text (dec offset))))
         (core/delete-at-offset state (dec offset) 2)
         (and (= character \")
-             (= \" (get-char text (inc offset)))
-             (not (quoted? text (inc offset))))
+             (= \" (parens/get-char text (inc offset)))
+             (not (parens/quoted? text (inc offset))))
         (core/delete-at-offset state offset 2)
         :else
         (fallback state))
@@ -148,7 +137,7 @@
         [sel-from sel-to] (core/selection state)
         paren-token? (parens/paren-token? document)
         caret-offset (core/caret-offset state)
-        character (get-char text caret-offset)]
+        character (parens/get-char text caret-offset)]
     (if (or (< 0 (- sel-to sel-from))
             (<= (text/text-length text) caret-offset))
       (controller/delete state)
@@ -160,7 +149,7 @@
         paren-token? (parens/paren-token? document)
         caret-offset (core/caret-offset state)
         deletion-offset (dec caret-offset)
-        character (get-char text deletion-offset)]
+        character (parens/get-char text deletion-offset)]
     (if (or (< 0 (- sel-to sel-from))
             (< deletion-offset 0))
       (controller/backspace state)
@@ -210,8 +199,8 @@
 
           (and (paren-token? next-from)
                (paren-token? next-to)
-               (parens/paren? (long (get-char text next-from)))
-               (parens/paren? (long (get-char text next-to))))
+               (parens/paren? (long (parens/get-char text next-from)))
+               (parens/paren? (long (parens/get-char text next-to))))
           (controller/set-caret-at-offset state (inc next-from) selection?)
 
           :else
@@ -249,8 +238,8 @@
 
           (and (paren-token? prev-from)
                (paren-token? prev-to)
-               (parens/paren? (long (get-char text prev-from)))
-               (parens/paren? (long (get-char text prev-to))))
+               (parens/paren? (long (parens/get-char text prev-from)))
+               (parens/paren? (long (parens/get-char text prev-to))))
           (controller/set-caret-at-offset state prev-to selection?)
 
           :else
