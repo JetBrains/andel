@@ -17,7 +17,7 @@
         paren-token? (parens/paren-token? document)]
     (loop [[_ cur-to] (parens/enclosing-parens text paren-token? caret-offset)]
       (if (some? cur-to)
-        (if-let [[_ next-to] (parens/find-next-form text paren-token? (inc cur-to))]
+        (if-let [next-to (second (parens/find-next-form text paren-token? (inc cur-to)))]
           (-> state
               (core/delete-at-offset cur-to 1)
               (core/insert-at-offset next-to (str (get-char text cur-to))))
@@ -30,7 +30,7 @@
         paren-token? (parens/paren-token? document)]
     (loop [[cur-from _] (parens/enclosing-parens text paren-token? caret-offset)]
       (if (some? cur-from)
-        (if-let [[prev-from _] (parens/find-prev-form text paren-token? (dec cur-from))]
+        (if-let [prev-from (first (parens/find-prev-form text paren-token? (dec cur-from)))]
           (-> state
             (core/delete-at-offset cur-from 1)
             (core/insert-at-offset prev-from (str (get-char text cur-from))))
@@ -110,7 +110,8 @@
         fallback (case op :delete controller/delete :backspace controller/backspace)
         text (:text document)
         character (get-char text offset)]
-    (if (not (paren-token? offset))
+    (if (not (and (parens/paren? (long character))
+                  (paren-token? offset)))
       (cond
         (and (= character \")
              (= \" (get-char text (dec offset)))
@@ -208,7 +209,9 @@
           state
 
           (and (paren-token? next-from)
-               (paren-token? next-to))
+               (paren-token? next-to)
+               (parens/paren? (long (get-char text next-from)))
+               (parens/paren? (long (get-char text next-to))))
           (controller/set-caret-at-offset state (inc next-from) selection?)
 
           :else
@@ -245,7 +248,9 @@
           state
 
           (and (paren-token? prev-from)
-               (paren-token? prev-to))
+               (paren-token? prev-to)
+               (parens/paren? (long (get-char text prev-from)))
+               (parens/paren? (long (get-char text prev-to))))
           (controller/set-caret-at-offset state prev-to selection?)
 
           :else
