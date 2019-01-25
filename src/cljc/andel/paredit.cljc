@@ -155,20 +155,25 @@
       (controller/backspace state)
       (delete-aux state deletion-offset :backspace))))
 
-(defn open-round [state]
-  (-> state
-      (controller/type-in "()")
-      (controller/move-caret :left false)))
+(defn insert-opening-paren [state [l r :as parens-pair]]
+  (let [state' (controller/type-in state l)
+        insertion-offset (core/caret-offset state)
+        paren-token? (parens/paren-token? (:document state'))]
+    (if (paren-token? insertion-offset)
+      (-> state'
+          (controller/type-in r)
+          (controller/move-caret :left false))
+      state')))
 
-(defn open-square [state]
-  (-> state
-      (controller/type-in "[]")
-      (controller/move-caret :left false)))
-
-(defn open-curly [state]
-  (-> state
-      (controller/type-in "{}")
-      (controller/move-caret :left false)))
+(defn insert-closing-paren [state [l r :as parens-pair]]
+  (let [state' (controller/type-in state r)
+        insertion-offset (core/caret-offset state)
+        paren-token? (parens/paren-token? (:document state'))]
+    (if (paren-token? insertion-offset)
+      (-> state'
+          (controller/move-caret :left false)
+          (controller/type-in l))
+      state')))
 
 (defn open-string [state]
   (-> state
