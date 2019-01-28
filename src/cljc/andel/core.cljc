@@ -134,7 +134,7 @@
                              from-char (text/char-offset from-loc)]
                          (conj (or l []) [[:retain from-char] [:delete old-text] [:retain (- total-chars-count from-char (count old-text))]])))))))
 
-(defn text-at-offset [text offset length]
+(defn text-at-offset ^String [text ^long offset ^long length]
   (-> (text/zipper text)
       (text/scan-to-offset offset)
       (text/text length)))

@@ -253,10 +253,10 @@
         [(persistent! tc) true])
       [(persistent! tc) false])))
 
-(defn distance [from to]
+(defn distance ^long [from to]
   (Math/abs ^long (- (offset to) (offset from))))
 
-(defn count-matching [cursor pred direction]
+(defn count-matching ^long [cursor pred direction]
   (distance cursor (first (case direction
                             :backward (backward-while cursor pred)
                             :forward (forward-while cursor pred)))))
