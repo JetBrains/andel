@@ -531,7 +531,7 @@
       itree))
 
 (defprotocol Lexer
-  (lexemes [this from to])
+  (lexemes [this from to constructor])
   (lexemes-hash [this from to])
   (update-text [this text-tree offset])
   (token-type [this offset])
