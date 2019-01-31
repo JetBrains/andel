@@ -98,9 +98,10 @@
   (let [paren-token? (parens/mk-paren-token? document)
         fallback (case op :delete controller/delete :backspace controller/backspace)
         text (:text document)
-        character (parens/get-char text offset)]
+        character (parens/get-char text offset)
+        char-offset (text/offset->char-offset text offset)]
     (if (not (and (parens/paren? (long character))
-                  (paren-token? offset)))
+                  (paren-token? char-offset)))
       (cond
         (and (= character \")
              (< 0 offset)
@@ -158,8 +159,9 @@
 (defn insert-opening-paren [state [l r :as parens-pair]]
   (let [state' (controller/type-in state l)
         insertion-offset (core/caret-offset state)
-        paren-token? (parens/mk-paren-token? (:document state'))]
-    (if (paren-token? insertion-offset)
+        paren-token? (parens/mk-paren-token? (:document state'))
+        insertion-char-offset (text/offset->char-offset (:text (:document state')) insertion-offset)]
+    (if (paren-token? insertion-char-offset)
       (-> state'
           (controller/type-in r)
           (controller/move-caret :left false))
@@ -168,8 +170,9 @@
 (defn insert-closing-paren [state [l r :as parens-pair]]
   (let [state' (controller/type-in state r)
         insertion-offset (core/caret-offset state)
-        paren-token? (parens/mk-paren-token? (:document state'))]
-    (if (paren-token? insertion-offset)
+        paren-token? (parens/mk-paren-token? (:document state'))
+        insertion-char-offset (text/offset->char-offset (:text (:document state')) insertion-offset)]
+    (if (paren-token? insertion-char-offset)
       (-> state'
           (controller/move-caret :left false)
           (controller/type-in l))
@@ -196,20 +199,18 @@
         max-offset (dec (text/text-length text))]
     (loop [offset (core/caret-offset state)]
       (let [[next-from next-to] (parens/find-next-form text paren-token? offset)]
-        (cond
-          (or (not (some? next-from))
-              (not (some? next-to))
-              (<= max-offset offset))
+        (if (or (not (some? next-from))
+                (not (some? next-to))
+                (<= max-offset offset))
           state
-
-          (and (paren-token? next-from)
-               (paren-token? next-to)
-               (parens/paren? (long (parens/get-char text next-from)))
-               (parens/paren? (long (parens/get-char text next-to))))
-          (controller/set-caret-at-offset state (inc next-from) selection?)
-
-          :else
-          (recur (inc next-to)))))))
+          (let [next-from-chars (text/offset->char-offset text next-from)
+                next-to-chars (text/offset->char-offset text next-to)]
+            (if (and (parens/paren? (long (parens/get-char text next-from)))
+                     (parens/paren? (long (parens/get-char text next-to)))
+                     (paren-token? next-from-chars)
+                     (paren-token? next-to-chars))
+              (controller/set-caret-at-offset state (inc next-from) selection?)
+              (recur (inc next-to)))))))))
 
 (defn navigate-next-form-up [{:keys [document] :as state} selection?]
   (let [{:keys [text]} document
@@ -235,20 +236,18 @@
         paren-token? (parens/mk-paren-token? document)]
     (loop [offset (dec (core/caret-offset state))]
       (let [[prev-from prev-to] (parens/find-prev-form text paren-token? offset)]
-        (cond
-          (or (not (some? prev-from))
-              (not (some? prev-to))
-              (= 0 offset))
+        (if (or (not (some? prev-from))
+                (not (some? prev-to))
+                (= 0 offset))
           state
-
-          (and (paren-token? prev-from)
-               (paren-token? prev-to)
-               (parens/paren? (long (parens/get-char text prev-from)))
-               (parens/paren? (long (parens/get-char text prev-to))))
-          (controller/set-caret-at-offset state prev-to selection?)
-
-          :else
-          (recur (dec prev-from)))))))
+          (let [prev-from-chars (text/offset->char-offset text prev-from)
+                prev-to-chars (text/offset->char-offset text prev-to)]
+            (if (and (parens/paren? (long (parens/get-char text prev-from)))
+                     (parens/paren? (long (parens/get-char text prev-to)))
+                     (paren-token? prev-from-chars)
+                     (paren-token? prev-to-chars))
+              (controller/set-caret-at-offset state prev-to selection?)
+              (recur (dec prev-from)))))))))
 
 (defn navigate-prev-form-up [{:keys [document] :as state} selection?]
   (let [{:keys [text]} document

@@ -36,8 +36,8 @@
 
 (defn mk-paren-token? [{:keys [lexer is-brace?]}]
   (if (some? lexer)
-    (fn [offset]
-      (is-brace? lexer offset))
+    (fn [char-offset]
+      (is-brace? lexer char-offset))
     (constantly true)))
 
 (defn- find-matching-paren [text lexer-paren? offset should-push? should-pop? advance]
@@ -73,10 +73,11 @@
       (loop [s '()]
         (when-let [t-cursor (advance t-cursor)]
           (let [c (cursor/get-char t-cursor)
-                o (cursor/offset t-cursor)]
+                o (cursor/offset t-cursor)
+                co (cursor/char-offset t-cursor)]
             (cond
               (not (and (paren? c)
-                        (lexer-paren? o))) (recur s)
+                        (lexer-paren? co))) (recur s)
               (should-push? c) (recur (cons c s))
               (should-pop? c) (if (= c (opposite (first s)))
                                 (recur (rest s))
