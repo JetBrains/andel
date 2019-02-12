@@ -258,9 +258,9 @@
       (controller/set-caret-at-offset state cur-from selection?)
       state)))
 
-(defn kill-form [{:keys [document editor] :as state} id]
+(defn kill-form [{:keys [document editor last-operation] :as state} current-operation]
   (let [{:keys [text]} document
-        prev-was-kill? (= id (some-> editor :prev-op-ids :kill inc))
+        prev-was-kill? (= last-operation current-operation)
         caret-offset (core/caret-offset state)
         paren-token? (parens/mk-paren-token? document)
         [next-from next-to] (parens/find-next-form text paren-token? caret-offset)]
@@ -268,7 +268,6 @@
       (let [kill-len (inc (- next-to caret-offset))
             killed-text (str (core/text-at-offset text caret-offset kill-len))]
         (-> state
-            (assoc-in [:editor :prev-op-ids :kill] id)
             (core/delete-at-offset caret-offset kill-len)
             (cond-> prev-was-kill? (controller/conj-to-clipboard killed-text)
               (not prev-was-kill?) (controller/put-to-clipboard killed-text))))
@@ -278,9 +277,9 @@
   (let [{:keys [clipboard]} editor]
     (controller/type-in state (:content clipboard))))
 
-(defn kill [{:keys [document editor] :as state} id]
+(defn kill [{:keys [document editor last-operation] :as state} current-operation]
   (let [{:keys [text]} document
-        prev-was-kill? (= id (some-> editor :prev-op-ids :kill inc))
+        prev-was-kill? (= last-operation current-operation)
         caret-offset (core/caret-offset state)
         caret-line (andel.utils/offset->line caret-offset text)
         paren-token? (parens/mk-paren-token? document)
@@ -299,7 +298,6 @@
       (let [kill-len (inc (- delete-to caret-offset))
             killed-text (str (core/text-at-offset text caret-offset kill-len))]
         (-> state
-            (assoc-in [:editor :prev-op-ids :kill] id)
             (core/delete-at-offset caret-offset kill-len)
             (cond-> prev-was-kill? (controller/conj-to-clipboard killed-text)
               (not prev-was-kill?) (controller/put-to-clipboard killed-text))))
