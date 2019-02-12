@@ -102,34 +102,6 @@
           (opening? c1) [offset (find-matching-paren-forward text lexer-paren? offset)]
           :else         nil)))))
 
-(defn highlight-parens [{:keys [editor document marker-id-generator] :as state} paren-attrs]
-  (let [caret-offset  (core/caret-offset state)
-        text (:text document)
-        lexer-paren?  (mk-paren-token? document)
-        [p-from p-to] (find-parens-pair text
-                                        lexer-paren?
-                                        caret-offset)
-        old-paren-ids (:paren-ids editor)
-        state (core/delete-markers state old-paren-ids)]
-    (if (and p-from p-to)
-      (let [from-id (marker-id-generator)
-            to-id   (marker-id-generator)]
-        (-> state
-            (core/insert-markers [(intervals/>Marker :id from-id
-                                                     :from p-from
-                                                     :to (inc p-from)
-                                                     :greedy-right? false
-                                                     :greedy-left? false
-                                                     :attrs paren-attrs)
-                                  (intervals/>Marker :id to-id
-                                                     :from p-to
-                                                     :to (inc p-to)
-                                                     :greedy-right? false
-                                                     :greedy-left? false
-                                                     :attrs paren-attrs)])
-            (assoc-in [:editor :paren-ids] (i/int-set [from-id to-id]))))
-      state)))
-
 (defn enclosing-parens [text lexer-paren? offset]
   (let [opening (find-opening-paren text lexer-paren? offset)
         closing (find-closing-paren text lexer-paren? (dec offset))]
