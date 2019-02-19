@@ -80,6 +80,10 @@
     {:offset (utils/line-col->offset {:line to-line :col new-col} text)
      :v-col new-v-col}))
 
+(def tab-or-space? #{(int \space) (int \tab)})
+(def whitespace? (into tab-or-space? #{(int \newline)}))
+(def stop-symbol? (into whitespace? (map int) #{\( \) \{ \} \[ \] \; \: \> \< \. \, \\ \- \+ \* \/ \= \& \| \@ \# \^}))
+
 (defn set-caret-at-line-col [{:keys [editor document] :as state} {:keys [line col]} selection?]
   (let [{:keys [caret selection]} editor
         {:keys [text]} document
@@ -92,6 +96,39 @@
     (update state :editor assoc
             :caret caret'
             :selection selection')))
+
+(defn triple-click [{:keys [editor document] :as state} {:keys [line col]}]
+  (let [[sel-from sel-to :as selection] (:selection editor)
+        {:keys [text]} document
+        [line-start-offset line-end-offset] (utils/line->from-to-offsets line text)
+        caret-offset' (+ line-start-offset col)
+        caret' {:offset caret-offset' :v-col 0}
+        selection' [line-start-offset (restrict-to-text-length (inc line-end-offset)
+                                                               text)]]
+    (update state :editor assoc
+            :caret caret'
+            :selection selection')))
+
+(defn double-click [{:keys [editor document] :as state} {:keys [line col]}]
+  (let [[sel-from sel-to :as selection] (:selection editor)
+        {:keys [text]} document
+        [line-start-offset line-end-offset] (utils/line->from-to-offsets line text)
+        caret-offset' (+ line-start-offset col)
+        caret' {:offset caret-offset' :v-col 0}]
+    (if (= caret-offset' (text/text-length text))
+      (update state :editor assoc
+              :caret caret'
+              :selection [caret-offset' caret-offset'])
+      (let [cursor (cursor/make-cursor text caret-offset')
+            selection' (if (whitespace? (cursor/get-char cursor))
+                         selection
+                         (let [[c-start _] (cursor/backward-while cursor #(not (stop-symbol? %)))
+                               [c-end _] (cursor/forward-while cursor #(not (stop-symbol? %)))]
+                           [(inc (cursor/offset c-start))
+                            (cursor/offset c-end)]))]
+        (update state :editor assoc
+                :caret caret'
+                :selection selection')))))
 
 (defn set-caret-at-offset [{:keys [document editor] :as state} caret-offset' selection?]
   (let [text (:text document)
@@ -134,10 +171,6 @@
         caret-line (utils/offset->line (core/caret-offset state) text)
         line-length (utils/line-length caret-line text)]
     (set-caret-at-line-col state {:line caret-line :col line-length} selection?)))
-
-(def tab-or-space? #{(int \space) (int \tab)})
-(def whitespace? (into tab-or-space? #{(int \newline)}))
-(def stop-symbol? (into whitespace? (map int) #{\( \) \{ \} \[ \] \; \: \> \< \. \, \\ \- \+ \* \/ \= \& \| \@ \# \^}))
 
 (defn next-word-delta [state]
   (let [text (-> state :document :text)
