@@ -44,11 +44,16 @@
       (text/insert (str pattern special-char))
       (tree/root)))
 
-(defn text-kmp [text pattern]
+(defn text-kmp [text pattern match-case?]
   (let [text (insert-pattern text pattern)
         pl (count pattern)
         tl (text/text-length text)
-        p #^ints (make-array Integer/TYPE tl)]
+        p #^ints (make-array Integer/TYPE tl)
+        get-char (if match-case?
+                   (fn [^TransientCursor cursor]
+                     (.getChar cursor))
+                   (fn [^TransientCursor cursor]
+                     (Character/toLowerCase (.getChar cursor))))]
     (let [i-cursor ^TransientCursor (cursor/transient (cursor/make-cursor text 1))
           j-cursor ^TransientCursor (cursor/transient (cursor/make-cursor text 0))]
       (binding [j 0]
@@ -56,12 +61,12 @@
          (for [i (range 1 tl)]
            (do (while
                    (and (< 0 j)
-                        (not= (.getChar i-cursor)
-                              (.getChar j-cursor)))
+                        (not= (get-char i-cursor)
+                              (get-char j-cursor)))
                  (do (set! j (aget p (dec j)))
                      (cursor/set-to-offset! j-cursor j)))
-               (when (= (.getChar i-cursor)
-                      (.getChar j-cursor))
+               (when (= (get-char i-cursor)
+                        (get-char j-cursor))
                  (set! j (inc j))
                  (cursor/next! j-cursor))
                (aset p i ^int j)
