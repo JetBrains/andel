@@ -404,8 +404,6 @@
         (recur next-loc (- l deleted-c))
         next-loc))))
 
-(def reset tree/reset)
-
 (defn play [t operation]
   (root (reduce (fn [loc [code arg]]
                   (case code

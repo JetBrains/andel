@@ -469,24 +469,10 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn insert-right
-  "Inserts the item as the right sibling of the node at this loc, without moving"
-  [^ZipperLocation loc item]
-  (assert (not (root? loc)) "Insert at top")
-  (z-merge loc {:siblings ((if (mutable? loc) al/insert! al/insert)
-                           (.-siblings loc) (inc (.-idx loc)) item)
-                :changed? true}))
-
 (defn edit
   "Replaces the node at this loc with the value of (f node args)"
   [^ZipperLocation loc f & args]
   (replace loc (apply f (node loc) args)))
-
-(defn insert-child
-  "Inserts the item as the leftmost child of the node at this loc, without moving"
-  [^ZipperLocation loc item]
-  (let [make-node-fn (.-make-node ^ZipperOps (.-ops loc))]
-    (replace loc (make-node-fn (cons item (children loc))))))
 
 (defn next-leaf [^ZipperLocation loc]
   (let [loc (next loc)]
@@ -494,10 +480,6 @@
             (end? loc))
       loc
       (recur loc))))
-
-(defn reset [^ZipperLocation loc]
-  (zipper (root loc)
-          (.-ops loc)))
 
 (defn reducible [reduction]
   #?(:clj (reify
