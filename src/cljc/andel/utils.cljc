@@ -1,6 +1,5 @@
 (ns andel.utils
   (:require [andel.text :as text]
-            [andel.tree :as tree]
             [clojure.spec.alpha :as s]))
 
 (defn line-height ^double [{:keys [^double height ^double spacing] :as metrics}]

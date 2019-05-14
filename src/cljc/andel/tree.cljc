@@ -346,8 +346,8 @@
         make-node-fn (.-make-node config)]
     (if changed?
       (if (some? pzip)
-        (let [children (.-siblings loc)]
-          (replace pzip (make-node-fn (balance-children children config))))
+        (let [siblings (.-siblings loc)]
+          (replace pzip (make-node-fn (balance-children siblings config))))
         (->zipper {:ops config
                    :transient? (.-transient? loc)
                    :idx 0

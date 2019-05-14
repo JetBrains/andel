@@ -1,6 +1,5 @@
 (ns andel.search
-  (:require [andel.tree :as tree]
-            [andel.text :as text]
+  (:require [andel.text :as text]
             [andel.cursor :as cursor])
   #?(:clj (:import [andel.tree ZipperLocation]
                    [andel.cursor TransientCursor])))
@@ -42,7 +41,7 @@
       text/zipper
       (text/scan-to-offset 0)
       (text/insert (str pattern special-char))
-      (tree/root)))
+      (text/root)))
 
 (defn text-kmp [text pattern match-case?]
   (let [text (insert-pattern text pattern)

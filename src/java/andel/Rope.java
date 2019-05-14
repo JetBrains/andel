@@ -2,14 +2,21 @@ package andel;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
-public class ImmutableTree {
+public class Rope {
 
   public static class Node {
     public ArrayList<Object> children;
-    // store precalculated accumulator values in metrics to use binary search
-    public ArrayList<Object> metrics;
+    // store precalculated accumulator values in childrenMetrics to use binary search
+    public Object metrics;
+    public ArrayList<Object> childrenMetrics;
+  }
+
+  public static class Leaf {
+    public Object metrics;
+    public Object data;
   }
 
   interface ZipperOps {
@@ -18,7 +25,7 @@ public class ImmutableTree {
     Object emptyMetrics();
 
     Object rf(Object m1, Object m2);
-    default Object rf(Object[] metrics){
+    default Object rf(List<Object> metrics){
       Object r = emptyMetrics();
       for (Object m : metrics) {
         r = rf(r, m);
@@ -39,16 +46,16 @@ public class ImmutableTree {
 
     public Zipper parent;
     public ArrayList<Object> siblings;
+    public ArrayList<Object> metrics;
     public int idx = 0;
 
+    public boolean isChanged = false;
+    public boolean isTransient = false;
+    public Object acc;
+    public Object oacc;
 
-    boolean isChanged = false;
-    boolean isTransient = false;
-    Object acc;
-    Object oacc;
-
-    boolean isEnd = false;
-    boolean isRoot = false; // suspiciously useless flag
+    public boolean isEnd = false;
+    public boolean isRoot = false; // suspiciously useless flag
 
     public Zipper() { }
 
@@ -61,34 +68,80 @@ public class ImmutableTree {
         throw new RuntimeException(e);
       }
     }
+
+    public static Zipper zipper(Node node, ZipperOps ops){
+      Zipper z = new Zipper();
+      z.parent = null;
+      z.ops = ops;
+      z.idx = 0;
+      z.siblings = singletonList(node);
+      z.metrics = singletonList(node.metrics);
+      z.acc = ops.emptyMetrics();
+      z.oacc = null;
+      z.isRoot = true;
+      return z;
+    }
   }
 
-  static Object currentNode(Zipper loc) {
+  private static ArrayList<Object> singletonList(Object object) {
+      ArrayList<Object> l = new ArrayList<>();
+      l.add(object);
+      return l;
+    }
+
+  public static Object currentNode(Zipper loc) {
     return loc.siblings.get(loc.idx);
   }
 
-  static Object currentAcc(Zipper loc) {
+  public static Object currentAcc(Zipper loc) {
     if (loc.oacc != null) return loc.oacc;
     return loc.acc;
   }
 
-  static boolean isNode(Object node) {
+  public static boolean isNode(Object node) {
     return node instanceof Node;
   }
 
-  static boolean isLeaf(Object leaf) {
+  public static boolean isLeaf(Object leaf) {
     return !isNode(leaf);
   }
 
-  static boolean isBranch(Zipper loc) {
+  public static boolean isBranch(Zipper loc) {
     return isNode(currentNode(loc));
   }
 
-  static ArrayList<Object> getChildren(Object node){
+  public static ArrayList<Object> getChildren(Object node){
     return ((Node) node).children;
   }
 
-  private static boolean splitNeeded(ArrayList<Object> children, ZipperOps ops) {
+  public static Object getMetrics(Object node) {
+    if (isNode(node)) {
+      return ((Node)node).metrics;
+    } else {
+      return ((Leaf)node).metrics;
+    }
+  }
+
+  static Node makeNode(ArrayList<Object> children, ZipperOps ops){
+    ArrayList<Object> childrenMetrics = new ArrayList<>(children.size());
+    for (int i = 0; i < children.size(); i++) {
+      childrenMetrics.set(i, getMetrics(children.get(i)));
+    }
+    Node n = new Node();
+    n.children = children;
+    n.childrenMetrics = childrenMetrics;
+    n.metrics = ops.rf(childrenMetrics);
+    return n;
+  }
+
+  static Leaf makeLeaf(Object data, ZipperOps ops) {
+    Leaf l = new Leaf();
+    l.data = data;
+    l.metrics = ops.calculateMetrics(data);
+    return l;
+  }
+
+  static boolean splitNeeded(ArrayList<Object> children, ZipperOps ops) {
     int splitThreshold = ops.splitThreshold();
     if (isNode(children.get(0))){
       for (Object child : children){
@@ -107,7 +160,7 @@ public class ImmutableTree {
   }
 
   // todo write unit test
-  private static ArrayList<ArrayList<Object>> partitionChildren(ArrayList<Object> children, int threshold) {
+  static ArrayList<ArrayList<Object>> partitionChildren(ArrayList<Object> children, int threshold) {
     int partitionCount = children.size() / threshold;
     int totalPartitions = partitionCount + (children.size() % threshold != 0 ? 1 : 0);
 
@@ -124,18 +177,20 @@ public class ImmutableTree {
     return partition;
   }
 
-  private static ArrayList<Object> splitChildren(ArrayList<Object> children, ZipperOps ops) {
+  static ArrayList<Object> splitChildren(ArrayList<Object> children, ZipperOps ops) {
     if (splitNeeded(children, ops)) {
       ArrayList<Object> result = new ArrayList<>(children.size() / 2);
       for (Object child : children) {
         if (isNode(child) && ops.splitThreshold() < getChildren(child).size()) {
           ArrayList<ArrayList<Object>> partition = partitionChildren(getChildren(child), ops.splitThreshold());
           for (ArrayList<Object> part : partition) {
-            result.add(makeNode(part));
+            result.add(makeNode(part, ops));
           }
         }
         else if (isLeaf(child) && ops.isLeafOverflown(child)) {
-          result.addAll(ops.splitLeaf(child));
+          for (Object o : ops.splitLeaf(child)) {
+            result.add(makeLeaf(o, ops));
+          }
         }
         else {
           result.add(child);
@@ -146,7 +201,7 @@ public class ImmutableTree {
     return children;
   }
 
-  private static boolean isMergeNeeded(ArrayList<Object> children, ZipperOps ops) {
+  static boolean isMergeNeeded(ArrayList<Object> children, ZipperOps ops) {
     int mergeThreshold = ops.splitThreshold() / 2;
     if (isNode(children.get(0))){
       for (Object child : children){
@@ -164,7 +219,7 @@ public class ImmutableTree {
     return false;
   }
 
-  private static ArrayList<Object> mergeChildren(ArrayList<Object> children, ZipperOps ops) {
+  static ArrayList<Object> mergeChildren(ArrayList<Object> children, ZipperOps ops) {
     final int mergeThreshold = ops.splitThreshold() / 2;
     if (isMergeNeeded(children, ops)) {
       ArrayList<Object> result = new ArrayList<>(mergeThreshold);
@@ -186,11 +241,11 @@ public class ImmutableTree {
               ArrayList<Object> newRight = new ArrayList<>(tmp.size() - n);
               newRight.addAll(tmp.subList(n, tmp.size() - n));
 
-              result.add(makeNode(mergeChildren(newLeft, ops)));
-              left = makeNode(newRight);
+              result.add(makeNode(mergeChildren(newLeft, ops), ops));
+              left = makeNode(newRight, ops);
             }
             else {
-              left = makeNode(mergeChildren(joinChildren(leftChildren, rightChildren), ops));
+              left = makeNode(mergeChildren(joinChildren(leftChildren, rightChildren), ops), ops);
             }
           }
           else {
@@ -211,7 +266,7 @@ public class ImmutableTree {
               List<Object> split = ops.splitLeaf(mergedData);
               Object dataLeft = split.get(0);
               Object dataRight = split.get(1);
-              result.add(dataLeft);
+              result.add(makeLeaf(dataLeft, ops));
               leftData = dataRight;
             }
             else {
@@ -219,39 +274,39 @@ public class ImmutableTree {
             }
           }
           else {
-            result.add(leftData);
+            result.add(makeLeaf(leftData, ops));
             leftData = rightData;
           }
         }
-        result.add(leftData);
+        result.add(makeLeaf(leftData, ops));
       }
       return result;
     }
     return children;
   }
 
-  private static ArrayList<Object> joinChildren(ArrayList<Object> leftChildren, ArrayList<Object> rightChildren) {
+  static ArrayList<Object> joinChildren(ArrayList<Object> leftChildren, ArrayList<Object> rightChildren) {
     ArrayList<Object> tmp = new ArrayList<>(leftChildren.size() + rightChildren.size());
     tmp.addAll(leftChildren);
     tmp.addAll(rightChildren);
     return tmp;
   }
 
-  private static ArrayList<Object> balanceChildren(ArrayList<Object> children, ZipperOps ops) {
+  static ArrayList<Object> balanceChildren(ArrayList<Object> children, ZipperOps ops) {
     return mergeChildren(splitChildren(children, ops), ops);
   }
 
-  private static Node growTree(ArrayList<Object> children, ZipperOps ops) {
+  static Node growTree(ArrayList<Object> children, ZipperOps ops) {
     ArrayList<Object> balanced = balanceChildren(children, ops);
     if (balanced.size() < ops.splitThreshold()) {
-      return makeNode(balanced);
+      return makeNode(balanced, ops);
     }
     else {
       return growTree(balanced, ops);
     }
   }
 
-  private static Node shrinkTree(Node node) {
+  static Node shrinkTree(Node node) {
     ArrayList<Object> children = getChildren(node);
     if (children.size() == 1 && isNode(children.get(0))) {
       return shrinkTree((Node)children.get(0));
@@ -259,19 +314,22 @@ public class ImmutableTree {
     return node;
   }
 
-  private static boolean isMutable(Zipper loc) {
+  static boolean isMutable(Zipper loc) {
     return loc.isTransient && loc.isChanged;
   }
 
-  static Zipper replaceNode(Zipper loc, Object node) {
+  public static Zipper replaceNode(Zipper loc, Object node) {
     Zipper newLoc = loc.clone();
     if (isMutable(newLoc)) {
       newLoc.siblings.set(newLoc.idx, node);
     }
     else {
       ArrayList<Object> copy = (ArrayList<Object>)newLoc.siblings.clone();
+      ArrayList<Object> metricsCopy = (ArrayList<Object>)newLoc.metrics.clone();
       copy.set(newLoc.idx, node);
+      metricsCopy.set(newLoc.idx, getMetrics(node));
       newLoc.siblings = copy;
+      newLoc.metrics = metricsCopy;
     }
     return newLoc;
   }
@@ -282,17 +340,19 @@ public class ImmutableTree {
     return al;
   }
 
-  static Zipper up(Zipper loc) {
+  public static Zipper up(Zipper loc) {
     if (loc.isChanged) {
       if (loc.parent != null) {
-        return replaceNode(loc.parent, makeNode(balanceChildren(getChildren(loc), loc.ops)));
+        return replaceNode(loc.parent, makeNode(balanceChildren(loc.siblings, loc.ops), loc.ops));
       }
       else {
         Zipper zipper = new Zipper();
         zipper.ops = loc.ops;
         zipper.isTransient = loc.isTransient;
         zipper.idx = 0;
-        zipper.siblings = wrapNode(shrinkTree(growTree(wrapNode(currentNode(loc), loc.ops), loc.ops)), loc.ops);
+        Node node = shrinkTree(growTree(wrapNode(currentNode(loc), loc.ops), loc.ops));
+        zipper.siblings = wrapNode(node, loc.ops);
+        zipper.metrics = wrapNode(node.metrics, loc.ops);
         zipper.isRoot = true;
         return zipper;
       }
@@ -300,13 +360,14 @@ public class ImmutableTree {
     return loc.parent;
   }
 
-  static Zipper right(Zipper loc) {
+  public static Zipper right(Zipper loc) {
     if (loc.idx < loc.siblings.size() - 1) {
       Zipper zipper = new Zipper();
       zipper.ops = loc.ops;
       zipper.idx = loc.idx + 1;
       zipper.siblings = loc.siblings;
-      zipper.acc = loc.ops.rf(currentAcc(loc), currentNode(loc).getMetrics());
+      zipper.metrics = loc.metrics;
+      zipper.acc = loc.ops.rf(currentAcc(loc), loc.metrics.get(loc.idx));
       zipper.oacc = null;
       zipper.parent = loc.parent;
       zipper.isChanged = loc.isChanged;
@@ -315,11 +376,13 @@ public class ImmutableTree {
     return null;
   }
 
-  static Zipper downForward(Zipper loc) {
+  public static Zipper downForward(Zipper loc) {
     if (isBranch(loc)) {
       Zipper zipper = new Zipper();
       zipper.ops = loc.ops;
-      zipper.siblings = getChildren(loc);
+      Node n = (Node)loc.siblings.get(loc.idx);
+      zipper.siblings = n.children;
+      zipper.metrics = n.childrenMetrics;
       zipper.idx = 0;
       zipper.parent = loc;
       return zipper;
@@ -327,19 +390,20 @@ public class ImmutableTree {
     return null;
   }
 
-  static Zipper downBackward(Zipper loc) {
+  public static Zipper downBackward(Zipper loc) {
     if (isBranch(loc)) {
       Zipper zipper = new Zipper();
-      ArrayList<Object> children = getChildren(loc);
+      Node n = (Node) loc.siblings.get(loc.idx);
       zipper.ops = loc.ops;
-      zipper.siblings = children;
-      zipper.idx = children.size() - 1;
+      zipper.siblings = n.children;
+      zipper.metrics = n.childrenMetrics;
+      zipper.idx = n.children.size() - 1;
       zipper.parent = loc;
     }
     return null;
   }
 
-  static Object root(Zipper loc) {
+  public static Object root(Zipper loc) {
     if (loc.isEnd) {
       return currentNode(loc);
     }
@@ -352,7 +416,7 @@ public class ImmutableTree {
     return currentNode(loc);
   }
 
-  static Zipper next(Zipper loc) {
+  public static Zipper next(Zipper loc) {
     if (loc.isEnd) {
       return loc;
     }
@@ -384,14 +448,16 @@ public class ImmutableTree {
         zipper.ops = loc.ops;
         zipper.idx = 0;
         zipper.isTransient = loc.isTransient;
-        zipper.siblings = wrapNode(currentNode(loc), loc.ops)
+        Object node = currentNode(loc);
+        zipper.siblings = wrapNode(node, loc.ops);
+        zipper.metrics = wrapNode(getMetrics(node), loc.ops);
         zipper.isEnd = true;
         return zipper;
       }
     }
   }
 
-  static Zipper skip(Zipper loc) {
+  public static Zipper skip(Zipper loc) {
     if (loc.isEnd) {
       return loc;
     }
@@ -416,7 +482,9 @@ public class ImmutableTree {
         zipper.ops = loc.ops;
         zipper.idx = 0;
         zipper.isTransient = loc.isTransient;
-        zipper.siblings = wrapNode(currentNode(loc), loc.ops);
+        Object node = currentNode(loc);
+        zipper.siblings = wrapNode(node, loc.ops);
+        zipper.metrics = wrapNode(getMetrics(node), loc.ops);
         zipper.isEnd = true;
         return zipper;
       }
@@ -426,18 +494,26 @@ public class ImmutableTree {
   //------ don't use these functions unless you know what you are doing -------
 
 
-  static Zipper left(Zipper loc) {
+  public static Zipper left(Zipper loc) {
     if (0 < loc.idx) {
-      return new ZipperBuilder(loc)
-        .setIdx(loc.idx - 1)
-        .setAcc(null)
-        .setOacc(null)
-        .build();
+      Zipper new_loc = new Zipper();
+      new_loc.ops = loc.ops;
+      new_loc.parent = loc.parent;
+      new_loc.siblings = loc.siblings;
+      new_loc.metrics = loc.metrics;
+      new_loc.isChanged = loc.isChanged;
+      new_loc.isTransient = loc.isTransient;
+      new_loc.isEnd = loc.isEnd;
+      new_loc.isRoot = loc.isRoot;
+      new_loc.idx = loc.idx - 1;
+      new_loc.acc = null;
+      new_loc.oacc = null;
+      return new_loc;
     }
     return null;
   }
 
-  static Zipper prev(Zipper loc) {
+  public static Zipper prev(Zipper loc) {
     if (loc.isEnd) {
       return loc;
     }
@@ -465,13 +541,14 @@ public class ImmutableTree {
         p = up;
       }
       else {
-        ArrayList<Object> newSiblings = new ArrayList<>();
-        newSiblings.add(currentNode(loc));
+
+        Object e = currentNode(loc);
         Zipper zipper = new Zipper();
         zipper.ops = loc.ops;
         zipper.idx = 0;
         zipper.isTransient = loc.isTransient;
-        zipper.siblings = newSiblings;
+        zipper.siblings = wrapNode(e, loc.ops);
+        zipper.metrics = wrapNode(getMetrics(e), loc.ops);
         zipper.isEnd = true;
         return zipper;
       }
@@ -485,29 +562,18 @@ public class ImmutableTree {
 
   //---------------------------------------------------------------------------
 
-  static Zipper edit(Zipper loc, Function<Object, Object> fn) {
+  public static Zipper edit(Zipper loc, Function<Object, Object> fn) {
     return replaceNode(loc, fn.apply(currentNode(loc)));
   }
 
-  static Zipper nextLeaf(Zipper loc) {
+  public static Zipper nextLeaf(Zipper loc) {
     while (!isLeaf(currentNode(loc)) || !loc.isRoot) {
       loc = next(loc);
     }
     return loc;
   }
 
-  // todo get rid of this POJ
-  static class accAndMetrics {
-    final public Object acc;
-    final public Object metrics;
-
-    public accAndMetrics(Object acc, Object metrics) {
-      this.acc = acc;
-      this.metrics = metrics;
-    }
-  }
-
-  static Zipper scan(Zipper loc, Function<accAndMetrics, Boolean> pred) {
+  public static Zipper scan(Zipper loc, BiFunction<Object, Object, Boolean> pred) {
     while (loc != null) {
 
       if (loc.isEnd) {
@@ -521,11 +587,12 @@ public class ImmutableTree {
       else {
         Object acc = loc.acc == null ? loc.ops.emptyMetrics() : loc.acc;
         for (int i = loc.idx; i < loc.siblings.size(); i++) {
-          if (pred.apply(new accAndMetrics(acc, loc.siblings.get(i).getMetrics()))) {
+          if (pred.apply(acc, loc.metrics.get(i))) {
             Zipper zipper = new Zipper();
             zipper.ops = loc.ops;
             zipper.isEnd = loc.isEnd;
             zipper.siblings = loc.siblings;
+            zipper.metrics = loc.metrics;
             zipper.isTransient = loc.isTransient;
             zipper.isChanged = loc.isChanged;
             zipper.parent = loc.parent;
@@ -537,7 +604,7 @@ public class ImmutableTree {
             break;
           }
           else {
-            acc = loc.ops.rf(acc, loc.siblings.get(i).getMetrics());
+            acc = loc.ops.rf(acc, loc.metrics.get(i));
           }
         }
       }
@@ -557,53 +624,48 @@ public class ImmutableTree {
     return null;
   }
 
-  static Zipper remove(Zipper loc) {
+  public static Zipper remove(Zipper loc) {
 
     while (loc.siblings.size() == 1) {
       if (loc.isRoot) {
-        return replaceNode(loc, makeNode(new ArrayList<>()));
+        return replaceNode(loc, makeNode(new ArrayList<>(), loc.ops));
       }
 
       loc = up(loc);
     }
 
     ArrayList<Object> newSiblings;
+    ArrayList<Object> newMetrics;
     if (isMutable(loc)) {
       newSiblings = loc.siblings;
+      newMetrics = loc.metrics;
     }
     else {
       newSiblings = (ArrayList<Object>)loc.siblings.clone();
+      newMetrics = (ArrayList<Object>)loc.metrics.clone();
     }
+    newMetrics.remove(loc.idx);
     newSiblings.remove(loc.idx);
 
 
+    Zipper zipper = new Zipper();
+    zipper.ops = loc.ops;
+    zipper.isEnd = loc.isEnd;
+    zipper.siblings = newSiblings;
+    zipper.isTransient = loc.isTransient;
+    zipper.isChanged = true;
+    zipper.parent = loc.parent;
+    zipper.isRoot = loc.isRoot;
+    zipper.oacc = loc.oacc;
+
     if (loc.idx < loc.siblings.size() - 1) {
-      Zipper zipper = new Zipper();
-      zipper.ops = loc.ops;
-      zipper.isEnd = loc.isEnd;
-      zipper.siblings = newSiblings;
-      zipper.isTransient = loc.isTransient;
-      zipper.isChanged = true;
-      zipper.parent = loc.parent;
-      zipper.isRoot = loc.isRoot;
       zipper.acc = loc.acc;
-      zipper.oacc = loc.oacc;
       zipper.idx = loc.idx;
-      return zipper;
     }
     else {
-      Zipper zipper = new Zipper();
-      zipper.ops = loc.ops;
-      zipper.isEnd = loc.isEnd;
-      zipper.siblings = newSiblings;
-      zipper.isTransient = loc.isTransient;
-      zipper.isChanged = true;
-      zipper.parent = loc.parent;
-      zipper.isRoot = loc.isRoot;
       zipper.acc = null;
-      zipper.oacc = loc.oacc;
       zipper.idx = loc.idx - 1;
-      return zipper;
     }
+    return zipper;
   }
 }

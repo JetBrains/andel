@@ -1,9 +1,9 @@
 (ns andel.text
-  (:require [andel.tree :as tree])
-  (:require [andel.array-list :as al])
-  #?(:clj (:import [andel.tree ZipperLocation Leaf]
-                   [andel Text]
-                   [java.lang CharSequence])))
+  (:require [andel.tree :as tree]
+            [andel.array-list :as al])
+  (:import [andel.tree ZipperLocation Leaf]
+           [andel Text]
+           [java.lang CharSequence]))
 
 (defn codepoints-count ^long [^String s]
   (.codePointCount s 0 (.length s)))
