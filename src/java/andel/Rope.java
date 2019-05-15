@@ -25,6 +25,7 @@ public class Rope {
     Object emptyMetrics();
 
     Object rf(Object m1, Object m2);
+
     default Object rf(List<Object> metrics){
       Object r = emptyMetrics();
       for (Object m : metrics) {
@@ -334,7 +335,7 @@ public class Rope {
     return newLoc;
   }
 
-  private static ArrayList<Object> wrapNode(Object node, ZipperOps ops) {
+  public static ArrayList<Object> wrapNode(Object node, ZipperOps ops) {
     ArrayList<Object> al = new ArrayList<>(ops.splitThreshold() / 2);
     al.add(node);
     return al;
@@ -563,6 +564,7 @@ public class Rope {
   //---------------------------------------------------------------------------
 
   public static Zipper edit(Zipper loc, Function<Object, Object> fn) {
+    // todo maybe Function<TData, TData> is a better fit
     return replaceNode(loc, fn.apply(currentNode(loc)));
   }
 
@@ -656,7 +658,7 @@ public class Rope {
     zipper.isChanged = true;
     zipper.parent = loc.parent;
     zipper.isRoot = loc.isRoot;
-    zipper.oacc = loc.oacc;
+    zipper.oacc = null;
 
     if (loc.idx < loc.siblings.size() - 1) {
       zipper.acc = loc.acc;
