@@ -95,8 +95,11 @@ public class Rope {
   }
 
   public static Object currentAcc(Zipper loc) {
-    if (loc.oacc != null) return loc.oacc;
-    return loc.acc;
+    if (loc.oacc != null)
+      return loc.oacc;
+    if (loc.acc != null)
+      return loc.acc;
+    return loc.ops.emptyMetrics();
   }
 
   public static boolean isNode(Object node) {
@@ -189,7 +192,7 @@ public class Rope {
           }
         }
         else if (isLeaf(child) && ops.isLeafOverflown(((Leaf)child).data)) {
-          for (Object o : ops.splitLeaf(child)) {
+          for (Object o : ops.splitLeaf(((Leaf)child).data)) {
             result.add(makeLeaf(o, ops));
           }
         }
@@ -260,7 +263,7 @@ public class Rope {
         Object leftData = ((Leaf)children.get(0)).data;
 
         for (int i = 1; i < children.size(); i++) {
-          Object rightData = children.get(i);
+          Object rightData = ((Leaf)children.get(i)).data;
           if (ops.isLeafUnderflown(leftData) || ops.isLeafUnderflown(rightData)) {
             Object mergedData = ops.mergeLeaves(leftData, rightData);
             if (ops.isLeafOverflown(mergedData)) {
@@ -321,6 +324,7 @@ public class Rope {
 
   public static Zipper replaceNode(Zipper loc, Object node) {
     Zipper newLoc = loc.clone();
+    newLoc.isChanged = true;
     if (isMutable(newLoc)) {
       newLoc.siblings.set(newLoc.idx, node);
     }
@@ -654,6 +658,7 @@ public class Rope {
     zipper.ops = loc.ops;
     zipper.isEnd = loc.isEnd;
     zipper.siblings = newSiblings;
+    zipper.metrics = newMetrics;
     zipper.isTransient = loc.isTransient;
     zipper.isChanged = true;
     zipper.parent = loc.parent;

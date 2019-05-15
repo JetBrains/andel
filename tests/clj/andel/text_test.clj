@@ -10,7 +10,7 @@
   (:import [andel Text Rope Rope$Zipper Rope$Node Text$TextMetrics]))
 
 (defn codepoints-count [^String arg]
-  (.codepointsCount arg 0 (.length arg)))
+  (.codePointCount arg 0 (.length arg)))
 
 (defn play [t operation]
   (Text/root (reduce (fn [^Rope$Zipper loc [code arg]]
@@ -87,5 +87,47 @@
 (def play-t)
 
 (deftest generative
-  (is (:result (tc/quick-check 2 play-test))))
+  (is (:result (tc/quick-check 200 play-test))))
 
+(comment
+
+
+  (defn mp [^andel.Text$TextMetrics metrics]
+    {:length           (.-length metrics)
+     :geometric-length (.-geometricLength metrics)
+     :lines-count      (.-linesCount metrics)
+     :chars-count      (.-charsCount metrics)})
+
+  (defn np [node]
+    (if (instance? andel.Rope$Node node)
+      (let [^andel.Rope$Node node node]
+        {:metrics  (mp (.-metrics node))
+         :children (mapv np (.-children node))})
+      (let [^andel.Rope$Leaf leaf node]
+        {:metrics (mp (.-metrics leaf))
+         :data    (.-data leaf)})))
+
+
+  (defn zp [^Rope$Zipper zipper]
+    {:siblings (mapv np (.-siblings zipper))
+     :idx      (.-idx zipper)
+     :parent   (when-let [p (.-parent zipper)]
+                 (zp p))
+     :root?    (.-isRoot zipper)
+     :end?     (.-isEnd zipper)})
+
+  (let [[[text operation]] [["0" [[:insert "0"] [:retain 1]]]]
+        t                  (Text/makeText text)
+        t'                 (play t operation)]
+    [(Text/text (Text/zipper t) (text-length t))
+     operation
+     (Text/text (Text/zipper t') (text-length t'))])
+
+  (np (Text/makeText "a"))
+
+  (zp
+   (-> (Text/makeText "a")
+       (Text/zipper)
+       (Text/insert "a")
+       (Rope/up)))
+  )

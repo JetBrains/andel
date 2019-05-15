@@ -35,6 +35,8 @@ public class Text {
       this.maxLineLength = maxLineLength;
     }
 
+    public static final TextMetrics EMPTY = new TextMetrics();
+
     public TextMetrics() {
       this.length = 0;
       this.geometricLength = 0;
@@ -131,7 +133,7 @@ public class Text {
 
     @Override
     public Object emptyMetrics() {
-      return new TextMetrics();
+      return TextMetrics.EMPTY;
     }
 
     @Override
@@ -190,7 +192,7 @@ public class Text {
     @Override
     public List<Object> splitLeaf(Object leafData) {
       String s = (String)leafData;
-      assert splitThresh < s.codePointCount(0, s.length());
+      assert splitThresh <= s.codePointCount(0, s.length());
       ArrayList<Object> result = new ArrayList<>();
       splitString(s, result, 0, s.length(), splitThresh);
       return result;
@@ -226,15 +228,18 @@ public class Text {
   }
 
   public static long nodeOffset(Rope.Zipper loc) {
-    return ((TextMetrics)loc.acc).length;
+    TextMetrics acc = (TextMetrics)loc.acc;
+    return acc == null ? 0 : acc.length;
   }
 
   public static long charOffset(Rope.Zipper loc) {
-    return ((TextMetrics)Rope.currentAcc(loc)).charsCount;
+    TextMetrics acc = (TextMetrics)Rope.currentAcc(loc);
+    return acc == null ? 0 : acc.charsCount;
   }
 
   public static long nodeCharOffset(Rope.Zipper loc) {
-    return ((TextMetrics)loc.acc).charsCount;
+    TextMetrics acc = (TextMetrics)loc.acc;
+    return acc == null ? 0 : acc.charsCount;
   }
 
   public static boolean atRightBorder(Rope.Zipper loc) {
@@ -254,7 +259,7 @@ public class Text {
     return Rope.Zipper.zipper(root, TEXT_OPS);
   }
 
-  public static Rope.Node  root(Rope.Zipper loc) {
+  public static Rope.Node root(Rope.Zipper loc) {
     Rope.Node r = (Rope.Node)Rope.root(loc);
     if (r.children.isEmpty()) {
       return makeText("");
@@ -295,14 +300,14 @@ public class Text {
 
     assert loc != null;
     int relCharOffset = (int)(charOffset(loc) - nodeCharOffset(loc));
-    Rope.Zipper finalLoc = loc;
+    ZipperOps ops = loc.ops;
     return retain(Rope.edit(loc,
                             o -> {
                               String data = (String)((Rope.Leaf)o).data;
                               return Rope.makeLeaf(data.substring(0, relCharOffset)
                                                      .concat(s)
                                                      .concat(data.substring(relCharOffset)),
-                                                   finalLoc.ops);
+                                                   ops);
                             }),
                   s.codePointCount(0, s.length()));
   }
@@ -334,15 +339,17 @@ public class Text {
     return loc;
   }
 
-  public static String text(Rope.Zipper loc, int length){
+  public static String text(Rope.Zipper loc, int length) {
     StringBuilder sb = new StringBuilder();
-    while (length > 0){
+    while (length > 0) {
       assert loc != null;
-      if (loc.isEnd)
+      if (loc.isEnd) {
         throw new IllegalArgumentException("Length is out of bounds, length: " + length);
-      if (Rope.isBranch(loc)){
+      }
+      if (Rope.isBranch(loc)) {
         loc = Rope.downForward(loc);
-      } else {
+      }
+      else {
         long i = offset(loc);
         Rope.Leaf leaf = (Rope.Leaf)Rope.currentNode(loc);
         String chunk = (String)leaf.data;
