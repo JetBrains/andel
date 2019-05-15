@@ -84,9 +84,9 @@ public class Text {
     long geometricLength = 0;
     long linesCount = 0;
 
-    while (kind == OffsetKind.CodePoints && codePointsCount <= offset ||
-           kind == OffsetKind.Characters && charsCount <= offset ||
-           kind == OffsetKind.Geom && geometricLength <= offset) {
+    while (kind == OffsetKind.CodePoints && codePointsCount < offset ||
+           kind == OffsetKind.Characters && charsCount < offset ||
+           kind == OffsetKind.Geom && geometricLength < offset) {
       int codepoint = str.codePointAt(charsCount);
 
       if (codepoint == '\n') {
@@ -202,7 +202,7 @@ public class Text {
     }
   }
 
-  public BiFunction<Object, Object, Boolean> offsetPredicate(long offset) {
+  public static BiFunction<Object, Object, Boolean> offsetPredicate(long offset) {
     return (acc, next) -> {
       TextMetrics m1 = (TextMetrics)acc;
       TextMetrics m2 = (TextMetrics)next;
@@ -237,7 +237,7 @@ public class Text {
     return ((TextMetrics)loc.acc).charsCount;
   }
 
-  public boolean atRightBorder(Rope.Zipper loc) {
+  public static boolean atRightBorder(Rope.Zipper loc) {
     // TODO подумоть
     String s = (String)((Rope.Leaf)Rope.currentNode(loc)).data;
     long o = charOffset(loc);
@@ -245,12 +245,16 @@ public class Text {
     return s.length() == (o - n);
   }
 
-  public Rope.Node makeText(String s) {
+  public static Rope.Node makeText(String s) {
     Rope.ZipperOps ops = TEXT_OPS;
     return Rope.growTree(Rope.wrapNode(Rope.makeLeaf(s, ops), ops), ops);
   }
 
-  public Rope.Node  root(Rope.Zipper loc) {
+  public static Rope.Zipper zipper(Rope.Node root) {
+    return Rope.Zipper.zipper(root, TEXT_OPS);
+  }
+
+  public static Rope.Node  root(Rope.Zipper loc) {
     Rope.Node r = (Rope.Node)Rope.root(loc);
     if (r.children.isEmpty()) {
       return makeText("");
@@ -260,7 +264,7 @@ public class Text {
     }
   }
 
-  public Rope.Zipper scanToOffset(Rope.Zipper loc, long offset) {
+  public static Rope.Zipper scanToOffset(Rope.Zipper loc, long offset) {
     Rope.Zipper offsetLoc = Rope.scan(loc, offsetPredicate(offset));
     if (offsetLoc.isEnd) {
       return offsetLoc;
@@ -280,11 +284,11 @@ public class Text {
     }
   }
 
-  public Rope.Zipper retain(Rope.Zipper loc, long l) {
+  public static Rope.Zipper retain(Rope.Zipper loc, long l) {
     return scanToOffset(loc, offset(loc) + l);
   }
 
-  public Rope.Zipper insert(Rope.Zipper loc, String s) {
+  public static Rope.Zipper insert(Rope.Zipper loc, String s) {
     while (Rope.isBranch(loc)) {
       loc = Rope.downForward(loc);
     }
@@ -303,7 +307,7 @@ public class Text {
                   s.codePointCount(0, s.length()));
   }
 
-  public Rope.Zipper delete(Rope.Zipper loc, int l) {
+  public static Rope.Zipper delete(Rope.Zipper loc, int l) {
     while (Rope.isBranch(loc)) {
       loc = Rope.downForward(loc);
     }
@@ -328,5 +332,32 @@ public class Text {
       l -= deleted;
     }
     return loc;
+  }
+
+  public static String text(Rope.Zipper loc, int length){
+    StringBuilder sb = new StringBuilder();
+    while (length > 0){
+      assert loc != null;
+      if (loc.isEnd)
+        throw new IllegalArgumentException("Length is out of bounds, length: " + length);
+      if (Rope.isBranch(loc)){
+        loc = Rope.downForward(loc);
+      } else {
+        long i = offset(loc);
+        Rope.Leaf leaf = (Rope.Leaf)Rope.currentNode(loc);
+        String chunk = (String)leaf.data;
+        long chunkOffset = nodeOffset(loc);
+        int start = (int)(i - chunkOffset);
+        int codepointsCount = (int)((TextMetrics)leaf.metrics).length;
+        int end = Math.min(codepointsCount, start + length);
+        int charsStart = chunk.offsetByCodePoints(0, start);
+        int charsEnd = chunk.offsetByCodePoints(0, end);
+
+        sb.append(chunk, charsStart, charsEnd);
+        length -= (end - start);
+        loc = Rope.next(loc);
+      }
+    }
+    return sb.toString();
   }
 }

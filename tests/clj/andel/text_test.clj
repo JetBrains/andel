@@ -5,8 +5,22 @@
             [clojure.spec.test.alpha :as stest]
             [clojure.test :refer :all]
             [clojure.test.check :as tc]
-            [andel.text :as text]
-            [andel.tree :as tree2]))
+;            [andel.text :as text]
+            )
+  (:import [andel Text Rope Rope$Zipper Rope$Node Text$TextMetrics]))
+
+(defn codepoints-count [^String arg]
+  (.codepointsCount arg 0 (.length arg)))
+
+(defn play [t operation]
+  (Text/root (reduce (fn [^Rope$Zipper loc [code arg]]
+                  (case code
+                    :retain (Text/retain loc ^long arg)
+                    :insert (Text/insert loc ^String arg)
+                    :delete (Text/delete loc ^long (if (string? arg) (codepoints-count arg) arg))
+                    ))
+                (Text/zipper t)
+                operation)))
 
 (def op-frames-gen (g/vector
                     (g/one-of [(g/tuple
@@ -52,13 +66,26 @@
     (assert (= idx (count text)))
     text))
 
+;(def play-test
+;  (prop/for-all [[text operation] operation-gen]
+;                (def last-op [text operation])
+;                (let [t (text/play (text/make-text text) operation)]
+;                  (= (text/text (text/zipper t) (text/text-length t))
+;                     (play-naive text operation)))))
+
+(defn text-length [node]
+  (.-length ^Text$TextMetrics (Rope/getMetrics node)))
+
 (def play-test
   (prop/for-all [[text operation] operation-gen]
                 (def last-op [text operation])
-                (let [t (text/play (text/make-text text) operation)]
-                  (= (text/text (text/zipper t) (text/text-length t))
+
+                (let [t (play (Text/makeText text) operation)]
+                  (= (Text/text (Text/zipper t) (text-length t))
                      (play-naive text operation)))))
 
+(def play-t)
+
 (deftest generative
-  (is (:result (tc/quick-check 3000 play-test))))
+  (is (:result (tc/quick-check 2 play-test))))
 

@@ -125,8 +125,8 @@ public class Rope {
 
   static Node makeNode(ArrayList<Object> children, ZipperOps ops){
     ArrayList<Object> childrenMetrics = new ArrayList<>(children.size());
-    for (int i = 0; i < children.size(); i++) {
-      childrenMetrics.set(i, getMetrics(children.get(i)));
+    for (Object child : children) {
+      childrenMetrics.add(getMetrics(child));
     }
     Node n = new Node();
     n.children = children;
@@ -152,7 +152,7 @@ public class Rope {
       }
     } else {
       for (Object child : children){
-        if (ops.isLeafOverflown(child)){
+        if (ops.isLeafOverflown(((Leaf)child).data)){
           return true;
         }
       }
@@ -188,7 +188,7 @@ public class Rope {
             result.add(makeNode(part, ops));
           }
         }
-        else if (isLeaf(child) && ops.isLeafOverflown(child)) {
+        else if (isLeaf(child) && ops.isLeafOverflown(((Leaf)child).data)) {
           for (Object o : ops.splitLeaf(child)) {
             result.add(makeLeaf(o, ops));
           }
@@ -212,7 +212,7 @@ public class Rope {
       }
     } else {
       for (Object child : children){
-        if (ops.isLeafUnderflown(child)){
+        if (ops.isLeafUnderflown(((Leaf)child).data)){
           return true;
         }
       }
@@ -257,7 +257,7 @@ public class Rope {
         result.add(left);
       }
       else {
-        Object leftData = children.get(0);
+        Object leftData = ((Leaf)children.get(0)).data;
 
         for (int i = 1; i < children.size(); i++) {
           Object rightData = children.get(i);
@@ -569,7 +569,7 @@ public class Rope {
   }
 
   public static Zipper nextLeaf(Zipper loc) {
-    while (!isLeaf(currentNode(loc)) || !loc.isRoot) {
+    while (!isLeaf(currentNode(loc)) && !loc.isRoot && !loc.isEnd) {
       loc = next(loc);
     }
     return loc;
