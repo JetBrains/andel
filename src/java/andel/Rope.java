@@ -163,7 +163,6 @@ public class Rope {
     return false;
   }
 
-  // todo write unit test
   static ArrayList<ArrayList<Object>> partitionChildren(ArrayList<Object> children, int threshold) {
     int partitionCount = children.size() / threshold;
     int totalPartitions = partitionCount + (children.size() % threshold != 0 ? 1 : 0);
@@ -388,6 +387,7 @@ public class Rope {
       Node n = (Node)loc.siblings.get(loc.idx);
       zipper.siblings = n.children;
       zipper.metrics = n.childrenMetrics;
+      //TODO didn't we forgot to set acc?
       zipper.idx = 0;
       zipper.parent = loc;
       return zipper;
@@ -631,7 +631,6 @@ public class Rope {
   }
 
   public static Zipper remove(Zipper loc) {
-
     while (loc.siblings.size() == 1) {
       if (loc.isRoot) {
         return replaceNode(loc, makeNode(new ArrayList<>(), loc.ops));
@@ -670,6 +669,7 @@ public class Rope {
       zipper.idx = loc.idx;
     }
     else {
+      // todo clojure version calls `skip` here
       zipper.acc = null;
       zipper.idx = loc.idx - 1;
     }

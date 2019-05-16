@@ -294,6 +294,9 @@ public class Text {
   }
 
   public static Rope.Zipper insert(Rope.Zipper loc, String s) {
+    if (s.isEmpty())
+      return loc;
+
     while (Rope.isBranch(loc)) {
       loc = Rope.downForward(loc);
     }

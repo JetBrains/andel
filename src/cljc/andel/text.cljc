@@ -47,8 +47,12 @@
           (recur (inc i) o'))
         m))))
 
-(defn metrics-to [^String str ^clojure.lang.IFn$LLLL pred]
-  (let [metrics (Text/metricsTo str pred)]
+(defn metrics-to [^String str kind offset]
+  (let [kind (case kind
+               :offset andel.Text$OffsetKind/CodePoints
+               :characters andel.Text$OffsetKind/Characters
+               :geom andel.Text$OffsetKind/Geom)
+         metrics (Text/metricsTo str kind offset)]
     (TextMetrics.
       (.-length metrics)
       (.-geometricLength metrics)
@@ -59,7 +63,7 @@
       (.-newlineSuffixGeomLength metrics))))
 
 (defn metrics [^String str]
-  (metrics-to str (offset-metrics-pred (.codePointCount str 0 (.length str)))))
+  (metrics-to str :offset (.codePointCount str 0 (.length str))))
 
 (defn ^TextMetrics scan-r-f
   ([] (TextMetrics. 0 0 0 0 0 0 0))
@@ -267,7 +271,7 @@
       (let [o (node-offset offset-loc)
             s (.-data ^Leaf (tree/node offset-loc))
             a (.-acc ^ZipperLocation offset-loc)
-            offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s (offset-metrics-pred (- i o)))))
+            offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s :offset (- i o))))
             next-node (tree/next-leaf offset-loc)]
         (if (and (at-the-right-border? offset-loc)
                  (not (tree/end? next-node)))
@@ -281,7 +285,7 @@
       (let [o (node-geom-offset offset-loc)
             s (.-data ^Leaf (tree/node offset-loc))
             a (.-acc ^ZipperLocation offset-loc)
-            offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s (geom-metrics-pred (- i o)))))
+            offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s :geom  (- i o))))
             next-node (tree/next-leaf offset-loc)]
         (if (and (at-the-right-border? offset-loc)
                  (not (tree/end? next-node)))
@@ -295,7 +299,7 @@
       (let [o (node-char-offset offset-loc)
             s (.-data ^Leaf (tree/node offset-loc))
             a (.-acc ^ZipperLocation offset-loc)
-            offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s (char-metrics-pred (- i o)))))
+            offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s :characters (- i o))))
             next-node (tree/next-leaf offset-loc)]
         (if (and (at-the-right-border? offset-loc)
                  (not (tree/end? next-node)))
@@ -317,7 +321,7 @@
                                (- n l))
             s (.-data ^Leaf (tree/node nth-eol-loc))
             a (.-acc ^ZipperLocation nth-eol-loc)
-            prev-line-end (tree/assoc-o-acc nth-eol-loc (scan-r-f a (metrics-to s (offset-metrics-pred eol-idx))))]
+            prev-line-end (tree/assoc-o-acc nth-eol-loc (scan-r-f a (metrics-to s :offset eol-idx)))]
         (-> prev-line-end
             (retain 1))))))
 
