@@ -87,7 +87,7 @@
 (def play-t)
 
 (deftest generative
-  (is (:result (tc/quick-check 200 play-test))))
+  (is (:result (tc/quick-check 3000 play-test))))
 
 (comment
 

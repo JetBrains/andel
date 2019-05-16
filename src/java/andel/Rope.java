@@ -573,9 +573,9 @@ public class Rope {
   }
 
   public static Zipper nextLeaf(Zipper loc) {
-    while (!isLeaf(currentNode(loc)) && !loc.isRoot && !loc.isEnd) {
+    do {
       loc = next(loc);
-    }
+    } while (!isLeaf(currentNode(loc)) && !loc.isEnd);
     return loc;
   }
 
