@@ -296,23 +296,33 @@ public class Text {
   public static Rope.Zipper insert(Rope.Zipper loc, String s) {
     if (s.isEmpty())
       return loc;
-
-    while (Rope.isBranch(loc)) {
-      loc = Rope.downForward(loc);
-    }
-
+    Rope.Zipper leaf;
+    Rope.Zipper branch = null;
     assert loc != null;
-    int relCharOffset = (int)(charOffset(loc) - nodeCharOffset(loc));
-    ZipperOps ops = loc.ops;
-    return retain(Rope.edit(loc,
-                            o -> {
-                              String data = (String)((Rope.Leaf)o).data;
-                              return Rope.makeLeaf(data.substring(0, relCharOffset)
-                                                     .concat(s)
-                                                     .concat(data.substring(relCharOffset)),
-                                                   ops);
-                            }),
-                  s.codePointCount(0, s.length()));
+    Rope.Zipper i = loc;
+    while (i != null && Rope.isBranch(i)) {
+      branch = i;
+      i = Rope.downForward(i);
+    }
+    leaf = i;
+
+    if (leaf == null){
+      ArrayList<Object> children = new ArrayList<>();
+      children.add(Rope.makeLeaf(s, branch.ops));
+      return Rope.replaceNode(branch, Rope.makeNode(children, branch.ops));
+    } else {
+      int relCharOffset = (int)(charOffset(leaf) - nodeCharOffset(leaf));
+      ZipperOps ops = leaf.ops;
+      return retain(Rope.edit(leaf,
+                              o -> {
+                                String data = (String)((Rope.Leaf)o).data;
+                                return Rope.makeLeaf(data.substring(0, relCharOffset)
+                                                       .concat(s)
+                                                       .concat(data.substring(relCharOffset)),
+                                                     ops);
+                              }),
+                    s.codePointCount(0, s.length()));
+    }
   }
 
   public static Rope.Zipper delete(Rope.Zipper loc, int l) {

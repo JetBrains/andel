@@ -84,6 +84,7 @@
 
 (def play-test
   (prop/for-all [[text operations] operations-seq-gen]
+                (def last-sample [text operations])
                 (let [t' (reduce play (Text/makeText text) operations)]
                   (= (Text/text (Text/zipper t') (text-length t'))
                      (reduce play-naive text operations)))))
@@ -92,8 +93,6 @@
   (is (:result (tc/quick-check 3000 play-test))))
 
 (comment
-
-  (type andel.Text$OffsetKind/CodePoints)
 
   (defn mp [^andel.Text$TextMetrics metrics]
     {:length           (.-length metrics)
@@ -119,18 +118,27 @@
      :root?    (.-isRoot zipper)
      :end?     (.-isEnd zipper)})
 
-  (let [[[text operation]] [["0" [[:delete "0"] [:insert "1"]]]]
+  (let [[[text operations]] [[""
+                              [[[:insert "0"] [:retain 0]]
+                               [[:delete "0"] [:insert "0"] [:insert "1"] [:retain 0]]]]]
         t                  (Text/makeText text)
-        t'                 (play t operation)]
-    [(Text/text (Text/zipper t) (text-length t))
-     operation
-     (Text/text (Text/zipper t') (text-length t'))])
+        t'                 (reduce play t operations)]
+    {:before text
+     :operations operations
+     :after (Text/text (Text/zipper t') (text-length t'))
+     :should-be (reduce play-naive text operations)})
 
-  (zp
+  (Text/makeText "")
+  *e
+
+  (np
    (-> (Text/makeText "a")
        (Text/zipper)
        (Text/delete 1)
-       (Text/insert "b")))
+       (Text/insert "b")
+       (Text/root)))
+
+  *e
 
   (require '[andel.text :as text])
 
