@@ -65,6 +65,12 @@
     (assert (= idx (count text)))
     text))
 
+(def operations-gen
+  (g/fmap
+   (fn [[text frames]]
+     (random-ops text frames))
+   (g/tuple g/string-alphanumeric op-frames-gen)))
+
 (def operations-seq-gen
   (g/fmap
    (fn [[starting-text operations]]
@@ -84,10 +90,12 @@
 
 (def play-test
   (prop/for-all [[text operations] operations-seq-gen]
-                (def last-sample [text operations])
-                (let [t' (reduce play (Text/makeText text) operations)]
-                  (= (Text/text (Text/zipper t') (text-length t'))
-                     (reduce play-naive text operations)))))
+                (try
+                  (let [t' (reduce play (Text/makeText text) operations)]
+                    (= (Text/text (Text/zipper t') (text-length t'))
+                       (reduce play-naive text operations)))
+                  (catch Throwable ex
+                    false))))
 
 (deftest generative
   (is (:result (tc/quick-check 3000 play-test))))
@@ -116,11 +124,17 @@
      :parent   (when-let [p (.-parent zipper)]
                  (zp p))
      :root?    (.-isRoot zipper)
+     :acc      (some-> (.-acc zipper) (mp))
+     :oacc     (some-> (.-oacc zipper) (mp))
      :end?     (.-isEnd zipper)})
 
-  (let [[[text operations]] [[""
-                              [[[:insert "0"] [:retain 0]]
-                               [[:delete "0"] [:insert "0"] [:insert "1"] [:retain 0]]]]]
+  (def foo
+    [["0000000000000000000000000000000000000000000000000000000000000000"
+    [[[:retain 18]
+      [:delete "0000000000000000000000000000000000000000000000"]
+      [:insert "1"]]]]])
+
+  (let [[[text operations]] foo
         t                  (Text/makeText text)
         t'                 (reduce play t operations)]
     {:before text
@@ -129,18 +143,34 @@
      :should-be (reduce play-naive text operations)})
 
   (Text/makeText "")
-  *e
 
-  (np
-   (-> (Text/makeText "a")
+  (-> (Text/makeText "00")
        (Text/zipper)
        (Text/delete 1)
-       (Text/insert "b")
-       (Text/root)))
+       )
+*e
+  (zp
+   (-> (Text/makeText "0000000000000000000000000000000000000000000000000000000000000000")
+       (Text/zipper)
+       (Text/retain 18)
+       (Text/delete (count "0000000000000000000000000000000000000000000000"))
+       (Text/insert "1")
+       ))
+
+  (into {}
+  (-> (text/make-text "0000000000000000000000000000000000000000000000000000000000000000000")
+      (text/zipper)
+      (text/retain 60)
+      (text/delete 7)
+      (text/insert "1")
+      (text/root)
+      (text/as-string)))
+
 
   *e
 
   (require '[andel.text :as text])
+  (require '[andel.tree :as tree])
 
   (into {}
          (-> (text/make-text "a")

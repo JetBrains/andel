@@ -294,11 +294,16 @@ public class Text {
   }
 
   public static Rope.Zipper insert(Rope.Zipper loc, String s) {
-    if (s.isEmpty())
+    if (s.isEmpty()) {
       return loc;
+    }
+
+    assert loc != null;
+    assert !loc.isEnd;
+
     Rope.Zipper leaf;
     Rope.Zipper branch = null;
-    assert loc != null;
+
     Rope.Zipper i = loc;
     while (i != null && Rope.isBranch(i)) {
       branch = i;
@@ -306,10 +311,13 @@ public class Text {
     }
     leaf = i;
 
-    if (leaf == null){
+    if (leaf == null) {
       ArrayList<Object> children = new ArrayList<>();
       children.add(Rope.makeLeaf(s, branch.ops));
-      return Rope.replaceNode(branch, Rope.makeNode(children, branch.ops));
+      Rope.Zipper newRoot = Rope.replaceNode(branch, Rope.makeNode(children, branch.ops));
+      newRoot.isEnd = false;
+      return retain(newRoot,
+                    s.codePointCount(0, s.length()));
     } else {
       int relCharOffset = (int)(charOffset(leaf) - nodeCharOffset(leaf));
       ZipperOps ops = leaf.ops;
@@ -326,28 +334,50 @@ public class Text {
   }
 
   public static Rope.Zipper delete(Rope.Zipper loc, int l) {
+    //TODO optimize here (we can delete entire subtree if it's inside of deletion range
     while (Rope.isBranch(loc)) {
       loc = Rope.downForward(loc);
     }
 
     assert loc != null;
     while (l > 0) {
+      if (loc.isEnd){
+        throw new IndexOutOfBoundsException();
+      }
       long i = offset(loc);
       String s = (String)((Rope.Leaf)Rope.currentNode(loc)).data;
       int relOffset = (int)(i - nodeOffset(loc));
       int chunkLength = s.codePointCount(0, s.length());
       int end = Math.min(chunkLength, relOffset + l);
       ZipperOps ops = loc.ops;
-      loc = relOffset == 0 && end == chunkLength
-            ? Rope.remove(loc)
-            : scanToOffset(Rope.edit(loc, (o) -> {
-              String data = (String)((Rope.Leaf)o).data;
-              return Rope.makeLeaf(data.substring(0, s.codePointCount(0, relOffset))
-                                     .concat(data.substring(s.codePointCount(0, end))),
-                                   ops);
-            }), i);
       int deleted = end - relOffset;
       l -= deleted;
+      if (relOffset == 0 && end == chunkLength) {
+        loc = Rope.remove(loc);
+      }
+      else {
+        Rope.Zipper newLeaf = Rope.edit(loc, (o) -> {
+          String data = (String)((Rope.Leaf)o).data;
+          return Rope.makeLeaf(data.substring(0, s.codePointCount(0, relOffset))
+                                 .concat(data.substring(s.codePointCount(0, end))),
+                               ops);
+        });
+        if (atRightBorder(newLeaf)) {
+          Rope.Zipper nextLeaf = Rope.nextLeaf(newLeaf);
+          if (nextLeaf.isEnd) {
+            if (l > 0) {
+              throw new IndexOutOfBoundsException();
+            } else {
+              return newLeaf;
+            }
+          } else {
+            loc = nextLeaf;
+          }
+        }
+        else {
+          loc = newLeaf;
+        }
+      }
     }
     return loc;
   }

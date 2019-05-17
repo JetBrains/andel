@@ -12,6 +12,12 @@ public class Rope {
     // store precalculated accumulator values in childrenMetrics to use binary search
     public Object metrics;
     public ArrayList<Object> childrenMetrics;
+
+    public Node(Object metrics, ArrayList<Object> children, ArrayList<Object> childrenMetrics) {
+      this.children = children;
+      this.metrics = metrics;
+      this.childrenMetrics = childrenMetrics;
+    }
   }
 
   public static class Leaf {
@@ -138,11 +144,7 @@ public class Rope {
     for (Object child : children) {
       childrenMetrics.add(getMetrics(child));
     }
-    Node n = new Node();
-    n.children = children;
-    n.childrenMetrics = childrenMetrics;
-    n.metrics = ops.rf(childrenMetrics);
-    return n;
+    return new Node(ops.rf(childrenMetrics), children, childrenMetrics);
   }
 
   static Leaf makeLeaf(Object data, ZipperOps ops) {
@@ -331,20 +333,20 @@ public class Rope {
   }
 
   public static Zipper replaceNode(Zipper loc, Object node) {
-    Zipper newLoc = loc.clone();
-    newLoc.isChanged = true;
-    if (isMutable(newLoc)) {
-      newLoc.siblings.set(newLoc.idx, node);
+    Zipper copy = loc.clone();
+    copy.isChanged = true;
+    if (isMutable(copy)) {
+      copy.siblings.set(copy.idx, node);
     }
     else {
-      ArrayList<Object> copy = (ArrayList<Object>)newLoc.siblings.clone();
-      ArrayList<Object> metricsCopy = (ArrayList<Object>)newLoc.metrics.clone();
-      copy.set(newLoc.idx, node);
-      metricsCopy.set(newLoc.idx, getMetrics(node));
-      newLoc.siblings = copy;
-      newLoc.metrics = metricsCopy;
+      ArrayList<Object> siblingsCopy = (ArrayList<Object>)copy.siblings.clone();
+      ArrayList<Object> metricsCopy = (ArrayList<Object>)copy.metrics.clone();
+      siblingsCopy.set(copy.idx, node);
+      metricsCopy.set(copy.idx, getMetrics(node));
+      copy.siblings = siblingsCopy;
+      copy.metrics = metricsCopy;
     }
-    return newLoc;
+    return copy;
   }
 
   public static ArrayList<Object> wrapNode(Object node, ZipperOps ops) {
@@ -355,10 +357,7 @@ public class Rope {
 
   public static Zipper up(Zipper loc) {
     if (loc.isChanged) {
-      if (loc.parent != null) {
-        return replaceNode(loc.parent, makeNode(balanceChildren(loc.siblings, loc.ops), loc.ops));
-      }
-      else {
+      if (loc.parent == null) {
         Zipper zipper = new Zipper();
         zipper.ops = loc.ops;
         zipper.isTransient = loc.isTransient;
@@ -368,6 +367,9 @@ public class Rope {
         zipper.metrics = wrapNode(node.metrics, loc.ops);
         zipper.isRoot = true;
         return zipper;
+      }
+      else {
+        return replaceNode(loc.parent, makeNode(balanceChildren(loc.siblings, loc.ops), loc.ops));
       }
     }
     return loc.parent;
@@ -380,7 +382,9 @@ public class Rope {
       zipper.idx = loc.idx + 1;
       zipper.siblings = loc.siblings;
       zipper.metrics = loc.metrics;
-      zipper.acc = loc.ops.rf(currentAcc(loc), loc.metrics.get(loc.idx));
+      zipper.acc = loc.acc == null
+                   ? loc.metrics.get(loc.idx)
+                   : loc.ops.rf(loc.acc, loc.metrics.get(loc.idx));
       zipper.oacc = null;
       zipper.parent = loc.parent;
       zipper.isChanged = loc.isChanged;
@@ -391,15 +395,15 @@ public class Rope {
 
   public static Zipper downForward(Zipper loc) {
     if (isBranch(loc)) {
-      Zipper zipper = new Zipper();
-      zipper.ops = loc.ops;
       Node n = (Node)loc.siblings.get(loc.idx);
-      zipper.siblings = n.children;
       if (n.children.isEmpty()) {
         return null;
       }
+      Zipper zipper = new Zipper();
+      zipper.ops = loc.ops;
+      zipper.siblings = n.children;
       zipper.metrics = n.childrenMetrics;
-      //TODO didn't we forgot to set acc?
+      zipper.acc = loc.acc;
       zipper.idx = 0;
       zipper.parent = loc;
       return zipper;
@@ -409,13 +413,13 @@ public class Rope {
 
   public static Zipper downBackward(Zipper loc) {
     if (isBranch(loc)) {
-      Zipper zipper = new Zipper();
       Node n = (Node)loc.siblings.get(loc.idx);
-      zipper.ops = loc.ops;
-      zipper.siblings = n.children;
       if (n.children.isEmpty()){
         return null;
       }
+      Zipper zipper = new Zipper();
+      zipper.ops = loc.ops;
+      zipper.siblings = n.children;
       zipper.metrics = n.childrenMetrics;
       zipper.idx = n.children.size() - 1;
       zipper.parent = loc;
@@ -453,7 +457,7 @@ public class Rope {
       return right;
     }
 
-    Zipper p = up(loc);
+    Zipper p = loc;
     while (true) {
       Zipper up = up(p);
       if (up != null) {
@@ -465,12 +469,12 @@ public class Rope {
       }
       else {
         Zipper zipper = new Zipper();
-        zipper.ops = loc.ops;
+        zipper.ops = p.ops;
         zipper.idx = 0;
-        zipper.isTransient = loc.isTransient;
-        Object node = currentNode(loc);
-        zipper.siblings = wrapNode(node, loc.ops);
-        zipper.metrics = wrapNode(getMetrics(node), loc.ops);
+        zipper.isTransient = p.isTransient;
+        Object node = currentNode(p);
+        zipper.siblings = wrapNode(node, p.ops);
+        zipper.metrics = wrapNode(getMetrics(node), p.ops);
         zipper.isEnd = true;
         return zipper;
       }
@@ -487,7 +491,7 @@ public class Rope {
       return right;
     }
 
-    Zipper p = up(loc);
+    Zipper p = loc;
     while (true) {
       Zipper up = up(p);
       if (up != null) {
@@ -499,12 +503,12 @@ public class Rope {
       }
       else {
         Zipper zipper = new Zipper();
-        zipper.ops = loc.ops;
+        zipper.ops = p.ops;
         zipper.idx = 0;
-        zipper.isTransient = loc.isTransient;
-        Object node = currentNode(loc);
-        zipper.siblings = wrapNode(node, loc.ops);
-        zipper.metrics = wrapNode(getMetrics(node), loc.ops);
+        zipper.isTransient = p.isTransient;
+        Object node = currentNode(p);
+        zipper.siblings = wrapNode(node, p.ops);
+        zipper.metrics = wrapNode(getMetrics(node), p.ops);
         zipper.isEnd = true;
         return zipper;
       }
@@ -606,8 +610,7 @@ public class Rope {
       Zipper nextLoc = null;
       if (loc.isRoot) {
         nextLoc = loc;
-      }
-      else {
+      } else {
         Object acc = loc.acc == null ? loc.ops.emptyMetrics() : loc.acc;
         for (int i = loc.idx; i < loc.siblings.size(); i++) {
           if (pred.apply(acc, loc.metrics.get(i))) {
@@ -634,7 +637,8 @@ public class Rope {
 
       if (nextLoc != null) {
         if (isBranch(nextLoc)) {
-          loc = downForward(nextLoc);
+          Zipper down = downForward(nextLoc);
+          loc = down == null ? skip(nextLoc) : down;
         }
         else {
           return nextLoc;
@@ -647,12 +651,15 @@ public class Rope {
     throw new IllegalStateException();
   }
 
+  /*
+   * removes current node preserving accumulated position
+   * if the deleted node was rightest sibling zipper skips to next dfs node
+   * if parent node has no more children it will be also deleted
+   * */
   public static Zipper remove(Zipper loc) {
     while (loc.siblings.size() == 1) {
       if (loc.isRoot) {
-        Zipper z = replaceNode(loc, makeNode(new ArrayList<>(), loc.ops));
-        z.isEnd = true;
-        return z;
+        return replaceNode(loc, new Node(loc.ops.emptyMetrics(), new ArrayList<>(), new ArrayList<>()));
       }
 
       loc = up(loc);
@@ -681,17 +688,24 @@ public class Rope {
     zipper.isChanged = true;
     zipper.parent = loc.parent;
     zipper.isRoot = loc.isRoot;
-    zipper.oacc = null;
+    zipper.acc = loc.acc;
 
-    if (loc.idx < loc.siblings.size() - 1) {
-      zipper.acc = loc.acc;
+    if (loc.idx < newSiblings.size()) {
       zipper.idx = loc.idx;
+      zipper.oacc = loc.acc;
+      return zipper;
     }
     else {
-      // todo clojure version calls `skip` here
-      zipper.acc = null;
+      // POZOR
+      zipper.oacc = null;
       zipper.idx = loc.idx - 1;
+      Zipper skip = skip(zipper);
+      if (skip.isEnd) {
+        zipper.oacc = loc.acc;
+        return zipper;
+      } else {
+        return skip;
+      }
     }
-    return zipper;
   }
 }
