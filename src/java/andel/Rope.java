@@ -25,7 +25,7 @@ public class Rope {
     public Object data;
   }
 
-  interface ZipperOps {
+  public interface ZipperOps {
 
     Object calculateMetrics(Object data);
 
@@ -139,7 +139,7 @@ public class Rope {
     }
   }
 
-  static Node makeNode(ArrayList<Object> children, ZipperOps ops) {
+  public static Node makeNode(ArrayList<Object> children, ZipperOps ops) {
     ArrayList<Object> childrenMetrics = new ArrayList<>(children.size());
     for (Object child : children) {
       childrenMetrics.add(getMetrics(child));
@@ -147,7 +147,7 @@ public class Rope {
     return new Node(ops.rf(childrenMetrics), children, childrenMetrics);
   }
 
-  static Leaf makeLeaf(Object data, ZipperOps ops) {
+  public static Leaf makeLeaf(Object data, ZipperOps ops) {
     Leaf l = new Leaf();
     l.data = data;
     l.metrics = ops.calculateMetrics(data);
@@ -194,7 +194,7 @@ public class Rope {
     if (splitNeeded(children, ops)) {
       ArrayList<Object> result = new ArrayList<>(children.size() / 2);
       for (Object child : children) {
-        if (isNode(child) && ops.splitThreshold() < getChildren(child).size()) {
+        if (isNode(child) && getChildren(child).size() >= ops.splitThreshold()) {
           ArrayList<ArrayList<Object>> partition = partitionChildren(getChildren(child), ops.splitThreshold());
           for (ArrayList<Object> part : partition) {
             result.add(makeNode(part, ops));
@@ -245,7 +245,7 @@ public class Rope {
           ArrayList<Object> rightChildren = getChildren(right);
 
           if (leftChildren.size() < mergeThreshold || rightChildren.size() < mergeThreshold) {
-            if (ops.splitThreshold() <= leftChildren.size() + rightChildren.size()) {
+            if (leftChildren.size() + rightChildren.size() >= ops.splitThreshold()) {
               int n = (leftChildren.size() + rightChildren.size()) / 2;
               // todo no actual need in tmp array here
               ArrayList<Object> tmp = joinChildren(leftChildren, rightChildren);
@@ -310,13 +310,13 @@ public class Rope {
     return mergeChildren(splitChildren(children, ops), ops);
   }
 
-  static Node growTree(ArrayList<Object> children, ZipperOps ops) {
+  public static Node growTree(ArrayList<Object> children, ZipperOps ops) {
     ArrayList<Object> balanced = balanceChildren(children, ops);
-    if (balanced.size() < ops.splitThreshold()) {
-      return makeNode(balanced, ops);
+    if (balanced.size() >= ops.splitThreshold()) {
+      return growTree(singletonList(makeNode(balanced, ops)), ops);
     }
     else {
-      return growTree(balanced, ops);
+      return makeNode(balanced, ops);
     }
   }
 
@@ -332,7 +332,7 @@ public class Rope {
     return loc.isTransient && loc.isChanged;
   }
 
-  public static Zipper replaceNode(Zipper loc, Object node) {
+  public static Zipper replace(Zipper loc, Object node) {
     Zipper copy = loc.clone();
     copy.isChanged = true;
     if (isMutable(copy)) {
@@ -369,7 +369,7 @@ public class Rope {
         return zipper;
       }
       else {
-        return replaceNode(loc.parent, makeNode(balanceChildren(loc.siblings, loc.ops), loc.ops));
+        return replace(loc.parent, makeNode(balanceChildren(loc.siblings, loc.ops), loc.ops));
       }
     }
     return loc.parent;
@@ -588,7 +588,7 @@ public class Rope {
 
   public static Zipper edit(Zipper loc, Function<Object, Object> fn) {
     // todo maybe Function<TData, TData> is a better fit
-    return replaceNode(loc, fn.apply(currentNode(loc)));
+    return replace(loc, fn.apply(currentNode(loc)));
   }
 
   public static Zipper nextLeaf(Zipper loc) {
@@ -659,7 +659,7 @@ public class Rope {
   public static Zipper remove(Zipper loc) {
     while (loc.siblings.size() == 1) {
       if (loc.isRoot) {
-        return replaceNode(loc, new Node(loc.ops.emptyMetrics(), new ArrayList<>(), new ArrayList<>()));
+        return replace(loc, new Node(loc.ops.emptyMetrics(), new ArrayList<>(), new ArrayList<>()));
       }
 
       loc = up(loc);

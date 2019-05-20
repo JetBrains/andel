@@ -90,7 +90,7 @@
 (defn replace
   "Replaces the node at this loc, without moving"
   [loc node]
-  (Rope/replaceNode loc node))
+  (Rope/replace loc node))
 
 (defn up [loc]
   (Rope/up loc))

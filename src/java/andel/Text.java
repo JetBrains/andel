@@ -118,12 +118,19 @@ public class Text {
                            maxLineLength);
   }
 
-  public static final TextOps TEXT_OPS = new TextOps();
+  public static final TextOps TEXT_OPS = new TextOps(32, 64);
 
   public static class TextOps implements ZipperOps {
 
-    final static int splitThresh = 64;
-    final static int mergeThresh = 32;
+    final int splitThresh;
+    final int leafSplitThresh;
+    final int leafMergeThresh;
+
+    public TextOps(int branching, int leafWidth) {
+      splitThresh = branching;
+      leafMergeThresh = leafWidth / 2;
+      leafSplitThresh = leafWidth;
+    }
 
     @Override
     public Object calculateMetrics(Object data) {
@@ -163,13 +170,13 @@ public class Text {
     @Override
     public boolean isLeafOverflown(Object leafData) {
       String s = (String)leafData;
-      return splitThresh <= s.codePointCount(0, s.length());
+      return leafSplitThresh <= s.codePointCount(0, s.length());
     }
 
     @Override
     public boolean isLeafUnderflown(Object leafData) {
       String s = (String)leafData;
-      return s.codePointCount(0, s.length()) < mergeThresh;
+      return s.codePointCount(0, s.length()) < leafMergeThresh;
     }
 
     @Override
@@ -179,22 +186,22 @@ public class Text {
 
     private static void splitString(String s, ArrayList<Object> result, int from, int to, int thresh) {
       int length = to - from;
-      if (length < thresh) {
-        result.add(s.substring(s.offsetByCodePoints(0, from), s.offsetByCodePoints(0, to)));
-      }
-      else {
+      if (thresh <= length) {
         int halfLength = length / 2;
         splitString(s, result, from, from + halfLength, thresh);
         splitString(s, result, from + halfLength, to, thresh);
+      }
+      else {
+        result.add(s.substring(s.offsetByCodePoints(0, from), s.offsetByCodePoints(0, to)));
       }
     }
 
     @Override
     public List<Object> splitLeaf(Object leafData) {
       String s = (String)leafData;
-      assert splitThresh <= s.codePointCount(0, s.length());
+      assert leafSplitThresh <= s.codePointCount(0, s.length());
       ArrayList<Object> result = new ArrayList<>();
-      splitString(s, result, 0, s.length(), splitThresh);
+      splitString(s, result, 0, s.length(), leafSplitThresh);
       return result;
     }
 
@@ -242,14 +249,6 @@ public class Text {
     return acc == null ? 0 : acc.charsCount;
   }
 
-  public static boolean atRightBorder(Rope.Zipper loc) {
-    // TODO подумоть
-    String s = (String)((Rope.Leaf)Rope.currentNode(loc)).data;
-    long o = charOffset(loc);
-    long n = nodeCharOffset(loc);
-    return s.length() == (o - n);
-  }
-
   public static Rope.Node makeText(String s) {
     Rope.ZipperOps ops = TEXT_OPS;
     return Rope.growTree(Rope.wrapNode(Rope.makeLeaf(s, ops), ops), ops);
@@ -279,13 +278,7 @@ public class Text {
       String s = (String)((Rope.Leaf)Rope.currentNode(offsetLoc)).data;
       TextMetrics acc = (TextMetrics)offsetLoc.acc;
       offsetLoc.oacc = acc.merge(metricsTo(s, OffsetKind.CodePoints, offset - o));
-      Rope.Zipper nextLoc = Rope.nextLeaf(offsetLoc);
-      if (atRightBorder(offsetLoc) && !(nextLoc.isEnd)) {
-        return nextLoc;
-      }
-      else {
-        return offsetLoc;
-      }
+      return offsetLoc;
     }
   }
 
@@ -314,21 +307,18 @@ public class Text {
     if (leaf == null) {
       ArrayList<Object> children = new ArrayList<>();
       children.add(Rope.makeLeaf(s, branch.ops));
-      Rope.Zipper newRoot = Rope.replaceNode(branch, Rope.makeNode(children, branch.ops));
+      Rope.Zipper newRoot = Rope.replace(branch, Rope.makeNode(children, branch.ops));
       newRoot.isEnd = false;
       return retain(newRoot,
                     s.codePointCount(0, s.length()));
     } else {
       int relCharOffset = (int)(charOffset(leaf) - nodeCharOffset(leaf));
       ZipperOps ops = leaf.ops;
-      return retain(Rope.edit(leaf,
-                              o -> {
-                                String data = (String)((Rope.Leaf)o).data;
-                                return Rope.makeLeaf(data.substring(0, relCharOffset)
-                                                       .concat(s)
-                                                       .concat(data.substring(relCharOffset)),
-                                                     ops);
-                              }),
+      String data = (String)((Rope.Leaf)(Rope.currentNode(leaf))).data;
+      return retain(Rope.replace(leaf, Rope.makeLeaf(data.substring(0, relCharOffset)
+                                         .concat(s)
+                                         .concat(data.substring(relCharOffset)),
+                                       ops)),
                     s.codePointCount(0, s.length()));
     }
   }
@@ -358,11 +348,11 @@ public class Text {
       else {
         Rope.Zipper newLeaf = Rope.edit(loc, (o) -> {
           String data = (String)((Rope.Leaf)o).data;
-          return Rope.makeLeaf(data.substring(0, s.codePointCount(0, relOffset))
-                                 .concat(data.substring(s.codePointCount(0, end))),
+          return Rope.makeLeaf(data.substring(0, s.offsetByCodePoints(0, relOffset))
+                                 .concat(data.substring(s.offsetByCodePoints(0, end))),
                                ops);
         });
-        if (atRightBorder(newLeaf)) {
+        if (end == chunkLength) {
           Rope.Zipper nextLeaf = Rope.nextLeaf(newLeaf);
           if (nextLeaf.isEnd) {
             if (l > 0) {

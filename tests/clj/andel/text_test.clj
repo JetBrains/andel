@@ -5,7 +5,7 @@
             [clojure.spec.test.alpha :as stest]
             [clojure.test :refer :all]
             [clojure.test.check :as tc])
-  (:import [andel Text Rope Rope$Zipper Rope$Node Text$TextMetrics]))
+  (:import [andel Text Rope Rope$Zipper Rope$Node Text$TextMetrics Text$TextOps Rope$ZipperOps]))
 
 (defn codepoints-count [^String arg]
   (.codePointCount arg 0 (.length arg)))
@@ -88,13 +88,18 @@
 (defn text-length [node]
   (.-length ^Text$TextMetrics (Rope/getMetrics node)))
 
+(defn make-text [text]
+  (let [ops (Text$TextOps. 4 5)]
+    (Rope/growTree (Rope/wrapNode (Rope/makeLeaf text ops) ops) ops)))
+
 (def play-test
   (prop/for-all [[text operations] operations-seq-gen]
                 (try
-                  (let [t' (reduce play (Text/makeText text) operations)]
+                  (let [t' (reduce play (make-text text) operations)]
                     (= (Text/text (Text/zipper t') (text-length t'))
                        (reduce play-naive text operations)))
                   (catch Throwable ex
+                    (def my-ex ex)
                     false))))
 
 (deftest generative
@@ -131,13 +136,12 @@
      :end?     (.-isEnd zipper)})
 
   (def foo
-    [["0000000000000000000000000000000000000000000000000000000000000000"
-    [[[:retain 18]
-      [:delete "0000000000000000000000000000000000000000000000"]
-      [:insert "1"]]]]])
+    [["0000000000" [[[:retain 0] [:retain 10]]]]])
+
+  (make-text "000000000000")
 
   (let [[[text operations]] foo
-        t                  (Text/makeText text)
+        t                  (make-text text)
         t'                 (reduce play t operations)]
     {:before text
      :operations operations
@@ -149,7 +153,7 @@
   (-> (Text/makeText "00")
        (Text/zipper)
        (Text/delete 1)
-       )
+       (Text/root))
 *e
   (zp
    (-> (Text/makeText "0000000000000000000000000000000000000000000000000000000000000000")
