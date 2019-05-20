@@ -346,16 +346,17 @@ public class Text {
   }
 
   public static Rope.Zipper delete(Rope.Zipper loc, int l) {
-    //TODO optimize here (we can delete entire subtree if it's inside of deletion range
-    while (Rope.isBranch(loc)) {
-      loc = Rope.downForward(loc);
-    }
-
-    assert loc != null;
     while (l > 0) {
       if (loc.isEnd){
         throw new IndexOutOfBoundsException();
       }
+      //TODO optimize here (we can delete entire subtree if it's inside of deletion range
+      while (Rope.isBranch(loc)) {
+        loc = Rope.downForward(loc);
+      }
+
+      assert loc != null;
+
       long i = offset(loc);
       String s = (String)((Rope.Leaf)Rope.currentNode(loc)).data;
       int relOffset = (int)(i - nodeOffset(loc));
@@ -375,15 +376,15 @@ public class Text {
                                ops);
         });
         if (end == chunkLength) {
-          Rope.Zipper nextLeaf = Rope.nextLeaf(newLeaf);
-          if (nextLeaf.isEnd) {
+          Rope.Zipper next = Rope.next(newLeaf);
+          if (next.isEnd) {
             if (l > 0) {
               throw new IndexOutOfBoundsException();
             } else {
               return newLeaf;
             }
           } else {
-            loc = nextLeaf;
+            loc = next;
           }
         }
         else {

@@ -107,8 +107,6 @@
 
 (comment
 
-  (g/sample operations-seq-gen 50)
-
   (defn mp [^andel.Text$TextMetrics metrics]
     {:length           (.-length metrics)
      :geometric-length (.-geometricLength metrics)
@@ -136,9 +134,11 @@
      :end?     (.-isEnd zipper)})
 
   (def foo
-    [["0000000000" [[[:retain 0] [:retain 10]]]]])
-
-  (make-text "000000000000")
+    [["00000000000000000"
+    [[[:insert "0"]
+      [:delete "00000000000000000"]
+      [:insert "A"]
+      [:retain 0]]]]])
 
   (let [[[text operations]] foo
         t                  (make-text text)
@@ -147,14 +147,6 @@
      :operations operations
      :after (Text/text (Text/zipper t') (text-length t'))
      :should-be (reduce play-naive text operations)})
-
-  (Text/makeText "")
-
-  (-> (Text/makeText "00")
-       (Text/zipper)
-       (Text/delete 1)
-       (Text/root))
-*e
   (zp
    (-> (Text/makeText "0000000000000000000000000000000000000000000000000000000000000000")
        (Text/zipper)
@@ -162,18 +154,6 @@
        (Text/delete (count "0000000000000000000000000000000000000000000000"))
        (Text/insert "1")
        ))
-
-  (into {}
-  (-> (text/make-text "0000000000000000000000000000000000000000000000000000000000000000000")
-      (text/zipper)
-      (text/retain 60)
-      (text/delete 7)
-      (text/insert "1")
-      (text/root)
-      (text/as-string)))
-
-
-  *e
 
   (require '[andel.text :as text])
   (require '[andel.tree :as tree])
