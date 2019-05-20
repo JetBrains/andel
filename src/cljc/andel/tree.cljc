@@ -219,7 +219,6 @@
       (reduce
        (fn [result node]
          (cond (and (node? node) (< split-thresh (al/length (.-children ^Node node))))
-
                (transduce (comp (partition-all (chunk-size (al/length (.-children ^Node node)) split-thresh))
                                 (map make-node-fn))
                           al/conj!

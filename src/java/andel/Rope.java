@@ -174,17 +174,19 @@ public class Rope {
   }
 
   static ArrayList<ArrayList<Object>> partitionChildren(ArrayList<Object> children, int threshold) {
-    int partitionCount = children.size() / threshold;
-    int totalPartitions = partitionCount + (children.size() % threshold != 0 ? 1 : 0);
+    int c = children.size();
+    int chunkSize = (int)Math.ceil(c / Math.pow(2, Math.ceil(Math.log((double)c / threshold) / Math.log(2))));
+    int partitionCount = c / chunkSize;
+    int totalPartitions = partitionCount + (c % threshold != 0 ? 1 : 0);
 
     ArrayList<ArrayList<Object>> partition = new ArrayList<>(totalPartitions);
-    int i = 0;
-    while (i < children.size()) {
-      int capacity = (children.size() - i) % threshold;
-      ArrayList<Object> part = new ArrayList<>(capacity);
-      part.addAll(children.subList(i, capacity));
+    int f = 0;
+    while (f < children.size()) {
+      ArrayList<Object> part = new ArrayList<>(chunkSize);
+      int e = Math.min(f + chunkSize, c);
+      part.addAll(children.subList(f, e));
       partition.add(part);
-      i += capacity;
+      f += chunkSize;
     }
 
     return partition;
@@ -653,7 +655,9 @@ public class Rope {
 
   /*
    * removes current node preserving accumulated position
+   * returns zipper pointing to right sibling of the deleted node
    * if the deleted node was rightest sibling zipper skips to next dfs node
+   * will stay in place if there is no `next` node to go
    * if parent node has no more children it will be also deleted
    * */
   public static Zipper remove(Zipper loc) {
