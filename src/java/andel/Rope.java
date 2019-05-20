@@ -692,15 +692,18 @@ public class Rope {
 
     if (loc.idx < newSiblings.size()) {
       zipper.idx = loc.idx;
-      zipper.oacc = loc.acc;
+      zipper.oacc = null;
       return zipper;
     }
     else {
-      // POZOR
-      zipper.oacc = null;
       zipper.idx = loc.idx - 1;
       Zipper skip = skip(zipper);
       if (skip.isEnd) {
+        Object acc = loc.parent.acc;
+        for (int i = 0; i < zipper.idx; i++) {
+          acc = loc.ops.rf(acc, loc.metrics.get(i));
+        }
+        zipper.acc = acc;
         zipper.oacc = loc.acc;
         return zipper;
       } else {

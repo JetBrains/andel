@@ -98,9 +98,11 @@
                     false))))
 
 (deftest generative
-  (is (:result (tc/quick-check 3000 play-test))))
+  (is (:result (tc/quick-check 50 play-test))))
 
 (comment
+
+  (g/sample operations-seq-gen 50)
 
   (defn mp [^andel.Text$TextMetrics metrics]
     {:length           (.-length metrics)
