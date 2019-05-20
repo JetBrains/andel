@@ -219,6 +219,14 @@ public class Text {
     };
   }
 
+  public static BiFunction<Object, Object, Boolean> charOffsetPredicate(long offset) {
+    return (acc, next) -> {
+      TextMetrics m1 = (TextMetrics)acc;
+      TextMetrics m2 = (TextMetrics)next;
+      return offset <= m1.merge(m2).charsCount;
+    };
+  }
+
   public static long offset(Rope.Zipper loc) {
     if (loc.isEnd) {
       return ((TextMetrics)Rope.getMetrics(Rope.currentNode(loc))).length;
@@ -278,6 +286,20 @@ public class Text {
       String s = (String)((Rope.Leaf)Rope.currentNode(offsetLoc)).data;
       TextMetrics acc = (TextMetrics)offsetLoc.acc;
       offsetLoc.oacc = acc.merge(metricsTo(s, OffsetKind.CodePoints, offset - o));
+      return offsetLoc;
+    }
+  }
+
+  public static Rope.Zipper scanToCharOffset(Rope.Zipper loc, long offset) {
+    Rope.Zipper offsetLoc = Rope.scan(loc, charOffsetPredicate(offset));
+    if (offsetLoc.isEnd) {
+      return offsetLoc;
+    }
+    else {
+      long o = nodeCharOffset(offsetLoc);
+      String s = (String)((Rope.Leaf)Rope.currentNode(offsetLoc)).data;
+      TextMetrics acc = (TextMetrics)offsetLoc.acc;
+      offsetLoc.oacc = acc.merge(metricsTo(s, OffsetKind.Characters, offset - o));
       return offsetLoc;
     }
   }
@@ -400,4 +422,89 @@ public class Text {
     }
     return sb.toString();
   }
+
+
+  public static BiFunction<Object, Object, Boolean> byCharOffsetExclusive(int offset, ZipperOps ops) {
+    return (o, o2) -> {
+      return offset <= ((TextMetrics)ops.rf(o, o2)).charsCount;
+    };
+  }
+
+
+  public static class Sequence implements CharSequence {
+
+    Rope.Node root;
+    Rope.Zipper loc;
+    final int from, to; // in chars
+
+    Sequence(Rope.Node root, int from, int to) {
+      this.root = root;
+      this.from = from;
+      this.to = to;
+      Rope.Zipper l = zipper(root);
+      this.loc = Rope.scan(l, byCharOffsetExclusive(from, l.ops));
+    }
+
+    public Sequence(Rope.Node root) {
+      this(root, 0, (int)((TextMetrics)root.metrics).charsCount);
+    }
+
+    @Override
+    public int length() {
+      return to - from;
+    }
+
+    @Override
+    public char charAt(int index) {
+      assert index < to - from;
+      int absoluteIndex = index + from;
+      int base = (int)nodeCharOffset(loc);
+      String currentChunk = ((String)((Rope.Leaf)Rope.currentNode(loc)).data);
+
+      if (absoluteIndex < base) {
+        Rope.Zipper rootLoc = zipper(root);
+        loc = Rope.scan(rootLoc, byCharOffsetExclusive(index, loc.ops));
+        String newChunk = ((String)((Rope.Leaf)Rope.currentNode(loc)).data);
+        return newChunk.charAt(absoluteIndex - base);
+      }
+
+      if (absoluteIndex < base + currentChunk.length()) {
+        return currentChunk.charAt(absoluteIndex - base);
+      }
+
+      if (base + currentChunk.length() < absoluteIndex) {
+        loc = Rope.scan(loc, byCharOffsetExclusive(index, loc.ops));
+        String newChunk = ((String)((Rope.Leaf)Rope.currentNode(loc)).data);
+        return newChunk.charAt(absoluteIndex - base);
+      }
+
+      throw new IndexOutOfBoundsException();
+    }
+
+    @Override
+    public CharSequence subSequence(int start, int end) {
+      assert start <= to - from;
+      assert end <= to - from;
+      return new Sequence(root, from + start, from + end);
+    }
+
+    @Override
+    public String toString() {
+      Rope.Zipper fromLoc = scanToCharOffset(zipper(root), from);
+      Rope.Zipper toLoc = scanToCharOffset(fromLoc, to);
+      return text(fromLoc, (int)(offset(toLoc) - offset(fromLoc)));
+    }
+  }
+
+  public static void main(String[] args) {
+
+    CharSequence s1 = new Sequence(makeText("foobar"));
+    System.out.println(s1);
+    CharSequence s2 = s1.subSequence(2, 4);
+    System.out.println(s2);
+    CharSequence s3 = new Sequence(makeText(""));
+    System.out.println(s3);
+
+  }
+
 }
