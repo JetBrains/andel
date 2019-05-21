@@ -186,13 +186,13 @@ public class Text {
 
     private static void splitString(String s, ArrayList<Object> result, int from, int to, int thresh) {
       int length = to - from;
-      if (thresh <= length) {
+      if (length < thresh) {
+        result.add(s.substring(s.offsetByCodePoints(0, from), s.offsetByCodePoints(0, to)));
+      }
+      else {
         int halfLength = length / 2;
         splitString(s, result, from, from + halfLength, thresh);
         splitString(s, result, from + halfLength, to, thresh);
-      }
-      else {
-        result.add(s.substring(s.offsetByCodePoints(0, from), s.offsetByCodePoints(0, to)));
       }
     }
 

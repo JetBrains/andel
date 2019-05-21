@@ -20,7 +20,7 @@
                 (Text/zipper t)
                 operation)))
 
-(def op-frames-gen
+(defn op-frames-gen [size]
   (g/not-empty
    (g/vector
     (g/one-of [(g/tuple
@@ -28,7 +28,8 @@
                (g/tuple
                 (g/return :insert) g/string-alphanumeric)
                (g/tuple
-                (g/return :delete) g/pos-int)]))))
+                (g/return :delete) g/pos-int)])
+    1 size)))
 
 (defn random-ops [text frames]
   (loop [text text
@@ -68,10 +69,12 @@
 (def operations-gen
   (g/fmap
    (fn [[text frames]]
-     (random-ops text frames))
-   (g/tuple g/string-alphanumeric op-frames-gen)))
+     [text (random-ops text frames)])
+   (g/tuple g/string-alphanumeric (op-frames-gen 50))))
 
-(def operations-seq-gen
+(g/sample operations-gen)
+
+(defn operations-seq-gen [size]
   (g/fmap
    (fn [[starting-text operations]]
      [starting-text
@@ -83,7 +86,7 @@
              (conj r ops)]))
         [starting-text []]
         operations))])
-   (g/tuple g/string-alphanumeric (g/not-empty (g/vector op-frames-gen)))))
+   (g/tuple g/string-alphanumeric (g/vector (op-frames-gen size) 1 size))))
 
 (defn text-length [node]
   (.-length ^Text$TextMetrics (Rope/getMetrics node)))
@@ -93,7 +96,17 @@
     (Rope/growTree (Rope/wrapNode (Rope/makeLeaf text ops) ops) ops)))
 
 (def play-test
-  (prop/for-all [[text operations] operations-seq-gen]
+  (prop/for-all [[text operation] operations-gen]
+                (try
+                  (let [t' (play (make-text text) operation)]
+                    (= (Text/text (Text/zipper t') (text-length t'))
+                       (play-naive text operation)))
+                  (catch Throwable ex
+                    (def my-ex ex)
+                    false))))
+
+(def play-many-test
+  (prop/for-all [[text operations] (operations-seq-gen 10)]
                 (try
                   (let [t' (reduce play (make-text text) operations)]
                     (= (Text/text (Text/zipper t') (text-length t'))
@@ -103,7 +116,8 @@
                     false))))
 
 (deftest generative
-  (is (:result (tc/quick-check 50 play-test))))
+  (is (:result (tc/quick-check 5000 play-test)))
+  (is (:result (tc/quick-check 1000 play-many-test))))
 
 (comment
 
@@ -137,7 +151,7 @@
     [["00000000000000000"
     [[[:insert "0"]
       [:delete "00000000000000000"]
-      [:insert "A"]
+      [:insert "1"]
       [:retain 0]]]]])
 
   (let [[[text operations]] foo
@@ -147,13 +161,14 @@
      :operations operations
      :after (Text/text (Text/zipper t') (text-length t'))
      :should-be (reduce play-naive text operations)})
+
   (zp
-   (-> (Text/makeText "0000000000000000000000000000000000000000000000000000000000000000")
+   (-> (make-text "00000000000000000")
        (Text/zipper)
-       (Text/retain 18)
-       (Text/delete (count "0000000000000000000000000000000000000000000000"))
+       (Text/insert "0")
+       (Text/delete (count "00000000000000000"))
        (Text/insert "1")
-       ))
+       (Text/root)))
 
   (require '[andel.text :as text])
   (require '[andel.tree :as tree])
@@ -163,4 +178,5 @@
              (text/zipper)
              (text/delete 1)
              (text/insert "b")))
+
   )

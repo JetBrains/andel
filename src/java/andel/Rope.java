@@ -155,10 +155,9 @@ public class Rope {
   }
 
   static boolean splitNeeded(ArrayList<Object> children, ZipperOps ops) {
-    int splitThreshold = ops.splitThreshold();
     if (isNode(children.get(0))) {
       for (Object child : children) {
-        if (splitThreshold < getChildren(child).size()) {
+        if (getChildren(child).size() > ops.splitThreshold()) {
           return true;
         }
       }
@@ -173,30 +172,30 @@ public class Rope {
     return false;
   }
 
-  static ArrayList<ArrayList<Object>> partitionChildren(ArrayList<Object> children, int threshold) {
-    int c = children.size();
-    int chunkSize = (int)Math.ceil(c / Math.pow(2, Math.ceil(Math.log((double)c / threshold) / Math.log(2))));
-    int partitionCount = c / chunkSize;
-    int totalPartitions = partitionCount + (c % threshold != 0 ? 1 : 0);
-
-    ArrayList<ArrayList<Object>> partition = new ArrayList<>(totalPartitions);
-    int f = 0;
-    while (f < children.size()) {
-      ArrayList<Object> part = new ArrayList<>(chunkSize);
-      int e = Math.min(f + chunkSize, c);
-      part.addAll(children.subList(f, e));
-      partition.add(part);
-      f += chunkSize;
+  private static void partitionList(ArrayList<ArrayList<Object>> result, ArrayList<Object> source, int from, int to, int thresh){
+    int length = to - from;
+    if (length <= thresh){
+      ArrayList<Object> part = new ArrayList<Object>(thresh);
+      part.addAll(source.subList(from, to));
+      result.add(part);
+    } else {
+      int half = length / 2;
+      partitionList(result, source, from, from + half, thresh);
+      partitionList(result, source, from + half, to, thresh);
     }
+  }
 
-    return partition;
+  static ArrayList<ArrayList<Object>> partitionChildren(ArrayList<Object> children, int threshold) {
+    ArrayList<ArrayList<Object>> result = new ArrayList<>();
+    partitionList(result, children, 0, children.size(), threshold);
+    return result;
   }
 
   static ArrayList<Object> splitChildren(ArrayList<Object> children, ZipperOps ops) {
     if (splitNeeded(children, ops)) {
       ArrayList<Object> result = new ArrayList<>(children.size() / 2);
       for (Object child : children) {
-        if (isNode(child) && getChildren(child).size() >= ops.splitThreshold()) {
+        if (isNode(child) && getChildren(child).size() > ops.splitThreshold()) {
           ArrayList<ArrayList<Object>> partition = partitionChildren(getChildren(child), ops.splitThreshold());
           for (ArrayList<Object> part : partition) {
             result.add(makeNode(part, ops));
@@ -247,7 +246,7 @@ public class Rope {
           ArrayList<Object> rightChildren = getChildren(right);
 
           if (leftChildren.size() < mergeThreshold || rightChildren.size() < mergeThreshold) {
-            if (leftChildren.size() + rightChildren.size() >= ops.splitThreshold()) {
+            if (leftChildren.size() + rightChildren.size() > ops.splitThreshold()) {
               int n = (leftChildren.size() + rightChildren.size()) / 2;
               // todo no actual need in tmp array here
               ArrayList<Object> tmp = joinChildren(leftChildren, rightChildren);
@@ -255,8 +254,7 @@ public class Rope {
               ArrayList<Object> newLeft = new ArrayList<>(n);
               newLeft.addAll(tmp.subList(0, n));
               ArrayList<Object> newRight = new ArrayList<>(tmp.size() - n);
-              newRight.addAll(tmp.subList(n, tmp.size() - n));
-
+              newRight.addAll(tmp.subList(n, tmp.size()));
               result.add(makeNode(mergeChildren(newLeft, ops), ops));
               left = makeNode(newRight, ops);
             }
@@ -314,7 +312,7 @@ public class Rope {
 
   public static Node growTree(ArrayList<Object> children, ZipperOps ops) {
     ArrayList<Object> balanced = balanceChildren(children, ops);
-    if (balanced.size() >= ops.splitThreshold()) {
+    if (balanced.size() > ops.splitThreshold()) {
       return growTree(singletonList(makeNode(balanced, ops)), ops);
     }
     else {
@@ -406,6 +404,7 @@ public class Rope {
       zipper.siblings = n.children;
       zipper.metrics = n.childrenMetrics;
       zipper.acc = loc.acc;
+      zipper.oacc = null;
       zipper.idx = 0;
       zipper.parent = loc;
       return zipper;
@@ -413,6 +412,9 @@ public class Rope {
     return null;
   }
 
+  /*
+  * CAUTION: drops accumulated position entirely
+  * */
   public static Zipper downBackward(Zipper loc) {
     if (isBranch(loc)) {
       Node n = (Node)loc.siblings.get(loc.idx);
@@ -425,6 +427,7 @@ public class Rope {
       zipper.metrics = n.childrenMetrics;
       zipper.idx = n.children.size() - 1;
       zipper.parent = loc;
+      return zipper;
     }
     return null;
   }
@@ -653,20 +656,29 @@ public class Rope {
     throw new IllegalStateException();
   }
 
+  private static Object nodeAccumulator(Zipper zipper, int idx){
+    Object acc = zipper.parent.acc;
+    for (int i = 0; i < idx; i++) {
+      acc = zipper.ops.rf(acc, zipper.metrics.get(i));
+    }
+    return acc;
+  }
+
   /*
    * removes current node preserving accumulated position
+   *
    * returns zipper pointing to right sibling of the deleted node
    * if the deleted node was rightest sibling zipper skips to next dfs node
-   * will stay in place if there is no `next` node to go
+   * will move to end position of nearest left leaf if there is no `next` node to go
    * if parent node has no more children it will be also deleted
    * */
   public static Zipper remove(Zipper loc) {
     while (loc.siblings.size() == 1) {
-      if (loc.isRoot) {
+      if (loc.parent == null) {
         return replace(loc, new Node(loc.ops.emptyMetrics(), new ArrayList<>(), new ArrayList<>()));
+      } else {
+        loc = up(loc);
       }
-
-      loc = up(loc);
     }
 
     ArrayList<Object> newSiblings;
@@ -703,11 +715,16 @@ public class Rope {
       zipper.idx = loc.idx - 1;
       Zipper skip = skip(zipper);
       if (skip.isEnd) {
-        Object acc = loc.parent.acc;
+        Object acc = zipper.parent.acc;
         for (int i = 0; i < zipper.idx; i++) {
-          acc = loc.ops.rf(acc, loc.metrics.get(i));
+          acc = zipper.ops.rf(acc, zipper.metrics.get(i));
         }
-        zipper.acc = acc;
+        zipper.acc = nodeAccumulator(zipper, zipper.idx);
+        while(isBranch(zipper)) {
+          zipper = downBackward(zipper);
+          assert zipper != null;
+          zipper.acc = nodeAccumulator(zipper, zipper.idx);
+        }
         zipper.oacc = loc.acc;
         return zipper;
       } else {
