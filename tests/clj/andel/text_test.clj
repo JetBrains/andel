@@ -148,10 +148,8 @@
      :end?     (.-isEnd zipper)})
 
   (def foo
-    [["00000000000000000"
-    [[[:insert "0"]
-      [:delete "00000000000000000"]
-      [:insert "1"]
+    [["0"
+    [[[:delete "0"]
       [:retain 0]]]]])
 
   (let [[[text operations]] foo

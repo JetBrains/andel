@@ -228,10 +228,7 @@ public class Text {
   }
 
   public static long offset(Rope.Zipper loc) {
-    if (loc.isEnd) {
-      return ((TextMetrics)Rope.getMetrics(Rope.currentNode(loc))).length;
-    }
-    else if (loc.oacc != null) {
+    if (loc.oacc != null) {
       return ((TextMetrics)loc.oacc).length;
     }
     else if (loc.acc != null) {
@@ -278,30 +275,26 @@ public class Text {
 
   public static Rope.Zipper scanToOffset(Rope.Zipper loc, long offset) {
     Rope.Zipper offsetLoc = Rope.scan(loc, offsetPredicate(offset));
-    if (offsetLoc.isEnd) {
+    if (offsetLoc.isRoot) {
       return offsetLoc;
     }
-    else {
-      long o = nodeOffset(offsetLoc);
-      String s = (String)((Rope.Leaf)Rope.currentNode(offsetLoc)).data;
-      TextMetrics acc = (TextMetrics)offsetLoc.acc;
-      offsetLoc.oacc = acc.merge(metricsTo(s, OffsetKind.CodePoints, offset - o));
-      return offsetLoc;
-    }
+    long o = nodeOffset(offsetLoc);
+    String s = (String)((Rope.Leaf)Rope.currentNode(offsetLoc)).data;
+    TextMetrics acc = (TextMetrics)offsetLoc.acc;
+    offsetLoc.oacc = acc.merge(metricsTo(s, OffsetKind.CodePoints, offset - o));
+    return offsetLoc;
   }
 
   public static Rope.Zipper scanToCharOffset(Rope.Zipper loc, long offset) {
     Rope.Zipper offsetLoc = Rope.scan(loc, charOffsetPredicate(offset));
-    if (offsetLoc.isEnd) {
+    if (offsetLoc.isRoot){
       return offsetLoc;
     }
-    else {
-      long o = nodeCharOffset(offsetLoc);
-      String s = (String)((Rope.Leaf)Rope.currentNode(offsetLoc)).data;
-      TextMetrics acc = (TextMetrics)offsetLoc.acc;
-      offsetLoc.oacc = acc.merge(metricsTo(s, OffsetKind.Characters, offset - o));
-      return offsetLoc;
-    }
+    long o = nodeCharOffset(offsetLoc);
+    String s = (String)((Rope.Leaf)Rope.currentNode(offsetLoc)).data;
+    TextMetrics acc = (TextMetrics)offsetLoc.acc;
+    offsetLoc.oacc = acc.merge(metricsTo(s, OffsetKind.Characters, offset - o));
+    return offsetLoc;
   }
 
   public static Rope.Zipper retain(Rope.Zipper loc, long l) {
@@ -314,7 +307,6 @@ public class Text {
     }
 
     assert loc != null;
-    assert !loc.isEnd;
 
     Rope.Zipper leaf;
     Rope.Zipper branch = null;
@@ -330,7 +322,6 @@ public class Text {
       ArrayList<Object> children = new ArrayList<>();
       children.add(Rope.makeLeaf(s, branch.ops));
       Rope.Zipper newRoot = Rope.replace(branch, Rope.makeNode(children, branch.ops));
-      newRoot.isEnd = false;
       return retain(newRoot,
                     s.codePointCount(0, s.length()));
     } else {
@@ -347,9 +338,6 @@ public class Text {
 
   public static Rope.Zipper delete(Rope.Zipper loc, int l) {
     while (l > 0) {
-      if (loc.isEnd){
-        throw new IndexOutOfBoundsException();
-      }
       //TODO optimize here (we can delete entire subtree if it's inside of deletion range
       while (Rope.isBranch(loc)) {
         loc = Rope.downForward(loc);
@@ -376,15 +364,10 @@ public class Text {
                                ops);
         });
         if (end == chunkLength) {
-          Rope.Zipper next = Rope.next(newLeaf);
-          if (next.isEnd) {
-            if (l > 0) {
-              throw new IndexOutOfBoundsException();
-            } else {
-              return newLeaf;
-            }
+          if (l == 0){
+            return newLeaf;
           } else {
-            loc = next;
+            loc = Rope.next(newLeaf);
           }
         }
         else {
@@ -397,11 +380,8 @@ public class Text {
 
   public static String text(Rope.Zipper loc, int length) {
     StringBuilder sb = new StringBuilder();
-    while (length > 0) {
+    while (true) {
       assert loc != null;
-      if (loc.isEnd) {
-        throw new IllegalArgumentException("Length is out of bounds, length: " + length);
-      }
       if (Rope.isBranch(loc)) {
         loc = Rope.downForward(loc);
       }
@@ -418,12 +398,14 @@ public class Text {
 
         sb.append(chunk, charsStart, charsEnd);
         length -= (end - start);
-        loc = Rope.next(loc);
+        if (length > 0) {
+          loc = Rope.next(loc);
+        } else {
+          return sb.toString();
+        }
       }
     }
-    return sb.toString();
   }
-
 
   public static BiFunction<Object, Object, Boolean> byCharOffsetExclusive(int offset, ZipperOps ops) {
     return (o, o2) -> {
