@@ -14,7 +14,7 @@
   (Rope/makeLeaf data zipper-ops))
 
 (defn metrics [n]
-  (Rope/getMetrics n))
+  (Rope/metrics n))
 
 (defn memoize-by-ref
   [f]
@@ -59,7 +59,7 @@
 (defn node
   "Returns the node at loc"
   [loc]
-  (Rope/currentNode loc))
+  (Rope/node loc))
 
 (defn acc
   "Returns the acc at loc"
@@ -79,7 +79,7 @@
 (defn children
   "Returns a seq of the children of node at loc, which must be a ?"
   [loc]
-  (Rope/getChildren (Rope/currentNode loc)))
+  (Rope/getChildren (Rope/node loc)))
 
 (defn fast-some [pred coll]
   (reduce (fn [_ c] (if (pred c) (reduced true) false)) false coll))
@@ -99,10 +99,10 @@
   (Rope/right loc))
 
 (defn down-forward [loc]
-  (Rope/downForward loc))
+  (Rope/downLeft loc))
 
 (defn down-backward [loc]
-  (Rope/downBackward loc))
+  (Rope/downRight loc))
 
 (defn end?
   "Returns true if loc represents the end of a depth-first walk"

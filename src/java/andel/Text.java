@@ -264,13 +264,7 @@ public class Text {
   }
 
   public static Rope.Node root(Rope.Zipper loc) {
-    Rope.Node r = (Rope.Node)Rope.root(loc);
-    if (r.children.isEmpty()) {
-      return makeText("");
-    }
-    else {
-      return r;
-    }
+    return Rope.root(loc);
   }
 
   public static Rope.Zipper scanToOffset(Rope.Zipper loc, long offset) {
@@ -279,7 +273,7 @@ public class Text {
       return offsetLoc;
     }
     long o = nodeOffset(offsetLoc);
-    String s = (String)((Rope.Leaf)Rope.currentNode(offsetLoc)).data;
+    String s = (String)Rope.leaf(offsetLoc).data;
     TextMetrics acc = (TextMetrics)offsetLoc.acc;
     offsetLoc.oacc = acc.merge(metricsTo(s, OffsetKind.CodePoints, offset - o));
     return offsetLoc;
@@ -287,11 +281,11 @@ public class Text {
 
   public static Rope.Zipper scanToCharOffset(Rope.Zipper loc, long offset) {
     Rope.Zipper offsetLoc = Rope.scan(loc, charOffsetPredicate(offset));
-    if (offsetLoc.isRoot){
+    if (offsetLoc.isRoot) {
       return offsetLoc;
     }
     long o = nodeCharOffset(offsetLoc);
-    String s = (String)((Rope.Leaf)Rope.currentNode(offsetLoc)).data;
+    String s = (String)Rope.leaf(offsetLoc).data;
     TextMetrics acc = (TextMetrics)offsetLoc.acc;
     offsetLoc.oacc = acc.merge(metricsTo(s, OffsetKind.Characters, offset - o));
     return offsetLoc;
@@ -311,10 +305,12 @@ public class Text {
     Rope.Zipper leaf;
     Rope.Zipper branch = null;
 
+    // TODO i know that the only case when there is no leaf to insert is an empty tree
+
     Rope.Zipper i = loc;
     while (i != null && Rope.isBranch(i)) {
       branch = i;
-      i = Rope.downForward(i);
+      i = Rope.downLeft(i);
     }
     leaf = i;
 
@@ -322,16 +318,16 @@ public class Text {
       ArrayList<Object> children = new ArrayList<>();
       children.add(Rope.makeLeaf(s, branch.ops));
       Rope.Zipper newRoot = Rope.replace(branch, Rope.makeNode(children, branch.ops));
-      return retain(newRoot,
-                    s.codePointCount(0, s.length()));
-    } else {
+      return retain(newRoot, s.codePointCount(0, s.length()));
+    }
+    else {
       int relCharOffset = (int)(charOffset(leaf) - nodeCharOffset(leaf));
       ZipperOps ops = leaf.ops;
-      String data = (String)((Rope.Leaf)(Rope.currentNode(leaf))).data;
+      String data = (String)Rope.leaf(leaf).data;
       return retain(Rope.replace(leaf, Rope.makeLeaf(data.substring(0, relCharOffset)
-                                         .concat(s)
-                                         .concat(data.substring(relCharOffset)),
-                                       ops)),
+                                                       .concat(s)
+                                                       .concat(data.substring(relCharOffset)),
+                                                     ops)),
                     s.codePointCount(0, s.length()));
     }
   }
@@ -340,13 +336,13 @@ public class Text {
     while (l > 0) {
       //TODO optimize here (we can delete entire subtree if it's inside of deletion range
       while (Rope.isBranch(loc)) {
-        loc = Rope.downForward(loc);
+        loc = Rope.downLeft(loc);
       }
 
       assert loc != null;
 
       long i = offset(loc);
-      String s = (String)((Rope.Leaf)Rope.currentNode(loc)).data;
+      String s = (String)Rope.leaf(loc).data;
       int relOffset = (int)(i - nodeOffset(loc));
       int chunkLength = s.codePointCount(0, s.length());
       int end = Math.min(chunkLength, relOffset + l);
@@ -364,9 +360,10 @@ public class Text {
                                ops);
         });
         if (end == chunkLength) {
-          if (l == 0){
+          if (l == 0) {
             return newLeaf;
-          } else {
+          }
+          else {
             loc = Rope.next(newLeaf);
           }
         }
@@ -383,11 +380,11 @@ public class Text {
     while (true) {
       assert loc != null;
       if (Rope.isBranch(loc)) {
-        loc = Rope.downForward(loc);
+        loc = Rope.downLeft(loc);
       }
       else {
         long i = offset(loc);
-        Rope.Leaf leaf = (Rope.Leaf)Rope.currentNode(loc);
+        Rope.Leaf leaf = Rope.leaf(loc);
         String chunk = (String)leaf.data;
         long chunkOffset = nodeOffset(loc);
         int start = (int)(i - chunkOffset);
@@ -400,7 +397,8 @@ public class Text {
         length -= (end - start);
         if (length > 0) {
           loc = Rope.next(loc);
-        } else {
+        }
+        else {
           return sb.toString();
         }
       }
@@ -408,9 +406,7 @@ public class Text {
   }
 
   public static BiFunction<Object, Object, Boolean> byCharOffsetExclusive(int offset, ZipperOps ops) {
-    return (o, o2) -> {
-      return offset <= ((TextMetrics)ops.rf(o, o2)).charsCount;
-    };
+    return (o, o2) -> offset <= ((TextMetrics)ops.rf(o, o2)).charsCount;
   }
 
 
@@ -442,12 +438,12 @@ public class Text {
       assert index < to - from;
       int absoluteIndex = index + from;
       int base = (int)nodeCharOffset(loc);
-      String currentChunk = ((String)((Rope.Leaf)Rope.currentNode(loc)).data);
+      String currentChunk = (String)Rope.leaf(loc).data;
 
       if (absoluteIndex < base) {
         Rope.Zipper rootLoc = zipper(root);
         loc = Rope.scan(rootLoc, byCharOffsetExclusive(index, loc.ops));
-        String newChunk = ((String)((Rope.Leaf)Rope.currentNode(loc)).data);
+        String newChunk = (String)Rope.leaf(loc).data;
         return newChunk.charAt(absoluteIndex - base);
       }
 
@@ -457,7 +453,7 @@ public class Text {
 
       if (base + currentChunk.length() < absoluteIndex) {
         loc = Rope.scan(loc, byCharOffsetExclusive(index, loc.ops));
-        String newChunk = ((String)((Rope.Leaf)Rope.currentNode(loc)).data);
+        String newChunk = (String)Rope.leaf(loc).data;
         return newChunk.charAt(absoluteIndex - base);
       }
 
@@ -487,7 +483,5 @@ public class Text {
     System.out.println(s2);
     CharSequence s3 = new Sequence(makeText(""));
     System.out.println(s3);
-
   }
-
 }

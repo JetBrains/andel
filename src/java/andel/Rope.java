@@ -61,11 +61,11 @@ public class Rope {
     public ArrayList<Object> metrics;
     public int idx = 0;
 
-    public boolean isChanged = false;
-    public boolean isTransient = false;
     public Object acc;
     public Object oacc;
 
+    public boolean isChanged = false;
+    public boolean isTransient = false;
     public boolean isRoot = false; // suspiciously useless flag
 
     public Zipper() { }
@@ -95,13 +95,17 @@ public class Rope {
   }
 
   private static ArrayList<Object> singletonList(Object object) {
-    ArrayList<Object> l = new ArrayList<>();
+    ArrayList<Object> l = new ArrayList<>(1);
     l.add(object);
     return l;
   }
 
-  public static Object currentNode(Zipper loc) {
-    return loc.siblings.get(loc.idx);
+  public static Node node(Zipper loc) {
+    return (Node)loc.siblings.get(loc.idx);
+  }
+
+  public static Leaf leaf(Zipper loc) {
+    return (Leaf)loc.siblings.get(loc.idx);
   }
 
   public static Object currentAcc(Zipper loc) {
@@ -114,24 +118,16 @@ public class Rope {
     return loc.ops.emptyMetrics();
   }
 
-  public static boolean isNode(Object node) {
-    return node instanceof Node;
-  }
-
-  public static boolean isLeaf(Object leaf) {
-    return !isNode(leaf);
-  }
-
   public static boolean isBranch(Zipper loc) {
-    return isNode(currentNode(loc));
+    return loc.siblings.get(loc.idx) instanceof Node;
   }
 
   public static ArrayList<Object> getChildren(Object node) {
     return ((Node)node).children;
   }
 
-  public static Object getMetrics(Object node) {
-    if (isNode(node)) {
+  public static Object metrics(Object node) {
+    if (node instanceof Node) {
       return ((Node)node).metrics;
     }
     else {
@@ -139,18 +135,18 @@ public class Rope {
     }
   }
 
-  public static boolean isSuffix(Zipper location) {
-    return location.idx == location.siblings.size() - 1 && (location.parent == null || isSuffix(location.parent));
+  public static boolean isRightmost(Zipper location) {
+    return location.idx == location.siblings.size() - 1 && (location.parent == null || isRightmost(location.parent));
   }
 
-  public static boolean isPrefix(Zipper location) {
-    return location.idx == 0 && (location.parent == null || isPrefix(location.parent));
+  public static boolean isLeftmost(Zipper location) {
+    return location.idx == 0 && (location.parent == null || isLeftmost(location.parent));
   }
 
   public static Node makeNode(ArrayList<Object> children, ZipperOps ops) {
     ArrayList<Object> childrenMetrics = new ArrayList<>(children.size());
     for (Object child : children) {
-      childrenMetrics.add(getMetrics(child));
+      childrenMetrics.add(metrics(child));
     }
     return new Node(ops.rf(childrenMetrics), children, childrenMetrics);
   }
@@ -163,7 +159,7 @@ public class Rope {
   }
 
   static boolean splitNeeded(ArrayList<Object> children, ZipperOps ops) {
-    if (isNode(children.get(0))) {
+    if (children.get(0) instanceof Node) {
       for (Object child : children) {
         if (getChildren(child).size() > ops.splitThreshold()) {
           return true;
@@ -204,13 +200,13 @@ public class Rope {
     if (splitNeeded(children, ops)) {
       ArrayList<Object> result = new ArrayList<>(children.size() / 2);
       for (Object child : children) {
-        if (isNode(child) && getChildren(child).size() > ops.splitThreshold()) {
+        if (child instanceof Node && getChildren(child).size() > ops.splitThreshold()) {
           ArrayList<ArrayList<Object>> partition = partitionChildren(getChildren(child), ops.splitThreshold());
           for (ArrayList<Object> part : partition) {
             result.add(makeNode(part, ops));
           }
         }
-        else if (isLeaf(child) && ops.isLeafOverflown(((Leaf)child).data)) {
+        else if (child instanceof Leaf && ops.isLeafOverflown(((Leaf)child).data)) {
           for (Object o : ops.splitLeaf(((Leaf)child).data)) {
             result.add(makeLeaf(o, ops));
           }
@@ -226,7 +222,7 @@ public class Rope {
 
   static boolean isMergeNeeded(ArrayList<Object> children, ZipperOps ops) {
     int mergeThreshold = ops.splitThreshold() / 2;
-    if (isNode(children.get(0))) {
+    if (children.get(0) instanceof Node) {
       for (Object child : children) {
         if (getChildren(child).size() < mergeThreshold) {
           return true;
@@ -247,7 +243,7 @@ public class Rope {
     final int mergeThreshold = ops.splitThreshold() / 2;
     if (isMergeNeeded(children, ops)) {
       ArrayList<Object> result = new ArrayList<>(mergeThreshold);
-      if (isNode(children.get(0))) {
+      if (children.get(0) instanceof Node) {
         Object left = children.get(0);
         for (int i = 1; i < children.size(); i++) {
           Object right = children.get(i);
@@ -331,7 +327,7 @@ public class Rope {
 
   static Node shrinkTree(Node node) {
     ArrayList<Object> children = getChildren(node);
-    if (children.size() == 1 && isNode(children.get(0))) {
+    if (children.size() == 1 && children.get(0) instanceof Node) {
       return shrinkTree((Node)children.get(0));
     }
     return node;
@@ -351,7 +347,7 @@ public class Rope {
       ArrayList<Object> siblingsCopy = (ArrayList<Object>)copy.siblings.clone();
       ArrayList<Object> metricsCopy = (ArrayList<Object>)copy.metrics.clone();
       siblingsCopy.set(copy.idx, node);
-      metricsCopy.set(copy.idx, getMetrics(node));
+      metricsCopy.set(copy.idx, metrics(node));
       copy.siblings = siblingsCopy;
       copy.metrics = metricsCopy;
     }
@@ -371,7 +367,7 @@ public class Rope {
         zipper.ops = loc.ops;
         zipper.isTransient = loc.isTransient;
         zipper.idx = 0;
-        Node node = shrinkTree(growTree(wrapNode(currentNode(loc), loc.ops), loc.ops));
+        Node node = shrinkTree(growTree(wrapNode(node(loc), loc.ops), loc.ops));
         zipper.siblings = wrapNode(node, loc.ops);
         zipper.metrics = wrapNode(node.metrics, loc.ops);
         zipper.isRoot = true;
@@ -384,9 +380,12 @@ public class Rope {
     return loc.parent;
   }
 
+  /*
+  * moves to next direct sibling and adds metrics of current node to accumulator
+  * returns null if it is last child
+  * */
   public static Zipper right(Zipper loc) {
-    int rightestIdx = loc.siblings.size() - 1;
-    if (loc.idx < rightestIdx) {
+    if (loc.idx < loc.siblings.size() - 1) {
       Zipper zipper = new Zipper();
       zipper.ops = loc.ops;
       zipper.idx = loc.idx + 1;
@@ -403,7 +402,11 @@ public class Rope {
     return null;
   }
 
-  public static Zipper downForward(Zipper loc) {
+  /*
+  * moves to first child of current node
+  * returns null for leaves and empty nodes
+  * */
+  public static Zipper downLeft(Zipper loc) {
     if (isBranch(loc)) {
       Node n = (Node)loc.siblings.get(loc.idx);
       if (n.children.isEmpty()) {
@@ -423,9 +426,12 @@ public class Rope {
   }
 
   /*
-   * CAUTION: drops accumulated position entirely
+   * moves to last child of current node
+   * returns null for leaves and empty nodes
+   *
+   * CAUTION: drops accumulated position
    * */
-  public static Zipper downBackward(Zipper loc) {
+  public static Zipper downRight(Zipper loc) {
     if (isBranch(loc)) {
       Node n = (Node)loc.siblings.get(loc.idx);
       if (n.children.isEmpty()) {
@@ -442,23 +448,23 @@ public class Rope {
     return null;
   }
 
-  public static Object root(Zipper loc) {
+  public static Node root(Zipper loc) {
     Zipper parent = up(loc);
-    return parent == null ? currentNode(loc) : root(parent);
+    return parent == null ? node(loc) : root(parent);
   }
 
 
   public static boolean hasNext(Zipper loc) {
-    if (loc.parent == null && ((Node)currentNode(loc)).children.size() > 0) {
+    if (loc.parent == null && node(loc).children.size() > 0) {
       return true;
     }
 
-    return isBranch(loc) || !isSuffix(loc);
+    return isBranch(loc) || !isRightmost(loc);
   }
 
   public static Zipper next(Zipper loc) {
     if (isBranch(loc)) {
-      Zipper df = downForward(loc);
+      Zipper df = downLeft(loc);
       if (df != null) {
         return df;
       }
@@ -469,7 +475,7 @@ public class Rope {
       return right;
     }
 
-    if (isSuffix(loc)) {
+    if (isRightmost(loc)) {
       throw new NoSuchElementException();
     }
 
@@ -488,9 +494,9 @@ public class Rope {
         zipper.ops = p.ops;
         zipper.idx = 0;
         zipper.isTransient = p.isTransient;
-        Object node = currentNode(p);
+        Node node = node(p);
         zipper.siblings = wrapNode(node, p.ops);
-        zipper.metrics = wrapNode(getMetrics(node), p.ops);
+        zipper.metrics = wrapNode(metrics(node), p.ops);
         return zipper;
       }
     }
@@ -502,7 +508,7 @@ public class Rope {
       return right;
     }
 
-    if (isSuffix(loc)) {
+    if (isRightmost(loc)) {
       throw new NoSuchElementException();
     }
 
@@ -521,16 +527,13 @@ public class Rope {
         zipper.ops = p.ops;
         zipper.idx = 0;
         zipper.isTransient = p.isTransient;
-        Object node = currentNode(p);
+        Node node = node(p);
         zipper.siblings = wrapNode(node, p.ops);
-        zipper.metrics = wrapNode(getMetrics(node), p.ops);
+        zipper.metrics = wrapNode(metrics(node), p.ops);
         return zipper;
       }
     }
   }
-
-  //------ don't use these functions unless you know what you are doing -------
-
 
   public static Zipper left(Zipper loc) {
     if (0 < loc.idx) {
@@ -556,7 +559,7 @@ public class Rope {
     //}
 
     if (isBranch(loc)) {
-      Zipper df = downBackward(loc);
+      Zipper df = downRight(loc);
       if (df != null) {
         return df;
       }
@@ -578,14 +581,13 @@ public class Rope {
         p = up;
       }
       else {
-
-        Object e = currentNode(loc);
+        Node e = node(loc);
         Zipper zipper = new Zipper();
         zipper.ops = loc.ops;
         zipper.idx = 0;
         zipper.isTransient = loc.isTransient;
         zipper.siblings = wrapNode(e, loc.ops);
-        zipper.metrics = wrapNode(getMetrics(e), loc.ops);
+        zipper.metrics = wrapNode(metrics(e), loc.ops);
         return zipper;
       }
     }
@@ -600,26 +602,27 @@ public class Rope {
 
   public static Zipper edit(Zipper loc, Function<Object, Object> fn) {
     // todo maybe Function<TData, TData> is a better fit
-    return replace(loc, fn.apply(currentNode(loc)));
+    return replace(loc, fn.apply(loc.siblings.get(loc.idx)));
   }
 
   public static Zipper nextLeaf(Zipper loc) {
     do {
       loc = next(loc);
     }
-    while (!isLeaf(currentNode(loc)));
+    while (isBranch(loc));
     return loc;
   }
 
   /*
-   * stops in a leaf or in the end location, should never return null
+   * stops in a leaf or in root node if the tree is empty, should never return null
    */
   public static Zipper scan(Zipper loc, BiFunction<Object, Object, Boolean> pred) {
     while (loc != null) {
       Zipper nextLoc = null;
       if (loc.isRoot) {
-        if (((Node)currentNode(loc)).children.isEmpty())
+        if (node(loc).children.isEmpty()) {
           return loc;
+        }
         nextLoc = loc;
       }
       else {
@@ -649,7 +652,7 @@ public class Rope {
 
       if (nextLoc == null) {
         Zipper u = up(loc);
-        if (isSuffix(u)){
+        if (isRightmost(u)) {
           Zipper c = loc.clone();
           c.idx = c.siblings.size() - 1;
           return loc;
@@ -658,7 +661,7 @@ public class Rope {
       }
       else {
         if (isBranch(nextLoc)) {
-          loc = downForward(nextLoc);
+          loc = downLeft(nextLoc);
         }
         else {
           return nextLoc;
@@ -668,7 +671,7 @@ public class Rope {
     throw new IllegalStateException();
   }
 
-  private static Object nodeAccumulator(Zipper zipper, int idx) {
+  private static Object accumulateTillIdx(Zipper zipper, int idx) {
     Object acc = zipper.parent.acc;
     for (int i = 0; i < idx; i++) {
       acc = zipper.ops.rf(acc, zipper.metrics.get(i));
@@ -680,9 +683,9 @@ public class Rope {
    * removes current node preserving accumulated position
    *
    * returns zipper pointing to right sibling of the deleted node
-   * if the deleted node was rightest sibling zipper skips to next dfs node
+   * if the deleted node was rightest sibling zipper skips to `next` node
    * will move to end position of nearest left leaf if there is no `next` node to go
-   * if parent node has no more children it will be also deleted
+   * if parent node has no more children it will be removed recursively
    * */
   public static Zipper remove(Zipper loc) {
     while (loc.siblings.size() == 1) {
@@ -725,16 +728,16 @@ public class Rope {
     }
     else {
       zipper.idx = loc.idx - 1;
-      if (isSuffix(zipper)) {
+      if (isRightmost(zipper)) {
         Object acc = zipper.parent.acc;
         for (int i = 0; i < zipper.idx; i++) {
           acc = zipper.ops.rf(acc, zipper.metrics.get(i));
         }
-        zipper.acc = nodeAccumulator(zipper, zipper.idx);
+        zipper.acc = accumulateTillIdx(zipper, zipper.idx);
         while (isBranch(zipper)) {
-          zipper = downBackward(zipper);
+          zipper = downRight(zipper);
           assert zipper != null;
-          zipper.acc = nodeAccumulator(zipper, zipper.idx);
+          zipper.acc = accumulateTillIdx(zipper, zipper.idx);
         }
         zipper.oacc = loc.acc;
         return zipper;

@@ -178,3 +178,10 @@
              (text/insert "b")))
 
   )
+
+(comment
+
+  (g/generate operaions-seq-gen )
+
+
+  )
