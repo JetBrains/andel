@@ -4,65 +4,64 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.function.BiFunction;
-import java.util.function.Function;
 
 public class Rope {
 
-  public static class Node {
+  public static class Node<Metrics> {
     public ArrayList<Object> children;
     // store precalculated accumulator values in childrenMetrics to use binary search
-    public Object metrics;
-    public ArrayList<Object> childrenMetrics;
+    public Metrics metrics;
+    public ArrayList<Metrics> childrenMetrics;
 
-    public Node(Object metrics, ArrayList<Object> children, ArrayList<Object> childrenMetrics) {
+    public Node(Metrics metrics, ArrayList<Object> children, ArrayList<Metrics> childrenMetrics) {
       this.children = children;
       this.metrics = metrics;
       this.childrenMetrics = childrenMetrics;
     }
   }
 
-  public static class Leaf {
-    public Object metrics;
-    public Object data;
+  public static class Leaf<Metrics, Data> {
+    public Metrics metrics;
+    public Data data;
   }
 
-  public interface ZipperOps {
+  public interface ZipperOps<Metrics, Data> {
 
-    Object calculateMetrics(Object data);
+    Metrics calculateMetrics(Data data);
 
-    Object emptyMetrics();
+    Metrics emptyMetrics();
 
-    Object rf(Object m1, Object m2);
+    Metrics rf(Metrics m1, Metrics m2);
 
-    default Object rf(List<Object> metrics) {
-      Object r = emptyMetrics();
-      for (Object m : metrics) {
+    default Metrics rf(List<Metrics> metrics) {
+      Metrics r = emptyMetrics();
+      for (Metrics m : metrics) {
         r = rf(r, m);
       }
       return r;
     }
 
-    boolean isLeafOverflown(Object leafData);
+    boolean isLeafOverflown(Data leafData);
 
-    boolean isLeafUnderflown(Object leafData);
+    boolean isLeafUnderflown(Data leafData);
 
-    Object mergeLeaves(Object leafData1, Object leafData22);
+    Data mergeLeaves(Data leafData1, Data leafData22);
 
-    List<Object> splitLeaf(Object leaf);
+    List<Data> splitLeaf(Data leaf);
 
     int splitThreshold();
   }
 
-  public static class Zipper implements Cloneable {
-    public ZipperOps ops;
+  public static class Zipper<Metrics, Data> implements Cloneable {
+    public ZipperOps<Metrics, Data> ops;
 
-    public Zipper parent;
+    public Zipper<Metrics, Data> parent;
     public ArrayList<Object> siblings;
-    public ArrayList<Object> metrics;
+    public ArrayList<Metrics> metrics;
     public int idx = 0;
 
-    public Object acc;
-    public Object oacc;
+    public Metrics acc;
+    public Metrics oacc;
 
     public boolean isChanged = false;
     public boolean isTransient = false;
@@ -80,8 +79,8 @@ public class Rope {
       }
     }
 
-    public static Zipper zipper(Node node, ZipperOps ops) {
-      Zipper z = new Zipper();
+    public static <Metrics, Data> Zipper<Metrics, Data> zipper(Node<Metrics> node, ZipperOps<Metrics, Data> ops) {
+      Zipper<Metrics, Data> z = new Zipper<>();
       z.parent = null;
       z.ops = ops;
       z.idx = 0;
@@ -94,21 +93,21 @@ public class Rope {
     }
   }
 
-  private static ArrayList<Object> singletonList(Object object) {
-    ArrayList<Object> l = new ArrayList<>(1);
+  private static <T> ArrayList<T> singletonList(T object) {
+    ArrayList<T> l = new ArrayList<>(1);
     l.add(object);
     return l;
   }
 
-  public static Node node(Zipper loc) {
-    return (Node)loc.siblings.get(loc.idx);
+  public static <Metrics, Data> Node<Metrics> node(Zipper<Metrics, Data> loc) {
+    return (Node<Metrics>)loc.siblings.get(loc.idx);
   }
 
-  public static Leaf leaf(Zipper loc) {
-    return (Leaf)loc.siblings.get(loc.idx);
+  public static <Metrics, Data> Leaf<Metrics, Data> leaf(Zipper<Metrics, Data> loc) {
+    return (Leaf<Metrics, Data>)loc.siblings.get(loc.idx);
   }
 
-  public static Object currentAcc(Zipper loc) {
+  public static <Metrics, Data> Metrics currentAcc(Zipper<Metrics, Data> loc) {
     if (loc.oacc != null) {
       return loc.oacc;
     }
@@ -143,22 +142,22 @@ public class Rope {
     return location.idx == 0 && (location.parent == null || isLeftmost(location.parent));
   }
 
-  public static Node makeNode(ArrayList<Object> children, ZipperOps ops) {
-    ArrayList<Object> childrenMetrics = new ArrayList<>(children.size());
+  public static <Metrics, Data> Node<Metrics> makeNode(ArrayList<Object> children, ZipperOps<Metrics, Data> ops) {
+    ArrayList<Metrics> childrenMetrics = new ArrayList<>(children.size());
     for (Object child : children) {
-      childrenMetrics.add(metrics(child));
+      childrenMetrics.add((Metrics)metrics(child));
     }
-    return new Node(ops.rf(childrenMetrics), children, childrenMetrics);
+    return new Node<>(ops.rf(childrenMetrics), children, childrenMetrics);
   }
 
-  public static Leaf makeLeaf(Object data, ZipperOps ops) {
-    Leaf l = new Leaf();
+  public static <Metrics, Data> Leaf<Metrics, Data> makeLeaf(Data data, ZipperOps<Metrics, Data> ops) {
+    Leaf<Metrics, Data> l = new Leaf<>();
     l.data = data;
     l.metrics = ops.calculateMetrics(data);
     return l;
   }
 
-  static boolean splitNeeded(ArrayList<Object> children, ZipperOps ops) {
+  static <Metrics, Data> boolean splitNeeded(ArrayList<Object> children, ZipperOps<Metrics, Data> ops) {
     if (children.get(0) instanceof Node) {
       for (Object child : children) {
         if (getChildren(child).size() > ops.splitThreshold()) {
@@ -168,7 +167,7 @@ public class Rope {
     }
     else {
       for (Object child : children) {
-        if (ops.isLeafOverflown(((Leaf)child).data)) {
+        if (ops.isLeafOverflown(((Leaf<Metrics, Data>)child).data)) {
           return true;
         }
       }
@@ -179,7 +178,7 @@ public class Rope {
   private static void partitionList(ArrayList<ArrayList<Object>> result, ArrayList<Object> source, int from, int to, int thresh) {
     int length = to - from;
     if (length <= thresh) {
-      ArrayList<Object> part = new ArrayList<Object>(thresh);
+      ArrayList<Object> part = new ArrayList<>(thresh);
       part.addAll(source.subList(from, to));
       result.add(part);
     }
@@ -196,7 +195,7 @@ public class Rope {
     return result;
   }
 
-  static ArrayList<Object> splitChildren(ArrayList<Object> children, ZipperOps ops) {
+  static <Metrics, Data> ArrayList<Object> splitChildren(ArrayList<Object> children, ZipperOps<Metrics, Data> ops) {
     if (splitNeeded(children, ops)) {
       ArrayList<Object> result = new ArrayList<>(children.size() / 2);
       for (Object child : children) {
@@ -206,8 +205,8 @@ public class Rope {
             result.add(makeNode(part, ops));
           }
         }
-        else if (child instanceof Leaf && ops.isLeafOverflown(((Leaf)child).data)) {
-          for (Object o : ops.splitLeaf(((Leaf)child).data)) {
+        else if (child instanceof Leaf && ops.isLeafOverflown(((Leaf<Metrics, Data>)child).data)) {
+          for (Data o : ops.splitLeaf(((Leaf<Metrics, Data>)child).data)) {
             result.add(makeLeaf(o, ops));
           }
         }
@@ -220,7 +219,7 @@ public class Rope {
     return children;
   }
 
-  static boolean isMergeNeeded(ArrayList<Object> children, ZipperOps ops) {
+  static <Metrics, Data> boolean isMergeNeeded(ArrayList<Object> children, ZipperOps<Metrics, Data> ops) {
     int mergeThreshold = ops.splitThreshold() / 2;
     if (children.get(0) instanceof Node) {
       for (Object child : children) {
@@ -231,7 +230,7 @@ public class Rope {
     }
     else {
       for (Object child : children) {
-        if (ops.isLeafUnderflown(((Leaf)child).data)) {
+        if (ops.isLeafUnderflown(((Leaf<Metrics, Data>)child).data)) {
           return true;
         }
       }
@@ -239,7 +238,7 @@ public class Rope {
     return false;
   }
 
-  static ArrayList<Object> mergeChildren(ArrayList<Object> children, ZipperOps ops) {
+  static <Metrics, Data> ArrayList<Object> mergeChildren(ArrayList<Object> children, ZipperOps<Metrics, Data> ops) {
     final int mergeThreshold = ops.splitThreshold() / 2;
     if (isMergeNeeded(children, ops)) {
       ArrayList<Object> result = new ArrayList<>(mergeThreshold);
@@ -275,16 +274,16 @@ public class Rope {
         result.add(left);
       }
       else {
-        Object leftData = ((Leaf)children.get(0)).data;
+        Data leftData = ((Leaf<Metrics, Data>)children.get(0)).data;
 
         for (int i = 1; i < children.size(); i++) {
-          Object rightData = ((Leaf)children.get(i)).data;
+          Data rightData = ((Leaf<Metrics, Data>)children.get(i)).data;
           if (ops.isLeafUnderflown(leftData) || ops.isLeafUnderflown(rightData)) {
-            Object mergedData = ops.mergeLeaves(leftData, rightData);
+            Data mergedData = ops.mergeLeaves(leftData, rightData);
             if (ops.isLeafOverflown(mergedData)) {
-              List<Object> split = ops.splitLeaf(mergedData);
-              Object dataLeft = split.get(0);
-              Object dataRight = split.get(1);
+              List<Data> split = ops.splitLeaf(mergedData);
+              Data dataLeft = split.get(0);
+              Data dataRight = split.get(1);
               result.add(makeLeaf(dataLeft, ops));
               leftData = dataRight;
             }
@@ -311,11 +310,11 @@ public class Rope {
     return tmp;
   }
 
-  static ArrayList<Object> balanceChildren(ArrayList<Object> children, ZipperOps ops) {
+  static <Metrics, Data> ArrayList<Object> balanceChildren(ArrayList<Object> children, ZipperOps<Metrics, Data> ops) {
     return mergeChildren(splitChildren(children, ops), ops);
   }
 
-  public static Node growTree(ArrayList<Object> children, ZipperOps ops) {
+  public static <Metrics, Data> Node<Metrics> growTree(ArrayList<Object> children, ZipperOps<Metrics, Data> ops) {
     ArrayList<Object> balanced = balanceChildren(children, ops);
     if (balanced.size() > ops.splitThreshold()) {
       return growTree(singletonList(makeNode(balanced, ops)), ops);
@@ -325,10 +324,10 @@ public class Rope {
     }
   }
 
-  static Node shrinkTree(Node node) {
+  static <Metrics> Node<Metrics> shrinkTree(Node<Metrics> node) {
     ArrayList<Object> children = getChildren(node);
     if (children.size() == 1 && children.get(0) instanceof Node) {
-      return shrinkTree((Node)children.get(0));
+      return shrinkTree((Node<Metrics>)children.get(0));
     }
     return node;
   }
@@ -337,17 +336,17 @@ public class Rope {
     return loc.isTransient && loc.isChanged;
   }
 
-  public static Zipper replace(Zipper loc, Object node) {
-    Zipper copy = loc.clone();
+  public static <Metrics, Data> Zipper<Metrics, Data> replace(Zipper<Metrics, Data> loc, Object node) {
+    Zipper<Metrics, Data> copy = loc.clone();
     copy.isChanged = true;
     if (isMutable(copy)) {
       copy.siblings.set(copy.idx, node);
     }
     else {
       ArrayList<Object> siblingsCopy = (ArrayList<Object>)copy.siblings.clone();
-      ArrayList<Object> metricsCopy = (ArrayList<Object>)copy.metrics.clone();
+      ArrayList<Metrics> metricsCopy = (ArrayList<Metrics>)copy.metrics.clone();
       siblingsCopy.set(copy.idx, node);
-      metricsCopy.set(copy.idx, metrics(node));
+      metricsCopy.set(copy.idx, (Metrics)metrics(node));
       copy.siblings = siblingsCopy;
       copy.metrics = metricsCopy;
     }
@@ -360,16 +359,16 @@ public class Rope {
     return al;
   }
 
-  public static Zipper up(Zipper loc) {
+  public static <Metrics, Data> Zipper<Metrics, Data> up(Zipper<Metrics, Data> loc) {
     if (loc.isChanged) {
       if (loc.parent == null) {
-        Zipper zipper = new Zipper();
+        Zipper<Metrics, Data> zipper = new Zipper<>();
         zipper.ops = loc.ops;
         zipper.isTransient = loc.isTransient;
         zipper.idx = 0;
-        Node node = shrinkTree(growTree(wrapNode(node(loc), loc.ops), loc.ops));
-        zipper.siblings = wrapNode(node, loc.ops);
-        zipper.metrics = wrapNode(node.metrics, loc.ops);
+        Node<Metrics> node = shrinkTree(growTree(wrapNode(node(loc), loc.ops), loc.ops));
+        zipper.siblings = singletonList(node);
+        zipper.metrics = singletonList(node.metrics);
         zipper.isRoot = true;
         return zipper;
       }
@@ -381,12 +380,12 @@ public class Rope {
   }
 
   /*
-  * moves to next direct sibling and adds metrics of current node to accumulator
-  * returns null if it is last child
-  * */
-  public static Zipper right(Zipper loc) {
+   * moves to next direct sibling and adds metrics of current node to accumulator
+   * returns null if it is last child
+   * */
+  public static <Metrics, Data> Zipper<Metrics, Data> right(Zipper<Metrics, Data> loc) {
     if (loc.idx < loc.siblings.size() - 1) {
-      Zipper zipper = new Zipper();
+      Zipper<Metrics, Data> zipper = new Zipper<>();
       zipper.ops = loc.ops;
       zipper.idx = loc.idx + 1;
       zipper.siblings = loc.siblings;
@@ -403,16 +402,16 @@ public class Rope {
   }
 
   /*
-  * moves to first child of current node
-  * returns null for leaves and empty nodes
-  * */
-  public static Zipper downLeft(Zipper loc) {
+   * moves to first child of current node
+   * returns null for leaves and empty nodes
+   * */
+  public static <Metrics, Data> Zipper<Metrics, Data> downLeft(Zipper<Metrics, Data> loc) {
     if (isBranch(loc)) {
-      Node n = (Node)loc.siblings.get(loc.idx);
+      Node<Metrics> n = node(loc);
       if (n.children.isEmpty()) {
         return null;
       }
-      Zipper zipper = new Zipper();
+      Zipper<Metrics, Data> zipper = new Zipper<>();
       zipper.ops = loc.ops;
       zipper.siblings = n.children;
       zipper.metrics = n.childrenMetrics;
@@ -431,13 +430,13 @@ public class Rope {
    *
    * CAUTION: drops accumulated position
    * */
-  public static Zipper downRight(Zipper loc) {
+  public static <Metrics, Data> Zipper<Metrics, Data> downRight(Zipper<Metrics, Data> loc) {
     if (isBranch(loc)) {
-      Node n = (Node)loc.siblings.get(loc.idx);
+      Node<Metrics> n = node(loc);
       if (n.children.isEmpty()) {
         return null;
       }
-      Zipper zipper = new Zipper();
+      Zipper<Metrics, Data> zipper = new Zipper<>();
       zipper.ops = loc.ops;
       zipper.siblings = n.children;
       zipper.metrics = n.childrenMetrics;
@@ -448,8 +447,8 @@ public class Rope {
     return null;
   }
 
-  public static Node root(Zipper loc) {
-    Zipper parent = up(loc);
+  public static <Metrics, Data> Node<Metrics> root(Zipper<Metrics, Data> loc) {
+    Zipper<Metrics, Data> parent = up(loc);
     return parent == null ? node(loc) : root(parent);
   }
 
@@ -462,15 +461,15 @@ public class Rope {
     return isBranch(loc) || !isRightmost(loc);
   }
 
-  public static Zipper next(Zipper loc) {
+  public static <Metrics, Data> Zipper<Metrics, Data> next(Zipper<Metrics, Data> loc) {
     if (isBranch(loc)) {
-      Zipper df = downLeft(loc);
+      Zipper<Metrics, Data> df = downLeft(loc);
       if (df != null) {
         return df;
       }
     }
 
-    Zipper right = right(loc);
+    Zipper<Metrics, Data> right = right(loc);
     if (right != null) {
       return right;
     }
@@ -479,31 +478,31 @@ public class Rope {
       throw new NoSuchElementException();
     }
 
-    Zipper p = loc;
+    Zipper<Metrics, Data> p = loc;
     while (true) {
-      Zipper up = up(p);
-      if (up != null) {
-        Zipper r = right(up);
+      Zipper<Metrics, Data> up = up(p);
+      if (up == null) {
+        Zipper<Metrics, Data> zipper = new Zipper<>();
+        zipper.ops = p.ops;
+        zipper.idx = 0;
+        zipper.isTransient = p.isTransient;
+        Node<Metrics> node = node(p);
+        zipper.siblings = singletonList(node);
+        zipper.metrics = singletonList((Metrics)metrics(node));
+        return zipper;
+      }
+      else {
+        Zipper<Metrics, Data> r = right(up);
         if (r != null) {
           return r;
         }
         p = up;
-      }
-      else {
-        Zipper zipper = new Zipper();
-        zipper.ops = p.ops;
-        zipper.idx = 0;
-        zipper.isTransient = p.isTransient;
-        Node node = node(p);
-        zipper.siblings = wrapNode(node, p.ops);
-        zipper.metrics = wrapNode(metrics(node), p.ops);
-        return zipper;
       }
     }
   }
 
-  public static Zipper skip(Zipper loc) {
-    Zipper right = right(loc);
+  public static <Metrics, Data> Zipper<Metrics, Data> skip(Zipper<Metrics, Data> loc) {
+    Zipper<Metrics, Data> right = right(loc);
     if (right != null) {
       return right;
     }
@@ -512,25 +511,25 @@ public class Rope {
       throw new NoSuchElementException();
     }
 
-    Zipper p = loc;
+    Zipper<Metrics, Data> p = loc;
     while (true) {
-      Zipper up = up(p);
-      if (up != null) {
-        Zipper r = right(up);
+      Zipper<Metrics, Data> up = up(p);
+      if (up == null) {
+        Zipper<Metrics, Data> zipper = new Zipper<>();
+        zipper.ops = p.ops;
+        zipper.idx = 0;
+        zipper.isTransient = p.isTransient;
+        Node<Metrics> node = node(p);
+        zipper.siblings = singletonList(node);
+        zipper.metrics = singletonList((Metrics)metrics(node));
+        return zipper;
+      }
+      else {
+        Zipper<Metrics, Data> r = right(up);
         if (r != null) {
           return r;
         }
         p = up;
-      }
-      else {
-        Zipper zipper = new Zipper();
-        zipper.ops = p.ops;
-        zipper.idx = 0;
-        zipper.isTransient = p.isTransient;
-        Node node = node(p);
-        zipper.siblings = wrapNode(node, p.ops);
-        zipper.metrics = wrapNode(metrics(node), p.ops);
-        return zipper;
       }
     }
   }
@@ -598,14 +597,7 @@ public class Rope {
     return null;
   }
 
-  //---------------------------------------------------------------------------
-
-  public static Zipper edit(Zipper loc, Function<Object, Object> fn) {
-    // todo maybe Function<TData, TData> is a better fit
-    return replace(loc, fn.apply(loc.siblings.get(loc.idx)));
-  }
-
-  public static Zipper nextLeaf(Zipper loc) {
+  public static <Metrics, Data> Zipper<Metrics, Data> nextLeaf(Zipper<Metrics, Data> loc) {
     do {
       loc = next(loc);
     }
@@ -616,9 +608,9 @@ public class Rope {
   /*
    * stops in a leaf or in root node if the tree is empty, should never return null
    */
-  public static Zipper scan(Zipper loc, BiFunction<Object, Object, Boolean> pred) {
+  public static <Metrics, Data> Zipper<Metrics, Data> scan(Zipper<Metrics, Data> loc, BiFunction<Metrics, Metrics, Boolean> pred) {
     while (loc != null) {
-      Zipper nextLoc = null;
+      Zipper<Metrics, Data> nextLoc = null;
       if (loc.isRoot) {
         if (node(loc).children.isEmpty()) {
           return loc;
@@ -626,11 +618,11 @@ public class Rope {
         nextLoc = loc;
       }
       else {
-        Object acc = loc.acc == null ? loc.ops.emptyMetrics() : loc.acc;
+        Metrics acc = loc.acc == null ? loc.ops.emptyMetrics() : loc.acc;
         int siblingsCount = loc.siblings.size();
         for (int i = loc.idx; i < siblingsCount; i++) {
           if (pred.apply(acc, loc.metrics.get(i))) {
-            Zipper zipper = new Zipper();
+            Zipper<Metrics, Data> zipper = new Zipper<>();
             zipper.ops = loc.ops;
             zipper.siblings = loc.siblings;
             zipper.metrics = loc.metrics;
@@ -651,7 +643,7 @@ public class Rope {
       }
 
       if (nextLoc == null) {
-        Zipper u = up(loc);
+        Zipper<Metrics, Data> u = up(loc);
         if (isRightmost(u)) {
           Zipper c = loc.clone();
           c.idx = c.siblings.size() - 1;
@@ -671,8 +663,8 @@ public class Rope {
     throw new IllegalStateException();
   }
 
-  private static Object accumulateTillIdx(Zipper zipper, int idx) {
-    Object acc = zipper.parent.acc;
+  private static <Metrics, Data> Metrics accumulateTillIdx(Zipper<Metrics, Data> zipper, int idx) {
+    Metrics acc = zipper.parent.acc;
     for (int i = 0; i < idx; i++) {
       acc = zipper.ops.rf(acc, zipper.metrics.get(i));
     }
@@ -687,10 +679,10 @@ public class Rope {
    * will move to end position of nearest left leaf if there is no `next` node to go
    * if parent node has no more children it will be removed recursively
    * */
-  public static Zipper remove(Zipper loc) {
+  public static <Metrics, Data> Zipper<Metrics, Data> remove(Zipper<Metrics, Data> loc) {
     while (loc.siblings.size() == 1) {
       if (loc.parent == null) {
-        return replace(loc, new Node(loc.ops.emptyMetrics(), new ArrayList<>(), new ArrayList<>()));
+        return replace(loc, new Node<>(loc.ops.emptyMetrics(), new ArrayList<>(), new ArrayList<>()));
       }
       else {
         loc = up(loc);
@@ -698,20 +690,20 @@ public class Rope {
     }
 
     ArrayList<Object> newSiblings;
-    ArrayList<Object> newMetrics;
+    ArrayList<Metrics> newMetrics;
     if (isMutable(loc)) {
       newSiblings = loc.siblings;
       newMetrics = loc.metrics;
     }
     else {
       newSiblings = (ArrayList<Object>)loc.siblings.clone();
-      newMetrics = (ArrayList<Object>)loc.metrics.clone();
+      newMetrics = (ArrayList<Metrics>)loc.metrics.clone();
     }
     newMetrics.remove(loc.idx);
     newSiblings.remove(loc.idx);
 
 
-    Zipper zipper = new Zipper();
+    Zipper<Metrics, Data> zipper = new Zipper<>();
     zipper.ops = loc.ops;
     zipper.siblings = newSiblings;
     zipper.metrics = newMetrics;
@@ -729,7 +721,7 @@ public class Rope {
     else {
       zipper.idx = loc.idx - 1;
       if (isRightmost(zipper)) {
-        Object acc = zipper.parent.acc;
+        Metrics acc = zipper.parent.acc;
         for (int i = 0; i < zipper.idx; i++) {
           acc = zipper.ops.rf(acc, zipper.metrics.get(i));
         }

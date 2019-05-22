@@ -1,6 +1,7 @@
 package andel;
 
 import andel.Rope.ZipperOps;
+import com.sun.jdi.request.InvalidRequestStateException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -9,7 +10,7 @@ import java.util.function.BiFunction;
 
 public class Text {
 
-  public static class TextMetrics {
+  public final static class TextMetrics {
 
     public final long length;
     public final long geometricLength;
@@ -47,7 +48,7 @@ public class Text {
       this.maxLineLength = 0;
     }
 
-    public TextMetrics merge(TextMetrics other) {
+    public TextMetrics add(TextMetrics other) {
       long length = this.length + other.length;
       long geomLength = this.geometricLength + other.geometricLength;
       long linesCount = this.linesCount + other.linesCount;
@@ -120,7 +121,7 @@ public class Text {
 
   public static final TextOps TEXT_OPS = new TextOps(32, 64);
 
-  public static class TextOps implements ZipperOps {
+  public static class TextOps implements ZipperOps<TextMetrics, String> {
 
     final int splitThresh;
     final int leafSplitThresh;
@@ -133,19 +134,18 @@ public class Text {
     }
 
     @Override
-    public Object calculateMetrics(Object data) {
-      String s = (String)data;
-      return metricsTo(s, OffsetKind.Characters, s.length());
+    public TextMetrics calculateMetrics(String data) {
+      return metricsTo(data, OffsetKind.Characters, data.length());
     }
 
     @Override
-    public Object emptyMetrics() {
+    public TextMetrics emptyMetrics() {
       return TextMetrics.EMPTY;
     }
 
     @Override
-    public Object rf(Object o1, Object o2) {
-      return ((TextMetrics)o1).merge((TextMetrics)o2);
+    public TextMetrics rf(TextMetrics o1, TextMetrics o2) {
+      return o1.add(o2);
     }
 
     //@Override
@@ -168,23 +168,22 @@ public class Text {
     //}
 
     @Override
-    public boolean isLeafOverflown(Object leafData) {
-      String s = (String)leafData;
-      return leafSplitThresh <= s.codePointCount(0, s.length());
+    public boolean isLeafOverflown(String leafData) {
+      // TODO we may benefit from calculated metrics here
+      return leafSplitThresh <= leafData.codePointCount(0, leafData.length());
     }
 
     @Override
-    public boolean isLeafUnderflown(Object leafData) {
-      String s = (String)leafData;
-      return s.codePointCount(0, s.length()) < leafMergeThresh;
+    public boolean isLeafUnderflown(String leafData) {
+      return leafData.codePointCount(0, leafData.length()) < leafMergeThresh;
     }
 
     @Override
-    public Object mergeLeaves(Object leafData1, Object leafData2) {
-      return ((String)leafData1).concat((String)leafData2);
+    public String mergeLeaves(String leafData1, String leafData2) {
+      return leafData1.concat(leafData2);
     }
 
-    private static void splitString(String s, ArrayList<Object> result, int from, int to, int thresh) {
+    private static void splitString(String s, ArrayList<String> result, int from, int to, int thresh) {
       int length = to - from;
       if (length < thresh) {
         result.add(s.substring(s.offsetByCodePoints(0, from), s.offsetByCodePoints(0, to)));
@@ -197,11 +196,11 @@ public class Text {
     }
 
     @Override
-    public List<Object> splitLeaf(Object leafData) {
-      String s = (String)leafData;
-      assert leafSplitThresh <= s.codePointCount(0, s.length());
-      ArrayList<Object> result = new ArrayList<>();
-      splitString(s, result, 0, s.length(), leafSplitThresh);
+    public List<String> splitLeaf(String leafData) {
+      int codePointsLength = leafData.codePointCount(0, leafData.length());
+      assert leafSplitThresh <= codePointsLength;
+      ArrayList<String> result = new ArrayList<>();
+      splitString(leafData, result, 0, codePointsLength, leafSplitThresh);
       return result;
     }
 
@@ -211,103 +210,92 @@ public class Text {
     }
   }
 
-  public static BiFunction<Object, Object, Boolean> offsetPredicate(long offset) {
-    return (acc, next) -> {
-      TextMetrics m1 = (TextMetrics)acc;
-      TextMetrics m2 = (TextMetrics)next;
-      return offset <= m1.merge(m2).length;
-    };
+  public static BiFunction<TextMetrics, TextMetrics, Boolean> offsetPredicate(long offset) {
+    return (acc, next) -> offset <= acc.add(next).length;
   }
 
-  public static BiFunction<Object, Object, Boolean> charOffsetPredicate(long offset) {
-    return (acc, next) -> {
-      TextMetrics m1 = (TextMetrics)acc;
-      TextMetrics m2 = (TextMetrics)next;
-      return offset <= m1.merge(m2).charsCount;
-    };
+  public static BiFunction<TextMetrics, TextMetrics, Boolean> charOffsetPredicate(long offset) {
+    return (acc, next) -> offset <= acc.add(next).charsCount;
   }
 
-  public static long offset(Rope.Zipper loc) {
+  public static long offset(Rope.Zipper<TextMetrics, String> loc) {
     if (loc.oacc != null) {
-      return ((TextMetrics)loc.oacc).length;
+      return loc.oacc.length;
     }
     else if (loc.acc != null) {
-      return ((TextMetrics)loc.acc).length;
+      return loc.acc.length;
     }
     else {
       return 0;
     }
   }
 
-  public static long nodeOffset(Rope.Zipper loc) {
-    TextMetrics acc = (TextMetrics)loc.acc;
+  public static long nodeOffset(Rope.Zipper<TextMetrics, String> loc) {
+    TextMetrics acc = loc.acc;
     return acc == null ? 0 : acc.length;
   }
 
-  public static long charOffset(Rope.Zipper loc) {
-    TextMetrics acc = (TextMetrics)Rope.currentAcc(loc);
+  public static long charOffset(Rope.Zipper<TextMetrics, ?> loc) {
+    return Rope.currentAcc(loc).charsCount;
+  }
+
+  public static long nodeCharOffset(Rope.Zipper<TextMetrics, ?> loc) {
+    TextMetrics acc = loc.acc;
     return acc == null ? 0 : acc.charsCount;
   }
 
-  public static long nodeCharOffset(Rope.Zipper loc) {
-    TextMetrics acc = (TextMetrics)loc.acc;
-    return acc == null ? 0 : acc.charsCount;
-  }
-
-  public static Rope.Node makeText(String s) {
-    Rope.ZipperOps ops = TEXT_OPS;
+  public static Rope.Node<TextMetrics> makeText(String s) {
+    Rope.ZipperOps<TextMetrics, String> ops = TEXT_OPS;
     return Rope.growTree(Rope.wrapNode(Rope.makeLeaf(s, ops), ops), ops);
   }
 
-  public static Rope.Zipper zipper(Rope.Node root) {
+  public static Rope.Zipper<TextMetrics, String> zipper(Rope.Node<TextMetrics> root) {
     return Rope.Zipper.zipper(root, TEXT_OPS);
   }
 
-  public static Rope.Node root(Rope.Zipper loc) {
+  public static Rope.Node<TextMetrics> root(Rope.Zipper<TextMetrics, ?> loc) {
     return Rope.root(loc);
   }
 
-  public static Rope.Zipper scanToOffset(Rope.Zipper loc, long offset) {
-    Rope.Zipper offsetLoc = Rope.scan(loc, offsetPredicate(offset));
+  public static Rope.Zipper<TextMetrics, String> scanToOffset(Rope.Zipper<TextMetrics, String> loc, long offset) {
+    Rope.Zipper<TextMetrics, String> offsetLoc = Rope.scan(loc, offsetPredicate(offset));
     if (offsetLoc.isRoot) {
       return offsetLoc;
     }
     long o = nodeOffset(offsetLoc);
-    String s = (String)Rope.leaf(offsetLoc).data;
-    TextMetrics acc = (TextMetrics)offsetLoc.acc;
-    offsetLoc.oacc = acc.merge(metricsTo(s, OffsetKind.CodePoints, offset - o));
+    String s = Rope.leaf(offsetLoc).data;
+    offsetLoc.oacc = offsetLoc.acc.add(metricsTo(s, OffsetKind.CodePoints, offset - o));
     return offsetLoc;
   }
 
-  public static Rope.Zipper scanToCharOffset(Rope.Zipper loc, long offset) {
-    Rope.Zipper offsetLoc = Rope.scan(loc, charOffsetPredicate(offset));
+  public static Rope.Zipper<TextMetrics, String> scanToCharOffset(Rope.Zipper<TextMetrics, String> loc, long offset) {
+    Rope.Zipper<TextMetrics, String> offsetLoc = Rope.scan(loc, charOffsetPredicate(offset));
     if (offsetLoc.isRoot) {
       return offsetLoc;
     }
     long o = nodeCharOffset(offsetLoc);
-    String s = (String)Rope.leaf(offsetLoc).data;
-    TextMetrics acc = (TextMetrics)offsetLoc.acc;
-    offsetLoc.oacc = acc.merge(metricsTo(s, OffsetKind.Characters, offset - o));
+    String s = Rope.leaf(offsetLoc).data;
+    offsetLoc.oacc = offsetLoc.acc.add(metricsTo(s, OffsetKind.Characters, offset - o));
     return offsetLoc;
   }
 
-  public static Rope.Zipper retain(Rope.Zipper loc, long l) {
+  public static Rope.Zipper<TextMetrics, String> retain(Rope.Zipper<TextMetrics, String> loc, long l) {
     return scanToOffset(loc, offset(loc) + l);
   }
 
-  public static Rope.Zipper insert(Rope.Zipper loc, String s) {
+  public static Rope.Zipper<TextMetrics, String> insert(Rope.Zipper<TextMetrics, String> loc, String s) {
     if (s.isEmpty()) {
       return loc;
     }
 
     assert loc != null;
 
-    Rope.Zipper leaf;
-    Rope.Zipper branch = null;
+    Rope.Zipper<TextMetrics, String> leaf;
+    Rope.Zipper<TextMetrics, String> branch = null;
 
     // TODO i know that the only case when there is no leaf to insert is an empty tree
 
-    Rope.Zipper i = loc;
+    Rope.Zipper<TextMetrics, String> i = loc;
     while (i != null && Rope.isBranch(i)) {
       branch = i;
       i = Rope.downLeft(i);
@@ -317,13 +305,13 @@ public class Text {
     if (leaf == null) {
       ArrayList<Object> children = new ArrayList<>();
       children.add(Rope.makeLeaf(s, branch.ops));
-      Rope.Zipper newRoot = Rope.replace(branch, Rope.makeNode(children, branch.ops));
+      Rope.Zipper<TextMetrics, String> newRoot = Rope.replace(branch, Rope.makeNode(children, branch.ops));
       return retain(newRoot, s.codePointCount(0, s.length()));
     }
     else {
       int relCharOffset = (int)(charOffset(leaf) - nodeCharOffset(leaf));
-      ZipperOps ops = leaf.ops;
-      String data = (String)Rope.leaf(leaf).data;
+      ZipperOps<TextMetrics, String> ops = leaf.ops;
+      String data = Rope.leaf(leaf).data;
       return retain(Rope.replace(leaf, Rope.makeLeaf(data.substring(0, relCharOffset)
                                                        .concat(s)
                                                        .concat(data.substring(relCharOffset)),
@@ -332,33 +320,31 @@ public class Text {
     }
   }
 
-  public static Rope.Zipper delete(Rope.Zipper loc, int l) {
+  public static Rope.Zipper<TextMetrics, String> delete(Rope.Zipper<TextMetrics, String> loc, int l) {
+
     while (l > 0) {
       //TODO optimize here (we can delete entire subtree if it's inside of deletion range
       while (Rope.isBranch(loc)) {
         loc = Rope.downLeft(loc);
+        assert loc != null;
       }
 
-      assert loc != null;
-
       long i = offset(loc);
-      String s = (String)Rope.leaf(loc).data;
+      String s = Rope.leaf(loc).data;
       int relOffset = (int)(i - nodeOffset(loc));
       int chunkLength = s.codePointCount(0, s.length());
       int end = Math.min(chunkLength, relOffset + l);
-      ZipperOps ops = loc.ops;
+      ZipperOps<TextMetrics, String> ops = loc.ops;
       int deleted = end - relOffset;
       l -= deleted;
       if (relOffset == 0 && end == chunkLength) {
         loc = Rope.remove(loc);
       }
       else {
-        Rope.Zipper newLeaf = Rope.edit(loc, (o) -> {
-          String data = (String)((Rope.Leaf)o).data;
-          return Rope.makeLeaf(data.substring(0, s.offsetByCodePoints(0, relOffset))
-                                 .concat(data.substring(s.offsetByCodePoints(0, end))),
-                               ops);
-        });
+        String news = s.substring(0, s.offsetByCodePoints(0, relOffset))
+          .concat(s.substring(s.offsetByCodePoints(0, end)));
+        Rope.Zipper<TextMetrics, String> newLeaf = Rope.replace(loc, Rope.makeLeaf(news, ops));
+
         if (end == chunkLength) {
           if (l == 0) {
             return newLeaf;
@@ -375,7 +361,13 @@ public class Text {
     return loc;
   }
 
-  public static String text(Rope.Zipper loc, int length) {
+  public static String text(Rope.Zipper<TextMetrics, String> loc, int length) {
+    if (loc == null) {
+      throw new IllegalArgumentException();
+    }
+    if (length == 0)
+      return "";
+
     StringBuilder sb = new StringBuilder();
     while (true) {
       assert loc != null;
@@ -384,12 +376,11 @@ public class Text {
       }
       else {
         long i = offset(loc);
-        Rope.Leaf leaf = Rope.leaf(loc);
-        String chunk = (String)leaf.data;
+        Rope.Leaf<TextMetrics, String> leaf = Rope.leaf(loc);
+        String chunk = leaf.data;
         long chunkOffset = nodeOffset(loc);
         int start = (int)(i - chunkOffset);
-        int codepointsCount = (int)((TextMetrics)leaf.metrics).length;
-        int end = Math.min(codepointsCount, start + length);
+        int end = (int)Math.min(leaf.metrics.length, start + length);
         int charsStart = chunk.offsetByCodePoints(0, start);
         int charsEnd = chunk.offsetByCodePoints(0, end);
 
@@ -405,27 +396,26 @@ public class Text {
     }
   }
 
-  public static BiFunction<Object, Object, Boolean> byCharOffsetExclusive(int offset, ZipperOps ops) {
-    return (o, o2) -> offset <= ((TextMetrics)ops.rf(o, o2)).charsCount;
+  public static BiFunction<TextMetrics, TextMetrics, Boolean> byCharOffsetExclusive(int offset, ZipperOps<TextMetrics, String> ops) {
+    return (o, o2) -> offset <= ops.rf(o, o2).charsCount;
   }
-
 
   public static class Sequence implements CharSequence {
 
-    Rope.Node root;
-    Rope.Zipper loc;
+    Rope.Node<TextMetrics> root;
+    Rope.Zipper<TextMetrics, String> loc;
     final int from, to; // in chars
 
-    Sequence(Rope.Node root, int from, int to) {
+    Sequence(Rope.Node<TextMetrics> root, int from, int to) {
       this.root = root;
       this.from = from;
       this.to = to;
-      Rope.Zipper l = zipper(root);
+      Rope.Zipper<TextMetrics, String> l = zipper(root);
       this.loc = Rope.scan(l, byCharOffsetExclusive(from, l.ops));
     }
 
-    public Sequence(Rope.Node root) {
-      this(root, 0, (int)((TextMetrics)root.metrics).charsCount);
+    public Sequence(Rope.Node<TextMetrics> root) {
+      this(root, 0, (int)(root.metrics).charsCount);
     }
 
     @Override
@@ -438,12 +428,12 @@ public class Text {
       assert index < to - from;
       int absoluteIndex = index + from;
       int base = (int)nodeCharOffset(loc);
-      String currentChunk = (String)Rope.leaf(loc).data;
+      String currentChunk = Rope.leaf(loc).data;
 
       if (absoluteIndex < base) {
-        Rope.Zipper rootLoc = zipper(root);
+        Rope.Zipper<TextMetrics, String> rootLoc = zipper(root);
         loc = Rope.scan(rootLoc, byCharOffsetExclusive(index, loc.ops));
-        String newChunk = (String)Rope.leaf(loc).data;
+        String newChunk = Rope.leaf(loc).data;
         return newChunk.charAt(absoluteIndex - base);
       }
 
@@ -453,7 +443,7 @@ public class Text {
 
       if (base + currentChunk.length() < absoluteIndex) {
         loc = Rope.scan(loc, byCharOffsetExclusive(index, loc.ops));
-        String newChunk = (String)Rope.leaf(loc).data;
+        String newChunk = Rope.leaf(loc).data;
         return newChunk.charAt(absoluteIndex - base);
       }
 
@@ -469,19 +459,9 @@ public class Text {
 
     @Override
     public String toString() {
-      Rope.Zipper fromLoc = scanToCharOffset(zipper(root), from);
-      Rope.Zipper toLoc = scanToCharOffset(fromLoc, to);
+      Rope.Zipper<TextMetrics, String> fromLoc = scanToCharOffset(zipper(root), from);
+      Rope.Zipper<TextMetrics, String> toLoc = scanToCharOffset(fromLoc, to);
       return text(fromLoc, (int)(offset(toLoc) - offset(fromLoc)));
     }
-  }
-
-  public static void main(String[] args) {
-
-    CharSequence s1 = new Sequence(makeText("foobar"));
-    System.out.println(s1);
-    CharSequence s2 = s1.subSequence(2, 4);
-    System.out.println(s2);
-    CharSequence s3 = new Sequence(makeText(""));
-    System.out.println(s3);
   }
 }

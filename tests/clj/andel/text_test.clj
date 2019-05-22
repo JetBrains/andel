@@ -89,7 +89,7 @@
    (g/tuple g/string-alphanumeric (g/vector (op-frames-gen size) 1 size))))
 
 (defn text-length [node]
-  (.-length ^Text$TextMetrics (Rope/getMetrics node)))
+  (.-length ^Text$TextMetrics (Rope/metrics node)))
 
 (defn make-text [text]
   (let [ops (Text$TextOps. 4 5)]
@@ -135,7 +135,6 @@
       (let [^andel.Rope$Leaf leaf node]
         {:metrics (mp (.-metrics leaf))
          :data    (.-data leaf)})))
-
 
   (defn zp [^Rope$Zipper zipper]
     {:siblings (mapv np (.-siblings zipper))
