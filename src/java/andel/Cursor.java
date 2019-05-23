@@ -3,7 +3,7 @@ public class Cursor {
 
 
   static String leafText(Rope.Zipper zipper) {
-    return (String)((Rope.Leaf)Rope.currentNode(zipper)).data;
+    return (String)Rope.leaf(zipper).data;
   }
 
   public static abstract class AbstractCursor {

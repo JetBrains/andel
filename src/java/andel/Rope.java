@@ -356,12 +356,6 @@ public class Rope {
     return copy;
   }
 
-  public static ArrayList<Object> wrapNode(Object node, ZipperOps ops) {
-    ArrayList<Object> al = new ArrayList<>(ops.splitThreshold() / 2);
-    al.add(node);
-    return al;
-  }
-
   public static <Metrics, Data> Zipper<Metrics, Data> up(Zipper<Metrics, Data> loc) {
     if (loc.isChanged) {
       if (loc.parent == null) {
@@ -369,7 +363,7 @@ public class Rope {
         zipper.ops = loc.ops;
         zipper.isTransient = loc.isTransient;
         zipper.idx = 0;
-        Node<Metrics> node = shrinkTree(growTree(wrapNode(node(loc), loc.ops), loc.ops));
+        Node<Metrics> node = shrinkTree(growTree(singletonList(node(loc)), loc.ops));
         zipper.siblings = singletonList(node);
         zipper.metrics = singletonList(node.metrics);
 //        zipper.isRoot = true;
