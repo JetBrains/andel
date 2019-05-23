@@ -294,7 +294,10 @@
 
       (prn "JAVA VERSION")
       (onair.dev/benchmark
-       (Text/makeText editor-impl)))
+       (Text/makeText editor-impl))
+      (prn "IMMUTABLE TEXT")
+      (onair.dev/benchmark
+        (ensure-chunked (com.intellij.util.text.CharArrayUtil/createImmutableCharSequence editor-impl))))
 
     (do
       (prn "PLAY OPERATION")
@@ -308,7 +311,7 @@
 
       (prn "IMMUTABLE TEXT")
       (onair.dev/benchmark
-       (play-intellij immaculate-text operation)))
+       (play-intellij not-so-immaculate-text operation)))
 
     (do
       (prn "RANDOM ACCESS")

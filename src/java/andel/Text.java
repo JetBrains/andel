@@ -169,7 +169,7 @@ public class Text {
     @Override
     public boolean isLeafOverflown(String leafData) {
       // TODO we may benefit from calculated metrics here
-      return leafSplitThresh <= leafData.codePointCount(0, leafData.length());
+      return leafSplitThresh < leafData.codePointCount(0, leafData.length());
     }
 
     @Override
@@ -182,15 +182,17 @@ public class Text {
       return leafData1.concat(leafData2);
     }
 
-    private static void splitString(String s, ArrayList<String> result, int from, int to, int thresh) {
+    private static int splitString(String s, int charFrom, ArrayList<String> result, int from, int to, int thresh) {
       int length = to - from;
-      if (length < thresh) {
-        result.add(s.substring(s.offsetByCodePoints(0, from), s.offsetByCodePoints(0, to)));
+      if (length <= thresh) {
+        int charTo = s.offsetByCodePoints(charFrom, length);
+        result.add(s.substring(charFrom, charTo));
+        return charTo;
       }
       else {
         int halfLength = length / 2;
-        splitString(s, result, from, from + halfLength, thresh);
-        splitString(s, result, from + halfLength, to, thresh);
+        int halfCharOffset= splitString(s, charFrom, result, from, from + halfLength, thresh);
+        return splitString(s, halfCharOffset, result, from + halfLength, to, thresh);
       }
     }
 
@@ -198,9 +200,9 @@ public class Text {
     public List<String> splitLeaf(String leafData) {
       int codePointsLength = leafData.codePointCount(0, leafData.length());
       // TODO fastpath if codepointsLength == string.length
-      assert leafSplitThresh <= codePointsLength;
+      assert leafSplitThresh < codePointsLength;
       ArrayList<String> result = new ArrayList<>();
-      splitString(leafData, result, 0, codePointsLength, leafSplitThresh);
+      splitString(leafData, 0, result, 0, codePointsLength, leafSplitThresh);
       return result;
     }
 
