@@ -376,7 +376,9 @@ public class Rope {
         return replace(loc.parent, makeNode(balanceChildren(loc.siblings, loc.ops), loc.ops));
       }
     }
-    return loc.parent;
+    else {
+      return loc.parent;
+    }
   }
 
   /*

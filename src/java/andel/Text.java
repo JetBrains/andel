@@ -1,7 +1,6 @@
 package andel;
 
 import andel.Rope.ZipperOps;
-import com.sun.jdi.request.InvalidRequestStateException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -198,6 +197,7 @@ public class Text {
     @Override
     public List<String> splitLeaf(String leafData) {
       int codePointsLength = leafData.codePointCount(0, leafData.length());
+      // TODO fastpath if codepointsLength == string.length
       assert leafSplitThresh <= codePointsLength;
       ArrayList<String> result = new ArrayList<>();
       splitString(leafData, result, 0, codePointsLength, leafSplitThresh);
