@@ -6,21 +6,20 @@ public class Cursor {
     return (String)((Rope.Leaf)Rope.currentNode(zipper)).data;
   }
 
-  public static class ImmutableCursor {
+  public static abstract class AbstractCursor {
+    public Rope.Zipper zipper;
+    public long nodeCharOffset;
+    public long innerCharOffset;
+    public long offset;
+    public long textLength;
+    public long leafCharLength;
 
-    Rope.Zipper zipper;
-    long nodeCharOffset;
-    long innerCharOffset;
-    long offset;
-    long textLength;
-    long leafCharLength;
-
-    public ImmutableCursor(Rope.Zipper zipper,
-                           long nodeCharOffset,
-                           long innerCharOffset,
-                           long offset,
-                           long textLength,
-                           long leafCharLength) {
+    public AbstractCursor(Rope.Zipper zipper,
+                          long nodeCharOffset,
+                          long innerCharOffset,
+                          long offset,
+                          long textLength,
+                          long leafCharLength) {
       this.zipper = zipper;
       this.nodeCharOffset = nodeCharOffset;
       this.innerCharOffset = innerCharOffset;
@@ -29,7 +28,7 @@ public class Cursor {
       this.leafCharLength = leafCharLength;
     }
 
-    public ImmutableCursor(Rope.Node text, long _offset) {
+    public AbstractCursor(Rope.Node text, long _offset) {
       zipper = Text.scanToOffset(Text.zipper(text), offset);
       long _charOffset = Text.charOffset(zipper);
       nodeCharOffset = Text.nodeCharOffset(zipper);
@@ -49,6 +48,22 @@ public class Cursor {
 
     public long getCharOffset() {
       return nodeCharOffset + innerCharOffset;
+    }
+  }
+
+  public static class ImmutableCursor extends AbstractCursor {
+
+    public ImmutableCursor(Rope.Zipper zipper,
+                           long nodeCharOffset,
+                           long innerCharOffset,
+                           long offset,
+                           long textLength,
+                           long leafCharLength) {
+      super(zipper, nodeCharOffset, innerCharOffset, offset, textLength, leafCharLength);
+    }
+
+    public ImmutableCursor(Rope.Node text, long _offset) {
+      super(text, _offset);
     }
   }
 
@@ -87,8 +102,8 @@ public class Cursor {
 
     if (0 < cursor.innerCharOffset) {
       long prevInnerCharOffset = Character.isHighSurrogate(leafText(cursor.zipper).charAt((int)(cursor.innerCharOffset - 1)))
-               ? cursor.innerCharOffset - 2
-               : cursor.innerCharOffset - 1;
+                                 ? cursor.innerCharOffset - 2
+                                 : cursor.innerCharOffset - 1;
       return new ImmutableCursor(
         cursor.zipper,
         cursor.nodeCharOffset,
@@ -123,6 +138,100 @@ public class Cursor {
   }
 
 
+  public static class TransientCursor extends AbstractCursor {
+
+    public TransientCursor(Rope.Zipper zipper,
+                           long nodeCharOffset,
+                           long innerCharOffset,
+                           long offset,
+                           long textLength,
+                           long leafCharLength) {
+      super(zipper, nodeCharOffset, innerCharOffset, offset, textLength, leafCharLength);
+    }
+
+    public TransientCursor(Rope.Node text, long _offset) {
+      super(text, _offset);
+    }
+
+    public TransientCursor next() {
+      long nextInnerCharOffset = Character.isSupplementaryCodePoint(getChar())
+                                 ? innerCharOffset + 2
+                                 : innerCharOffset + 1;
+
+      if (nextInnerCharOffset < leafCharLength) {
+        offset += 1;
+        innerCharOffset = nextInnerCharOffset;
+        return this;
+      }
+
+      if (Rope.hasNext(zipper)) {
+        Rope.Zipper nextLeaf = Rope.nextLeaf(zipper);
+
+        zipper = nextLeaf;
+        nodeCharOffset += leafCharLength;
+        innerCharOffset = 0;
+        offset += 1;
+        leafCharLength = leafText(nextLeaf).length();
+
+        return this;
+      }
+
+      return null;
+    }
+
+    public TransientCursor prev() {
+      if (0 < innerCharOffset) {
+
+        innerCharOffset = Character.isHighSurrogate(leafText(zipper).charAt((int)(innerCharOffset - 1)))
+                          ? innerCharOffset - 2
+                          : innerCharOffset - 1;
+        offset -= 1;
+        return this;
+      }
+
+      if (Rope.hasPrev(zipper)) {
+        Rope.Zipper prevLeaf = Rope.prevLeaf(zipper);
+        String prevLeafText = leafText(prevLeaf);
+        long prevLeafCharLength = prevLeafText.length();
+        long prevInnerCharOffset = Character.isHighSurrogate(prevLeafText.charAt((int)(prevLeafCharLength - 1)))
+                                   ? prevLeafCharLength - 2
+                                   : prevLeafCharLength - 1;
+
+        zipper = prevLeaf;
+        nodeCharOffset -= prevLeafCharLength;
+        innerCharOffset = prevInnerCharOffset;
+        offset -= 1;
+        leafCharLength = prevLeafCharLength;
+
+        return this;
+
+      }
+
+      return null;
+    }
+  }
+
+  public static TransientCursor makeTransient(ImmutableCursor cursor) {
+    return new TransientCursor(
+      cursor.zipper,
+      cursor.nodeCharOffset,
+      cursor.innerCharOffset,
+      cursor.offset,
+      cursor.textLength,
+      cursor.leafCharLength
+    );
+  }
+
+  public static ImmutableCursor persistentBang(TransientCursor cursor) {
+    return new ImmutableCursor(
+      cursor.zipper,
+      cursor.nodeCharOffset,
+      cursor.innerCharOffset,
+      cursor.offset,
+      cursor.textLength,
+      cursor.leafCharLength
+    );
+  }
 
 
 }
