@@ -111,14 +111,13 @@
             prev-leaf-char-length (.length prev-leaf-text)]
         (->cursor
          :zipper           prev-leaf
-         :offset           (dec offset)
-         :leaf-char-length prev-leaf-char-length
          :node-char-offset (- node-char-offset prev-leaf-char-length)
-         :inner-char-offset
-                           (if (Character/isHighSurrogate (.charAt prev-leaf-text (dec prev-leaf-char-length)))
-                             (- prev-leaf-char-length 2)
-                             (dec prev-leaf-char-length))
-         :text-length      text-length))
+         :inner-char-offset (if (Character/isHighSurrogate (.charAt prev-leaf-text (dec prev-leaf-char-length)))
+                              (- prev-leaf-char-length 2)
+                              (dec prev-leaf-char-length))
+         :offset           (dec offset)
+         :text-length      text-length
+         :leaf-char-length prev-leaf-char-length))
 
       :else nil)))
 

@@ -66,8 +66,6 @@ public class Rope {
     public Object acc;
     public Object oacc;
 
-    public boolean isRoot = false; // suspiciously useless flag
-
     public Zipper() { }
 
     @Override
@@ -89,7 +87,6 @@ public class Rope {
       z.metrics = singletonList(node.metrics);
       z.acc = ops.emptyMetrics();
       z.oacc = null;
-      z.isRoot = true;
       return z;
     }
   }
@@ -116,6 +113,10 @@ public class Rope {
 
   public static boolean isNode(Object node) {
     return node instanceof Node;
+  }
+
+  public static boolean isRoot(Zipper location){
+    return location.parent == null;
   }
 
   public static boolean isLeaf(Object leaf) {
@@ -374,7 +375,7 @@ public class Rope {
         Node node = shrinkTree(growTree(wrapNode(currentNode(loc), loc.ops), loc.ops));
         zipper.siblings = wrapNode(node, loc.ops);
         zipper.metrics = wrapNode(node.metrics, loc.ops);
-        zipper.isRoot = true;
+//        zipper.isRoot = true;
         return zipper;
       }
       else {
@@ -454,6 +455,14 @@ public class Rope {
     }
 
     return isBranch(loc) || !isSuffix(loc);
+  }
+
+  public static boolean hasPrev(Zipper loc) {
+    if (loc.parent == null && ((Node)currentNode(loc)).children.size() > 0) {
+      return true;
+    }
+
+    return isBranch(loc) || !isPrefix(loc);
   }
 
   public static Zipper next(Zipper loc) {
@@ -541,30 +550,29 @@ public class Rope {
       new_loc.metrics = loc.metrics;
       new_loc.isChanged = loc.isChanged;
       new_loc.isTransient = loc.isTransient;
-      new_loc.isRoot = loc.isRoot;
       new_loc.idx = loc.idx - 1;
-      new_loc.acc = null;
-      new_loc.oacc = null;
+      new_loc.acc = null; // acc is removed!
+      new_loc.oacc = null; // acc is removed!
       return new_loc;
     }
     return null;
   }
 
   public static Zipper prev(Zipper loc) {
-    //if (loc.isEnd) {
-    //  return loc;
-    //}
-
     if (isBranch(loc)) {
-      Zipper df = downBackward(loc);
-      if (df != null) {
-        return df;
+      Zipper db = downBackward(loc);
+      if (db != null) {
+        return db;
       }
     }
 
     Zipper left = left(loc);
     if (left != null) {
       return left;
+    }
+
+    if (isPrefix(loc)) {
+      throw new NoSuchElementException();
     }
 
     Zipper p = loc;
@@ -578,22 +586,24 @@ public class Rope {
         p = up;
       }
       else {
-
-        Object e = currentNode(loc);
         Zipper zipper = new Zipper();
-        zipper.ops = loc.ops;
+        zipper.ops = p.ops;
         zipper.idx = 0;
-        zipper.isTransient = loc.isTransient;
-        zipper.siblings = wrapNode(e, loc.ops);
-        zipper.metrics = wrapNode(getMetrics(e), loc.ops);
+        zipper.isTransient = p.isTransient;
+        Object node = currentNode(p);
+        zipper.siblings = wrapNode(node, p.ops);
+        zipper.metrics = wrapNode(getMetrics(node), p.ops);
         return zipper;
       }
     }
   }
 
   static Zipper prevLeaf(Zipper loc) {
-    // todo fix
-    return null;
+    do {
+      loc = prev(loc);
+    }
+    while (!isLeaf(currentNode(loc)));
+    return loc;
   }
 
   //---------------------------------------------------------------------------
@@ -617,7 +627,7 @@ public class Rope {
   public static Zipper scan(Zipper loc, BiFunction<Object, Object, Boolean> pred) {
     while (loc != null) {
       Zipper nextLoc = null;
-      if (loc.isRoot) {
+      if (isRoot(loc)) {
         if (((Node)currentNode(loc)).children.isEmpty())
           return loc;
         nextLoc = loc;
@@ -634,7 +644,6 @@ public class Rope {
             zipper.isTransient = loc.isTransient;
             zipper.isChanged = loc.isChanged;
             zipper.parent = loc.parent;
-            zipper.isRoot = loc.isRoot;
             zipper.oacc = loc.oacc;
             zipper.acc = acc;
             zipper.idx = i;
@@ -715,7 +724,6 @@ public class Rope {
     zipper.isTransient = loc.isTransient;
     zipper.isChanged = true;
     zipper.parent = loc.parent;
-    zipper.isRoot = loc.isRoot;
     zipper.acc = loc.acc;
 
     if (loc.idx < newSiblings.size()) {

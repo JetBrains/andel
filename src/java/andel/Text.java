@@ -275,7 +275,7 @@ public class Text {
 
   public static Rope.Zipper scanToOffset(Rope.Zipper loc, long offset) {
     Rope.Zipper offsetLoc = Rope.scan(loc, offsetPredicate(offset));
-    if (offsetLoc.isRoot) {
+    if (Rope.isRoot(offsetLoc)) {
       return offsetLoc;
     }
     long o = nodeOffset(offsetLoc);
@@ -287,7 +287,7 @@ public class Text {
 
   public static Rope.Zipper scanToCharOffset(Rope.Zipper loc, long offset) {
     Rope.Zipper offsetLoc = Rope.scan(loc, charOffsetPredicate(offset));
-    if (offsetLoc.isRoot){
+    if (Rope.isRoot(offsetLoc)) {
       return offsetLoc;
     }
     long o = nodeCharOffset(offsetLoc);
@@ -479,15 +479,9 @@ public class Text {
     }
   }
 
-  public static void main(String[] args) {
-
-    CharSequence s1 = new Sequence(makeText("foobar"));
-    System.out.println(s1);
-    CharSequence s2 = s1.subSequence(2, 4);
-    System.out.println(s2);
-    CharSequence s3 = new Sequence(makeText(""));
-    System.out.println(s3);
-
+  public static long length(Rope.Node text) {
+    return ((TextMetrics)text.metrics).length;
   }
+
 
 }
