@@ -4,7 +4,8 @@
             [clojure.test.check :as tc]
             [clojure.test :refer :all]
             [andel.text :as text]
-            [andel.cursor :as cursor]))
+            [andel.cursor :as cursor])
+  (:import [andel Cursor$ImmutableCursor Cursor$TransientCursor Cursor Text]))
 
 (def single-operation-gen
   (g/one-of [(g/return :next)
@@ -61,24 +62,58 @@
             [(cursor/get-char prev-cursor) prev-cursor]
             [nil t-cursor])))
 
+(defn play-java-cursor [jcursor op]
+  (case op
+    :next (if-let [next-cursor (Cursor/next jcursor)]
+            [(.getChar next-cursor) next-cursor]
+            [nil jcursor])
+    :prev (if-let [prev-cursor (Cursor/prev jcursor)]
+            [(.getChar prev-cursor) prev-cursor]
+            [nil jcursor])))
+
+(defn play-java-tcursor [^Cursor$TransientCursor jtcursor op]
+  (case op
+    :next (if-let [next-cursor (.next jtcursor)]
+            [(.getChar next-cursor) next-cursor]
+            [nil jtcursor])
+    :prev (if-let [prev-cursor (.prev jtcursor)]
+            [(.getChar prev-cursor) prev-cursor]
+            [nil jtcursor])))
+
 (def cursor-test
   (prop/for-all
    [[t o] text-offset-pair-gen
     ops multiple-operations-gen]
    (let [cursor (cursor/make-cursor t o)
          t-cursor (cursor/transient cursor)
+         j-cursor (Cursor$ImmutableCursor.
+                    (Text/makeText (text/as-string t))
+                    o)
+         jt-cursor (Cursor$TransientCursor.
+                    (Text/makeText (text/as-string t))
+                    o)
          result (get
                  (reduce
-                  (fn [[naive cursor acc] op]
+                  (fn [[naive cursor t-cursor j-cursor jt-cursor acc] op]
                     (let [[cn naive'] (play-naive naive op)
                           [cc cursor'] (play-cursor cursor op)
                           [ct t-cursor'] (play-transient-cursor
-                                          t-cursor op)]
+                                          t-cursor op)
+                          [cj j-cursor'] (play-java-cursor
+                                          j-cursor op)
+                          [cjt jt-cursor'] (play-java-tcursor
+                                             jt-cursor op)]
                       [naive'
                        cursor'
-                       (and acc (= cc cn ct))]))
+                       t-cursor'
+                       j-cursor'
+                       jt-cursor'
+                       (and acc (= cc cn ct cj cjt))]))
                   [[t o]
-                   (cursor/make-cursor t o)
+                   cursor
+                   t-cursor
+                   j-cursor
+                   jt-cursor
                    true]
                   ops)
                  2)]

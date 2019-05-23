@@ -261,7 +261,7 @@ public class Text {
 
   public static Rope.Zipper<TextMetrics, String> scanToOffset(Rope.Zipper<TextMetrics, String> loc, long offset) {
     Rope.Zipper<TextMetrics, String> offsetLoc = Rope.scan(loc, offsetPredicate(offset));
-    if (offsetLoc.isRoot) {
+    if (Rope.isRoot(offsetLoc)) {
       return offsetLoc;
     }
     long o = nodeOffset(offsetLoc);
@@ -272,7 +272,7 @@ public class Text {
 
   public static Rope.Zipper<TextMetrics, String> scanToCharOffset(Rope.Zipper<TextMetrics, String> loc, long offset) {
     Rope.Zipper<TextMetrics, String> offsetLoc = Rope.scan(loc, charOffsetPredicate(offset));
-    if (offsetLoc.isRoot) {
+    if (Rope.isRoot(offsetLoc)) {
       return offsetLoc;
     }
     long o = nodeCharOffset(offsetLoc);
@@ -465,5 +465,9 @@ public class Text {
       Rope.Zipper<TextMetrics, String> toLoc = scanToCharOffset(fromLoc, to);
       return text(fromLoc, (int)(offset(toLoc) - offset(fromLoc)));
     }
+  }
+
+  public static long length(Rope.Node text) {
+    return ((TextMetrics)text.metrics).length;
   }
 }
