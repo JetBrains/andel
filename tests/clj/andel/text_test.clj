@@ -5,7 +5,7 @@
             [clojure.spec.test.alpha :as stest]
             [clojure.test :refer :all]
             [clojure.test.check :as tc])
-  (:import [andel Text Rope Rope$Zipper Rope$Node Text$TextMetrics Text$TextOps Rope$ZipperOps]))
+  (:import [andel Text Rope Rope$Zipper Rope$Node Text$TextMetrics Text$TextOps Text$Sequence Text$Sequence2 Rope$ZipperOps]))
 
 (defn codepoints-count [^String arg]
   (.codePointCount arg 0 (.length arg)))
@@ -193,6 +193,7 @@
   )
 
 (comment
+  (do
 
   (require '[onair.dev])
   (require '[andel.text])
@@ -220,11 +221,6 @@
 
   (def clj-tree (andel.text/make-text editor-impl))
   (def java-tree (Text/makeText editor-impl))
-
-  (= (play-naive editor-impl operation)
-     (andel.text/as-string (andel.text/play (andel.text/make-text editor-impl) operation))
-     (let [t (play (Text/makeText editor-impl) operation)]
-       (Text/text (Text/zipper t) (text-length t))))
 
   (defn make-random-accesses [text c]
     (let [length (.length ^String text)
@@ -271,10 +267,6 @@
                                            (.setAccessible true))]
       (fn [n] (.get f n))))
 
-  (->> (iterate head (my-node not-so-immaculate-text))
-       (take-while (fn [n] (= com.intellij.util.text.ImmutableText$CompositeNode (type n))))
-       (count))
-
   (defn text-clj [t [from len]]
     (-> (andel.text/zipper t)
         (andel.text/scan-to-offset from)
@@ -291,10 +283,40 @@
   (defn random-access [t impl a]
     (into [] (map (fn [a] (str (impl t a)))) a))
 
+    (defn iterate-char-seq [^CharSequence char-seq]
+      (let [length (.length char-seq)]
+        (loop [i 0]
+          (when (< i length)
+            (.charAt char-seq i)
+            (recur (inc i))))))
+    ;; eval here
+    )
+
+  (= (play-naive editor-impl operation)
+     (andel.text/as-string (andel.text/play (andel.text/make-text editor-impl) operation))
+     (let [t (play (Text/makeText editor-impl) operation)]
+       (Text/text (Text/zipper t) (text-length t)))
+     (let [t (play-transient (Text/makeText editor-impl) operation)]
+       (Text/text (Text/zipper t) (text-length t))))
+
+  (->> (iterate head (my-node not-so-immaculate-text))
+       (take-while (fn [n] (= com.intellij.util.text.ImmutableText$CompositeNode (type n))))
+       (count))
+
   (let [as (make-random-accesses editor-impl 10)]
     (= (random-access clj-tree text-clj as)
        (random-access java-tree text-java as)
        (random-access immaculate-text text-intellij as)))
+
+  (let [ts (Text$Sequence. java-tree)
+        len (.length ts)]
+    (and (= len (.length editor-impl))
+         (loop [i 0]
+           (if (< i len)
+             (do
+               (assert (= (.charAt ^String editor-impl i) (.charAt ts i)))
+               (recur (inc i)))
+             true))))
 
   (do
     (do
@@ -320,6 +342,10 @@
       (onair.dev/benchmark
        (play java-tree operation))
 
+      (prn "JAVA VERSION TRANSIENT")
+      (onair.dev/benchmark
+       (play-transient java-tree operation))
+
       (prn "IMMUTABLE TEXT")
       (onair.dev/benchmark
        (play-intellij not-so-immaculate-text operation)))
@@ -336,6 +362,41 @@
 
       (prn "IMMUTABLE TEXT")
       (onair.dev/benchmark
-        (random-access not-so-immaculate-text text-intellij random-accesses))))
+        (random-access not-so-immaculate-text text-intellij random-accesses)))
+    (do
+      (prn "CHAR SEQUENCE")
+      (prn "CLJ VERSION")
+      (onair.dev/benchmark
+        (iterate-char-seq (andel.text/text->char-seq clj-tree)))
+
+      (prn "JAVA VERSION")
+      (onair.dev/benchmark
+        (iterate-char-seq (Text$Sequence. java-tree)))
+
+      (prn "JAVA VERSION WITHOUT TRANSIENTCE")
+      (onair.dev/benchmark
+        (iterate-char-seq (Text$Sequence2. java-tree)))
+
+      (prn "IMMUTABLE TEXT")
+      (onair.dev/benchmark
+       (iterate-char-seq not-so-immaculate-text))))
+
+  "ITERATE CHAR SEQUENCE"
+  "CLJ VERSION"
+  Execution time mean : 13.998987 ms
+  Execution time std-deviation : 216.218613 µs
+  Execution time lower quantile : 13.719452 ms ( 2.5%)
+  "JAVA VERSION"
+  Execution time mean : 2.180040 ms
+  Execution time std-deviation : 111.428787 µs
+  Execution time lower quantile : 2.093185 ms ( 2.5%)
+  "JAVA VERSION WITHOUT TRANSIENTCE"
+  Execution time mean : 2.138835 ms
+  Execution time std-deviation : 54.539280 µs
+  Execution time lower quantile : 2.096352 ms ( 2.5%)
+  "IMMUTABLE TEXT"
+  Execution time mean : 1.244878 ms
+  Execution time std-deviation : 39.177076 µs
+  Execution time lower quantile : 1.221052 ms ( 2.5%)
 
   )

@@ -212,12 +212,17 @@ public class Text {
     }
   }
 
+  //TODO it's off by one, isn't it?
   public static BiFunction<TextMetrics, TextMetrics, Boolean> offsetPredicate(long offset) {
-    return (acc, next) -> offset <= acc.add(next).length;
+    return (acc, next) -> offset <= acc.length + next.length;
   }
 
   public static BiFunction<TextMetrics, TextMetrics, Boolean> charOffsetPredicate(long offset) {
-    return (acc, next) -> offset <= acc.add(next).charsCount;
+    return (acc, next) -> offset <= acc.charsCount + next.charsCount;
+  }
+
+  public static BiFunction<TextMetrics, TextMetrics, Boolean> byCharOffsetExclusive(int offset) {
+    return (o, o2) -> o.charsCount <= offset && offset < o.charsCount + o2.charsCount;
   }
 
   public static long offset(Rope.Zipper<TextMetrics, String> loc) {
@@ -420,10 +425,6 @@ public class Text {
     }
   }
 
-  public static BiFunction<TextMetrics, TextMetrics, Boolean> byCharOffsetExclusive(int offset, ZipperOps<TextMetrics, String> ops) {
-    return (o, o2) -> offset <= ops.rf(o, o2).charsCount;
-  }
-
   public static class Sequence implements CharSequence {
 
     Rope.Node<TextMetrics> root;
@@ -437,8 +438,8 @@ public class Text {
       this.root = root;
       this.from = from;
       this.to = to;
-      Rope.Zipper<TextMetrics, String> z = zipper(root);
-      this.zipper = Rope.scan(z, byCharOffsetExclusive(from, z.ops));
+      Rope.Zipper<TextMetrics, String> z = Rope.toTransient(zipper(root));
+      this.zipper = Rope.scan(z, byCharOffsetExclusive(from));
     }
 
     public Sequence(Rope.Node<TextMetrics> root) {
@@ -452,35 +453,31 @@ public class Text {
 
     @Override
     public char charAt(int index) {
-      if (index > to - from)
-        throw new IndexOutOfBoundsException();
+      if (index > to - from || index < 0)
+        throw new IndexOutOfBoundsException("index:" + index + ", from:" + from + ", to:" + to);
 
       int absoluteCharOffset = from + index;
       int nodeCharOffset = (int)nodeCharOffset(zipper);
-
+      String currentChunk = Rope.leaf(zipper).data;
+      
       if (absoluteCharOffset < nodeCharOffset) {
-        Rope.Zipper<TextMetrics, String> rootLoc = zipper(root);
-        Rope.Zipper<TextMetrics, String> offsetZipper = Rope.scan(rootLoc, byCharOffsetExclusive(index, zipper.ops));
+        Rope.Zipper<TextMetrics, String> rootLoc = Rope.toTransient(zipper(root));
+        Rope.Zipper<TextMetrics, String> offsetZipper = Rope.scan(rootLoc, byCharOffsetExclusive(absoluteCharOffset));
         assert offsetZipper != null;
         this.zipper = offsetZipper;
-        String newChunk = Rope.leaf(zipper).data;
-        return newChunk.charAt(absoluteCharOffset - nodeCharOffset);
+        String newChunk = Rope.leaf(offsetZipper).data;
+        return newChunk.charAt(absoluteCharOffset - (int) nodeCharOffset(offsetZipper));
       }
-      String currentChunk = Rope.leaf(zipper).data;
-
-      if (absoluteCharOffset < nodeCharOffset + currentChunk.length()) {
+      else if (absoluteCharOffset < nodeCharOffset + currentChunk.length()) {
         return currentChunk.charAt(absoluteCharOffset - nodeCharOffset);
       }
-
-      if (nodeCharOffset + currentChunk.length() < absoluteCharOffset) {
-        Rope.Zipper<TextMetrics, String> offsetLoc = Rope.scan(zipper, byCharOffsetExclusive(index, zipper.ops));
+      else {
+        Rope.Zipper<TextMetrics, String> offsetLoc = Rope.scan(zipper, byCharOffsetExclusive(absoluteCharOffset));
         assert offsetLoc != null;
         this.zipper = offsetLoc;
-        String newChunk = Rope.leaf(zipper).data;
-        return newChunk.charAt(absoluteCharOffset - nodeCharOffset);
+        String newChunk = Rope.leaf(offsetLoc).data;
+        return newChunk.charAt(absoluteCharOffset - (int)nodeCharOffset(offsetLoc));
       }
-
-      throw new IndexOutOfBoundsException();
     }
 
     @Override
@@ -496,6 +493,7 @@ public class Text {
 
     @Override
     public String toString() {
+      //TODO  Index out of bounds : to = length, no such offset
       Rope.Zipper<TextMetrics, String> fromLoc = scanToCharOffset(zipper(root), from);
       Rope.Zipper<TextMetrics, String> toLoc = scanToCharOffset(fromLoc, to);
       return text(fromLoc, (int)(offset(toLoc) - offset(fromLoc)));
