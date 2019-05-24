@@ -92,7 +92,7 @@ public class Rope {
     }
   }
 
-  private static <T> ArrayList<T> singletonList(T object) {
+  public static <T> ArrayList<T> singletonList(T object) {
     ArrayList<T> l = new ArrayList<>(1);
     l.add(object);
     return l;
@@ -591,8 +591,8 @@ public class Rope {
         zipper.ops = p.ops;
         zipper.idx = 0;
         zipper.isTransient = loc.isTransient;
-        zipper.siblings = wrapNode(e, loc.ops);
-        zipper.metrics = wrapNode(metrics(e), loc.ops);
+        zipper.siblings = singletonList(e);
+        zipper.metrics = singletonList(metrics(e));
         return zipper;
       }
     }

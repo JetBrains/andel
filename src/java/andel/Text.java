@@ -248,7 +248,7 @@ public class Text {
 
   public static Rope.Node<TextMetrics> makeText(String s) {
     Rope.ZipperOps<TextMetrics, String> ops = TEXT_OPS;
-    return Rope.growTree(Rope.wrapNode(Rope.makeLeaf(s, ops), ops), ops);
+    return Rope.growTree(Rope.singletonList(Rope.makeLeaf(s, ops)), ops);
   }
 
   public static Rope.Zipper<TextMetrics, String> zipper(Rope.Node<TextMetrics> root) {
