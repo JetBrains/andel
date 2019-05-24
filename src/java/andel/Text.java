@@ -254,10 +254,7 @@ public class Text {
   @SuppressWarnings("unused")
   public static Rope.Node<TextMetrics> makeText(String s) {
     Rope.ZipperOps<TextMetrics, String> ops = TEXT_OPS;
-    Rope.Leaf<TextMetrics, String> leaf = Rope.makeLeaf(s, ops);
-    ArrayList<Object> children = new ArrayList<>(1);
-    children.add(leaf);
-    return Rope.growTree(children, ops);
+    return Rope.growTree(Rope.singletonList(Rope.makeLeaf(s, ops)), ops);
   }
 
   public static Rope.Zipper<TextMetrics, String> zipper(Rope.Node<TextMetrics> root) {

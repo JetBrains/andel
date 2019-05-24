@@ -100,7 +100,7 @@ public class Rope {
     }
   }
 
-  private static <T> ArrayList<T> singletonList(T object) {
+  public static <T> ArrayList<T> singletonList(T object) {
     ArrayList<T> l = new ArrayList<>(1);
     l.add(object);
     return l;
