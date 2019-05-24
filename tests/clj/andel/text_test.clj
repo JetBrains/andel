@@ -11,14 +11,26 @@
   (.codePointCount arg 0 (.length arg)))
 
 (defn play [t operation]
-  (Text/root (reduce (fn [^Rope$Zipper loc [code arg]]
-                  (case code
-                    :retain (Text/retain loc ^long arg)
-                    :insert (Text/insert loc ^String arg)
-                    :delete (Text/delete loc ^long (if (string? arg) (codepoints-count arg) arg))
-                    ))
-                (Text/zipper t)
-                operation)))
+  (Text/root
+   (reduce (fn [^Rope$Zipper loc [code arg]]
+             (case code
+               :retain (Text/retain loc ^long arg)
+               :insert (Text/insert loc ^String arg)
+               :delete (Text/delete loc ^long (if (string? arg) (codepoints-count arg) arg))
+               ))
+           (Text/zipper t)
+           operation)))
+
+(defn play-transient [t operation]
+  (Text/root
+   (reduce (fn [^Rope$Zipper loc [code arg]]
+             (case code
+               :retain (Text/retain loc ^long arg)
+               :insert (Text/insert loc ^String arg)
+               :delete (Text/delete loc ^long (if (string? arg) (codepoints-count arg) arg))
+               ))
+           (Rope/toTransient (Text/zipper t))
+           operation)))
 
 (defn op-frames-gen [size]
   (g/not-empty
@@ -93,31 +105,36 @@
 
 (defn make-text [text]
   (let [ops (Text$TextOps. 4 5)]
-    (Rope/growTree (Rope/wrapNode (Rope/makeLeaf text ops) ops) ops)))
+    (Rope/growTree (doto (java.util.ArrayList.)
+                         (.add (Rope/makeLeaf text ops))) ops)))
 
-(def play-test
+(defn play-test [play-impl]
   (prop/for-all [[text operation] operations-gen]
                 (try
-                  (let [t' (play (make-text text) operation)]
+                  (let [t' (play-impl (make-text text) operation)]
                     (= (Text/text (Text/zipper t') (text-length t'))
                        (play-naive text operation)))
                   (catch Throwable ex
                     (def my-ex ex)
                     false))))
 
-(def play-many-test
+(defn play-many-test [play-impl]
   (prop/for-all [[text operations] (operations-seq-gen 10)]
                 (try
-                  (let [t' (reduce play (make-text text) operations)]
+                  (let [t' (reduce play-impl (make-text text) operations)]
                     (= (Text/text (Text/zipper t') (text-length t'))
                        (reduce play-naive text operations)))
                   (catch Throwable ex
                     (def my-ex ex)
                     false))))
 
+(def transient-play-many)
+
 (deftest generative
-  (is (:result (tc/quick-check 5000 play-test)))
-  (is (:result (tc/quick-check 1000 play-many-test))))
+  (is (:result (tc/quick-check 3000 (play-test play))))
+  (is (:result (tc/quick-check 3000 (play-test play-transient))))
+  (is (:result (tc/quick-check 1000 (play-many-test play))))
+  (is (:result (tc/quick-check 1000 (play-many-test play-transient)))))
 
 (comment
 
@@ -141,31 +158,29 @@
      :idx      (.-idx zipper)
      :parent   (when-let [p (.-parent zipper)]
                  (zp p))
-     :root?    (.-isRoot zipper)
      :acc      (some-> (.-acc zipper) (mp))
-     :oacc     (some-> (.-oacc zipper) (mp))
-     :end?     (.-isEnd zipper)})
+     :oacc     (some-> (.-oacc zipper) (mp))})
 
   (def foo
-    [["0"
-    [[[:delete "0"]
-      [:retain 0]]]]])
+    [["0000000" [[ [:retain 1][:delete "000000"] [:insert "1"] [:retain 0]]]]])
+
+  (zp (-> (make-text "0000000000000000000000000001")
+          (Text/zipper)
+          (Rope/toTransient)
+          (Rope/downLeft)))
 
   (let [[[text operations]] foo
         t                  (make-text text)
-        t'                 (reduce play t operations)]
+        t'                 (reduce play-transient t operations)]
     {:before text
      :operations operations
      :after (Text/text (Text/zipper t') (text-length t'))
      :should-be (reduce play-naive text operations)})
 
   (zp
-   (-> (make-text "00000000000000000")
+   (-> (make-text "0000000000")
        (Text/zipper)
-       (Text/insert "0")
-       (Text/delete (count "00000000000000000"))
-       (Text/insert "1")
-       (Text/root)))
+       (Text/retain 10)))
 
   (require '[andel.text :as text])
   (require '[andel.tree :as tree])
@@ -173,13 +188,14 @@
   (into {}
          (-> (text/make-text "a")
              (text/zipper)
-             (text/delete 1)
-             (text/insert "b")))
+             (text/retain 1)))
 
   )
 
 (comment
 
+  (require '[onair.dev])
+  (require '[andel.text])
   (require '[clojure.test.check.rose-tree :as rose])
   (require '[clojure.test.check.random :as random])
 
@@ -202,9 +218,6 @@
 
   (def operation (make-operation editor-impl))
 
-  (require '[onair.dev])
-  (require '[andel.text])
-
   (def clj-tree (andel.text/make-text editor-impl))
   (def java-tree (Text/makeText editor-impl))
 
@@ -212,8 +225,6 @@
      (andel.text/as-string (andel.text/play (andel.text/make-text editor-impl) operation))
      (let [t (play (Text/makeText editor-impl) operation)]
        (Text/text (Text/zipper t) (text-length t))))
-
-  (def operation2 (make-operation (play-naive editor-impl operation)))
 
   (defn make-random-accesses [text c]
     (let [length (.length ^String text)
@@ -326,18 +337,5 @@
       (prn "IMMUTABLE TEXT")
       (onair.dev/benchmark
         (random-access not-so-immaculate-text text-intellij random-accesses))))
-
-  (defn calculate-codepoints [^String s]
-     (.codePointCount s 0 (.length s)))
-
-  (onair.dev/benchmark
-   (calculate-codepoints editor-impl))
-
-
-  (onair.dev/profile (Text/makeText editor-impl))
-
-  (onair.dev/profile-with-interval 10000
-   (random-access java-tree text-java random-accesses))
-
 
   )

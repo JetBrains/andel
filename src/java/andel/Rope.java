@@ -9,7 +9,6 @@ public class Rope {
 
   public static class Node<Metrics> {
     public ArrayList<Object> children;
-    // store precalculated accumulator values in childrenMetrics to use binary search
     public Metrics metrics;
     public ArrayList<Metrics> childrenMetrics;
 
@@ -52,10 +51,12 @@ public class Rope {
     int splitThreshold();
   }
 
-  public static class Zipper<Metrics, Data> implements Cloneable {
+  public static class Zipper<Metrics, Data> {
     public ZipperOps<Metrics, Data> ops;
 
     public Zipper<Metrics, Data> parent;
+
+    //TODO why not use arrays?
     public ArrayList<Object> siblings;
     public ArrayList<Metrics> metrics;
     public int idx = 0;
@@ -65,18 +66,25 @@ public class Rope {
 
     public boolean isChanged = false;
     public boolean isTransient = false;
-    //public boolean isRoot = false; // suspiciously useless flag
 
     public Zipper() { }
 
-    @Override
-    public Zipper clone() {
-      try {
-        return (Zipper)super.clone();
-      }
-      catch (CloneNotSupportedException e) {
-        throw new RuntimeException(e);
-      }
+    public void copyTo(Zipper<Metrics, Data> that) {
+      that.ops = this.ops;
+      that.parent = this.parent;
+      that.siblings = this.siblings;
+      that.metrics = this.metrics;
+      that.idx = this.idx;
+      that.acc = this.acc;
+      that.oacc = this.oacc;
+      that.isChanged = this.isChanged;
+      that.isTransient = this.isTransient;
+    }
+
+    public Zipper<Metrics, Data> copy() {
+      Zipper<Metrics, Data> zipper = new Zipper<>();
+      this.copyTo(zipper);
+      return zipper;
     }
 
     public static <Metrics, Data> Zipper<Metrics, Data> zipper(Node<Metrics> node, ZipperOps<Metrics, Data> ops) {
@@ -99,10 +107,12 @@ public class Rope {
   }
 
   public static <Metrics, Data> Node<Metrics> node(Zipper<Metrics, Data> loc) {
+    //noinspection unchecked
     return (Node<Metrics>)loc.siblings.get(loc.idx);
   }
 
   public static <Metrics, Data> Leaf<Metrics, Data> leaf(Zipper<Metrics, Data> loc) {
+    //noinspection unchecked
     return (Leaf<Metrics, Data>)loc.siblings.get(loc.idx);
   }
 
@@ -120,7 +130,11 @@ public class Rope {
     return loc.siblings.get(loc.idx) instanceof Node;
   }
 
-  public static boolean isRoot(Zipper loc){
+  public static boolean isLeaf(Zipper loc) {
+    return loc.siblings.get(loc.idx) instanceof Leaf;
+  }
+
+  public static boolean isRoot(Zipper loc) {
     return loc.parent == null;
   }
 
@@ -335,67 +349,94 @@ public class Rope {
     return node;
   }
 
-  static boolean isMutable(Zipper loc) {
+  static boolean isChildrenMutable(Zipper loc) {
     return loc.isTransient && loc.isChanged;
   }
 
-  public static <Metrics, Data> Zipper<Metrics, Data> replace(Zipper<Metrics, Data> loc, Object node) {
-    Zipper<Metrics, Data> copy = loc.clone();
-    copy.isChanged = true;
-    if (isMutable(copy)) {
-      copy.siblings.set(copy.idx, node);
+  public static <Metrics, Data> Zipper<Metrics, Data> toTransient(Zipper<Metrics, Data> zipper) {
+    if (zipper.isTransient) {
+      return zipper;
     }
     else {
-      ArrayList<Object> siblingsCopy = (ArrayList<Object>)copy.siblings.clone();
-      ArrayList<Metrics> metricsCopy = (ArrayList<Metrics>)copy.metrics.clone();
-      siblingsCopy.set(copy.idx, node);
-      metricsCopy.set(copy.idx, (Metrics)metrics(node));
-      copy.siblings = siblingsCopy;
-      copy.metrics = metricsCopy;
+      Zipper<Metrics, Data> copy = zipper.copy();
+      copy.isTransient = true;
+      return copy;
     }
-    return copy;
+  }
+
+  public static <Metrics, Data> Zipper<Metrics, Data> toPersistent(Zipper<Metrics, Data> zipper) {
+    zipper.isTransient = false;
+    return zipper;
+  }
+
+  public static <Metrics, Data> Zipper<Metrics, Data> replace(Zipper<Metrics, Data> zipper, Object node) {
+    ArrayList<Object> siblings = isChildrenMutable(zipper) ? zipper.siblings : (ArrayList<Object>)zipper.siblings.clone();
+    ArrayList<Metrics> metrics = isChildrenMutable(zipper) ? zipper.metrics : (ArrayList<Metrics>)zipper.metrics.clone();
+    siblings.set(zipper.idx, node);
+    metrics.set(zipper.idx, (Metrics)metrics(node));
+
+    Zipper<Metrics, Data> result = zipper.isTransient ? zipper : zipper.copy();
+    result.isChanged = true;
+    result.siblings = siblings;
+    result.metrics = metrics;
+    return result;
   }
 
   public static <Metrics, Data> Zipper<Metrics, Data> up(Zipper<Metrics, Data> loc) {
     if (loc.isChanged) {
       if (loc.parent == null) {
-        Zipper<Metrics, Data> zipper = new Zipper<>();
-        zipper.ops = loc.ops;
-        zipper.isTransient = loc.isTransient;
-        zipper.idx = 0;
+        Zipper<Metrics, Data> result = loc.isTransient ? loc : loc.copy();
+        result.ops = loc.ops;
+        result.idx = 0;
+        result.acc = null;
+        result.oacc = null;
+        result.isChanged = false;  // this way we break recursion in root
+        //TODO move tree growth code to root?
         Node<Metrics> node = shrinkTree(growTree(singletonList(node(loc)), loc.ops));
-        zipper.siblings = singletonList(node);
-        zipper.metrics = singletonList(node.metrics);
-//        zipper.isRoot = true;
-        return zipper;
+        result.siblings = singletonList(node);
+        result.metrics = singletonList(node.metrics);
+        return result;
       }
       else {
+        // TODO can reuse metrics from loc.metrics if children are balanced
         return replace(loc.parent, makeNode(balanceChildren(loc.siblings, loc.ops), loc.ops));
       }
     }
     else {
+      if (loc.parent != null) {
+        if (loc.isTransient && !loc.parent.isTransient) {
+          return toTransient(loc.parent);
+        }
+        //TODO can avoid allocation
+        //result.copyTo(input);
+        //input.isTransient = true;
+        //return input;
+
+        if (!loc.isTransient && loc.parent.isTransient) {
+          return toPersistent(loc.parent);
+        }
+      }
       return loc.parent;
     }
+  }
+
+  public static boolean hasRight(Zipper zipper) {
+    return zipper.idx < zipper.siblings.size() - 1;
   }
 
   /*
    * moves to next direct sibling and adds metrics of current node to accumulator
    * returns null if it is last child
    * */
-  public static <Metrics, Data> Zipper<Metrics, Data> right(Zipper<Metrics, Data> loc) {
-    if (loc.idx < loc.siblings.size() - 1) {
-      Zipper<Metrics, Data> zipper = new Zipper<>();
-      zipper.ops = loc.ops;
-      zipper.idx = loc.idx + 1;
-      zipper.siblings = loc.siblings;
-      zipper.metrics = loc.metrics;
-      zipper.acc = loc.acc == null
-                   ? loc.metrics.get(loc.idx)
-                   : loc.ops.rf(loc.acc, loc.metrics.get(loc.idx));
-      zipper.oacc = null;
-      zipper.parent = loc.parent;
-      zipper.isChanged = loc.isChanged;
-      return zipper;
+  public static <Metrics, Data> Zipper<Metrics, Data> right(Zipper<Metrics, Data> zipper) {
+    if (zipper.idx < zipper.siblings.size() - 1) {
+      Zipper<Metrics, Data> result = zipper.isTransient ? zipper : zipper.copy();
+      result.acc = zipper.acc == null
+                   ? zipper.metrics.get(zipper.idx)
+                   : zipper.ops.rf(zipper.acc, zipper.metrics.get(zipper.idx));
+      result.idx = zipper.idx + 1;
+      result.oacc = null;
+      return result;
     }
     return null;
   }
@@ -404,21 +445,22 @@ public class Rope {
    * moves to first child of current node
    * returns null for leaves and empty nodes
    * */
-  public static <Metrics, Data> Zipper<Metrics, Data> downLeft(Zipper<Metrics, Data> loc) {
-    if (isBranch(loc)) {
-      Node<Metrics> n = node(loc);
+  public static <Metrics, Data> Zipper<Metrics, Data> downLeft(Zipper<Metrics, Data> zipper) {
+    if (isBranch(zipper)) {
+      Node<Metrics> n = node(zipper);
       if (n.children.isEmpty()) {
         return null;
       }
-      Zipper<Metrics, Data> zipper = new Zipper<>();
-      zipper.ops = loc.ops;
-      zipper.siblings = n.children;
-      zipper.metrics = n.childrenMetrics;
-      zipper.acc = loc.acc;
-      zipper.oacc = null;
-      zipper.idx = 0;
-      zipper.parent = loc;
-      return zipper;
+      Zipper<Metrics, Data> result = new Zipper<>();
+      result.ops = zipper.ops;
+      result.siblings = n.children;
+      result.metrics = n.childrenMetrics;
+      result.acc = zipper.acc;
+      result.oacc = null;
+      result.idx = 0;
+      result.parent = zipper;
+      result.isTransient = zipper.isTransient;
+      return result;
     }
     return null;
   }
@@ -429,19 +471,22 @@ public class Rope {
    *
    * CAUTION: drops accumulated position
    * */
-  public static <Metrics, Data> Zipper<Metrics, Data> downRight(Zipper<Metrics, Data> loc) {
-    if (isBranch(loc)) {
-      Node<Metrics> n = node(loc);
+  public static <Metrics, Data> Zipper<Metrics, Data> downRight(Zipper<Metrics, Data> zipper) {
+    if (isBranch(zipper)) {
+      Node<Metrics> n = node(zipper);
       if (n.children.isEmpty()) {
         return null;
       }
-      Zipper<Metrics, Data> zipper = new Zipper<>();
-      zipper.ops = loc.ops;
-      zipper.siblings = n.children;
-      zipper.metrics = n.childrenMetrics;
-      zipper.idx = n.children.size() - 1;
-      zipper.parent = loc;
-      return zipper;
+      Zipper<Metrics, Data> result = new Zipper<>();
+      result.ops = zipper.ops;
+      result.siblings = n.children;
+      result.metrics = n.childrenMetrics;
+      result.idx = n.children.size() - 1;
+      result.acc = null;
+      result.oacc = null;
+      result.parent = zipper;
+      result.isTransient = zipper.isTransient;
+      return result;
     }
     return null;
   }
@@ -452,7 +497,7 @@ public class Rope {
   }
 
 
-  public static boolean hasNext(Zipper loc) {
+  public static <Metrics, Data> boolean hasNext(Zipper<Metrics, Data> loc) {
     if (loc.parent == null && node(loc).children.size() > 0) {
       return true;
     }
@@ -460,7 +505,7 @@ public class Rope {
     return isBranch(loc) || !isRightmost(loc);
   }
 
-  public static boolean hasPrev(Zipper loc) {
+  public static <Metrics, Data> boolean hasPrev(Zipper<Metrics, Data> loc) {
     if (loc.parent == null && node(loc).children.size() > 0) {
       return true;
     }
@@ -468,207 +513,150 @@ public class Rope {
     return isBranch(loc) || !isLeftmost(loc);
   }
 
-  public static <Metrics, Data> Zipper<Metrics, Data> next(Zipper<Metrics, Data> loc) {
-    if (isBranch(loc)) {
-      Zipper<Metrics, Data> df = downLeft(loc);
-      if (df != null) {
-        return df;
-      }
+  public static <Metrics, Data> Zipper<Metrics, Data> next(Zipper<Metrics, Data> zipper) {
+    assert hasNext(zipper);
+    if (isBranch(zipper)) {
+      return downLeft(zipper);
     }
 
-    Zipper<Metrics, Data> right = right(loc);
-    if (right != null) {
-      return right;
-    }
-
-    if (isRightmost(loc)) {
+    if (isRightmost(zipper)) {
       throw new NoSuchElementException();
     }
 
-    Zipper<Metrics, Data> p = loc;
+    boolean isTransient = zipper.isTransient;
+    Zipper<Metrics, Data> p = toTransient(zipper);
     while (true) {
-      Zipper<Metrics, Data> up = up(p);
-      if (up == null) {
-        Zipper<Metrics, Data> zipper = new Zipper<>();
-        zipper.ops = p.ops;
-        zipper.idx = 0;
-        zipper.isTransient = p.isTransient;
-        Node<Metrics> node = node(p);
-        zipper.siblings = singletonList(node);
-        zipper.metrics = singletonList((Metrics)metrics(node));
-        return zipper;
+      Zipper<Metrics, Data> r = right(p);
+      if (r != null) {
+        return isTransient ? r : toPersistent(r);
       }
       else {
-        Zipper<Metrics, Data> r = right(up);
-        if (r != null) {
-          return r;
-        }
-        p = up;
+        p = up(p);
       }
     }
   }
 
-  public static <Metrics, Data> Zipper<Metrics, Data> skip(Zipper<Metrics, Data> loc) {
-    Zipper<Metrics, Data> right = right(loc);
-    if (right != null) {
-      return right;
-    }
-
-    if (isRightmost(loc)) {
+  public static <Metrics, Data> Zipper<Metrics, Data> skip(Zipper<Metrics, Data> zipper) {
+    assert hasNext(zipper);
+    if (isRightmost(zipper)) {
       throw new NoSuchElementException();
     }
 
-    Zipper<Metrics, Data> p = loc;
+    boolean isTransient = zipper.isTransient;
+    Zipper<Metrics, Data> p = toTransient(zipper);
     while (true) {
-      Zipper<Metrics, Data> up = up(p);
-      if (up == null) {
-        Zipper<Metrics, Data> zipper = new Zipper<>();
-        zipper.ops = p.ops;
-        zipper.idx = 0;
-        zipper.isTransient = p.isTransient;
-        Node<Metrics> node = node(p);
-        zipper.siblings = singletonList(node);
-        zipper.metrics = singletonList((Metrics)metrics(node));
-        return zipper;
+      Zipper<Metrics, Data> r = right(p);
+      if (r != null) {
+        return isTransient ? r : toPersistent(r);
       }
       else {
-        Zipper<Metrics, Data> r = right(up);
-        if (r != null) {
-          return r;
-        }
-        p = up;
+        p = up(p);
       }
     }
   }
 
-  public static Zipper left(Zipper loc) {
-    if (0 < loc.idx) {
-      Zipper new_loc = new Zipper();
-      new_loc.ops = loc.ops;
-      new_loc.parent = loc.parent;
-      new_loc.siblings = loc.siblings;
-      new_loc.metrics = loc.metrics;
-      new_loc.isChanged = loc.isChanged;
-      new_loc.isTransient = loc.isTransient;
-      new_loc.idx = loc.idx - 1;
-      new_loc.acc = null; // acc is removed!
-      new_loc.oacc = null; // acc is removed!
-      return new_loc;
+  public static <Metrics, Data> Zipper<Metrics, Data> left(Zipper<Metrics, Data> zipper) {
+    if (0 < zipper.idx) {
+      Zipper<Metrics, Data> result = zipper.isTransient ? zipper : zipper.copy();
+      result.idx = zipper.idx - 1;
+      result.acc = null; // acc is removed!
+      result.oacc = null; // acc is removed!
+      return result;
     }
     return null;
   }
 
-  public static Zipper prev(Zipper loc) {
-    if (isBranch(loc)) {
-      Zipper dr = downRight(loc);
+  public static <Metrics, Data> Zipper<Metrics, Data> prev(Zipper<Metrics, Data> zipper) {
+    if (isBranch(zipper)) {
+      Zipper<Metrics, Data> dr = downRight(zipper);
       if (dr != null) {
         return dr;
       }
     }
 
-    Zipper left = left(loc);
-    if (left != null) {
-      return left;
-    }
-
-    if (isLeftmost(loc)) {
+    if (isLeftmost(zipper)) {
       throw new NoSuchElementException();
     }
 
-    Zipper p = loc;
+    boolean isTransient = zipper.isTransient;
+    Zipper<Metrics, Data> p = toTransient(zipper);
     while (true) {
-      Zipper up = up(p);
-      if (up != null) {
-        Zipper l = left(up);
-        if (l != null) {
-          return l;
-        }
-        p = up;
+      Zipper<Metrics, Data> l = left(p);
+      if (l != null) {
+        return isTransient ? l : toPersistent(l);
       }
-      else {
-        Node e = node(loc);
-        Zipper zipper = new Zipper();
-        zipper.ops = p.ops;
-        zipper.idx = 0;
-        zipper.isTransient = loc.isTransient;
-        zipper.siblings = wrapNode(e, loc.ops);
-        zipper.metrics = wrapNode(metrics(e), loc.ops);
-        return zipper;
-      }
+      p = up(p);
     }
   }
 
-  static Zipper prevLeaf(Zipper loc) {
+  static <Metrics, Data> Zipper<Metrics, Data> prevLeaf(Zipper<Metrics, Data> zipper) {
+    boolean isTransient = zipper.isTransient;
+    zipper = toTransient(zipper);
     do {
-      loc = prev(loc);
+      zipper = prev(zipper);
     }
-    while (loc.siblings.get(loc.idx) instanceof Leaf);
-    return loc;
+    while (isBranch(zipper));
+    return isTransient ? zipper : toPersistent(zipper);
   }
 
-  public static <Metrics, Data> Zipper<Metrics, Data> nextLeaf(Zipper<Metrics, Data> loc) {
+  public static <Metrics, Data> Zipper<Metrics, Data> nextLeaf(Zipper<Metrics, Data> zipper) {
+    boolean isTransient = zipper.isTransient;
+    zipper = toTransient(zipper);
     do {
-      loc = next(loc);
+      zipper = next(zipper);
     }
-    while (isBranch(loc));
-    return loc;
+    while (isBranch(zipper));
+    return isTransient ? zipper : toPersistent(zipper);
   }
 
   /*
    * stops in a leaf or in root node if the tree is empty, should never return null
    */
-  public static <Metrics, Data> Zipper<Metrics, Data> scan(Zipper<Metrics, Data> loc, BiFunction<Metrics, Metrics, Boolean> pred) {
-    while (loc != null) {
-      Zipper<Metrics, Data> nextLoc = null;
-      if (isRoot(loc)) {
-        if (node(loc).children.isEmpty()) {
-          return loc;
-        }
-        nextLoc = loc;
-      }
-      else {
-        Metrics acc = loc.acc == null ? loc.ops.emptyMetrics() : loc.acc;
-        int siblingsCount = loc.siblings.size();
-        for (int i = loc.idx; i < siblingsCount; i++) {
-          if (pred.apply(acc, loc.metrics.get(i))) {
-            Zipper<Metrics, Data> zipper = new Zipper<>();
-            zipper.ops = loc.ops;
-            zipper.siblings = loc.siblings;
-            zipper.metrics = loc.metrics;
-            zipper.isTransient = loc.isTransient;
-            zipper.isChanged = loc.isChanged;
-            zipper.parent = loc.parent;
-            zipper.oacc = loc.oacc;
-            zipper.acc = acc;
-            zipper.idx = i;
-            nextLoc = zipper;
-            break;
-          }
-          else {
-            acc = loc.ops.rf(acc, loc.metrics.get(i));
-          }
+  public static <Metrics, Data> Zipper<Metrics, Data> scan(Zipper<Metrics, Data> zipper, BiFunction<Metrics, Metrics, Boolean> pred) {
+    // TODO return null even if it is empty root
+    if (isRoot(zipper) && node(zipper).children.isEmpty()) {
+      return zipper;
+    }
+    // fast path
+    if (isLeaf(zipper) && pred.apply(zipper.acc == null ? zipper.ops.emptyMetrics() : zipper.acc,
+                                     zipper.metrics.get(zipper.idx))) {
+      return zipper;
+    }
+
+    boolean isTransient = zipper.isTransient;
+    zipper = toTransient(zipper);
+    while (true) {
+
+      Zipper<Metrics, Data> found = null;
+      Metrics acc = zipper.acc == null ? zipper.ops.emptyMetrics() : zipper.acc;
+      int siblingsCount = zipper.siblings.size();
+
+      for (int i = zipper.idx; i < siblingsCount; ++i) {
+        if (pred.apply(acc, zipper.metrics.get(i))){
+          zipper.idx = i;
+          zipper.acc = acc;
+          found = zipper;
+          break;
+        } else {
+          acc = zipper.ops.rf(acc, zipper.metrics.get(i));
         }
       }
 
-      if (nextLoc == null) {
-        Zipper<Metrics, Data> u = up(loc);
-        if (isRightmost(u)) {
-          Zipper c = loc.clone();
-          c.idx = c.siblings.size() - 1;
-          return loc;
+      if (found == null) {
+        if (isRightmost(zipper)){
+          return null;
+        } else {
+          zipper = skip(zipper);
         }
-        loc = skip(u);
       }
       else {
-        if (isBranch(nextLoc)) {
-          loc = downLeft(nextLoc);
-        }
-        else {
-          return nextLoc;
+        if (isBranch(found)){
+          zipper = downLeft(found);
+        } else {
+          return isTransient ? found : toPersistent(found);
         }
       }
     }
-    throw new IllegalStateException();
   }
 
   private static <Metrics, Data> Metrics accumulateTillIdx(Zipper<Metrics, Data> zipper, int idx) {
@@ -687,62 +675,62 @@ public class Rope {
    * will move to end position of nearest left leaf if there is no `next` node to go
    * if parent node has no more children it will be removed recursively
    * */
-  public static <Metrics, Data> Zipper<Metrics, Data> remove(Zipper<Metrics, Data> loc) {
-    while (loc.siblings.size() == 1) {
-      if (loc.parent == null) {
-        return replace(loc, new Node<>(loc.ops.emptyMetrics(), new ArrayList<>(), new ArrayList<>()));
+  public static <Metrics, Data> Zipper<Metrics, Data> remove(Zipper<Metrics, Data> zipper) {
+    while (zipper.siblings.size() == 1) {
+      if (isRoot(zipper)) {
+        return replace(zipper, new Node<>(zipper.ops.emptyMetrics(), new ArrayList<>(), new ArrayList<>()));
       }
       else {
-        loc = up(loc);
+        zipper = up(zipper);
       }
     }
 
     ArrayList<Object> newSiblings;
     ArrayList<Metrics> newMetrics;
-    if (isMutable(loc)) {
-      newSiblings = loc.siblings;
-      newMetrics = loc.metrics;
+    if (isChildrenMutable(zipper)) {
+      newSiblings = zipper.siblings;
+      newMetrics = zipper.metrics;
     }
     else {
-      newSiblings = (ArrayList<Object>)loc.siblings.clone();
-      newMetrics = (ArrayList<Metrics>)loc.metrics.clone();
+      newSiblings = (ArrayList<Object>)zipper.siblings.clone();
+      newMetrics = (ArrayList<Metrics>)zipper.metrics.clone();
     }
-    newMetrics.remove(loc.idx);
-    newSiblings.remove(loc.idx);
+    newMetrics.remove(zipper.idx);
+    newSiblings.remove(zipper.idx);
 
+    boolean isTransient = zipper.isTransient;
+    Metrics initialAcc = zipper.acc;
+    int initialIdx = zipper.idx;
+    Zipper<Metrics, Data> result = isTransient ? zipper : zipper.copy();
+    result.siblings = newSiblings;
+    result.metrics = newMetrics;
+    result.isChanged = true;
 
-    Zipper<Metrics, Data> zipper = new Zipper<>();
-    zipper.ops = loc.ops;
-    zipper.siblings = newSiblings;
-    zipper.metrics = newMetrics;
-    zipper.isTransient = loc.isTransient;
-    zipper.isChanged = true;
-    zipper.parent = loc.parent;
-    zipper.acc = loc.acc;
-
-    if (loc.idx < newSiblings.size()) {
-      zipper.idx = loc.idx;
-      zipper.oacc = null;
-      return zipper;
+    if (zipper.idx < newSiblings.size()) {
+      result.idx = initialIdx;
+      result.oacc = null;
+      return result;
     }
     else {
-      zipper.idx = loc.idx - 1;
-      if (isRightmost(zipper)) {
-        Metrics acc = zipper.parent.acc;
-        for (int i = 0; i < zipper.idx; i++) {
-          acc = zipper.ops.rf(acc, zipper.metrics.get(i));
+      result.isTransient = true;
+      result.idx = initialIdx - 1;
+      if (isRightmost(result)) {
+        Metrics acc = result.parent.acc;
+        for (int i = 0; i < result.idx; i++) {
+          acc = result.ops.rf(acc, result.metrics.get(i));
         }
-        zipper.acc = accumulateTillIdx(zipper, zipper.idx);
-        while (isBranch(zipper)) {
-          zipper = downRight(zipper);
-          assert zipper != null;
-          zipper.acc = accumulateTillIdx(zipper, zipper.idx);
+        result.acc = accumulateTillIdx(result, result.idx);
+        while (isBranch(result)) {
+          result = downRight(result);
+          assert result != null;
+          result.acc = accumulateTillIdx(result, result.idx);
         }
-        zipper.oacc = loc.acc;
-        return zipper;
+        result.oacc = initialAcc;
+        return isTransient ? result : toPersistent(result);
       }
       else {
-        return skip(zipper);
+        Zipper<Metrics,Data> s = skip(result);
+        return isTransient ? s : toPersistent(s);
       }
     }
   }
