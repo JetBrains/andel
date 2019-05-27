@@ -151,6 +151,12 @@ public class Rope {
     }
   }
 
+  public static <Metrics, Data> Metrics metrics(Zipper<Metrics, Data> zipper) {
+    return (Metrics)metrics(isBranch(zipper)
+                   ? node(zipper)
+                   : leaf(zipper));
+  }
+
   public static boolean isRightmost(Zipper location) {
     return location.idx == location.siblings.size() - 1 && (location.parent == null || isRightmost(location.parent));
   }
@@ -365,7 +371,11 @@ public class Rope {
   }
 
   public static <Metrics, Data> Zipper<Metrics, Data> toPersistent(Zipper<Metrics, Data> zipper) {
-    zipper.isTransient = false;
+    Zipper<Metrics, Data> z = zipper;
+    while (z != null && z.isTransient){
+      z.isTransient = false;
+      z = z.parent;
+    }
     return zipper;
   }
 
@@ -403,20 +413,11 @@ public class Rope {
       }
     }
     else {
-      if (loc.parent != null) {
-        if (loc.isTransient && !loc.parent.isTransient) {
-          return toTransient(loc.parent);
-        }
-        //TODO can avoid allocation
-        //result.copyTo(input);
-        //input.isTransient = true;
-        //return input;
-
-        if (!loc.isTransient && loc.parent.isTransient) {
-          return toPersistent(loc.parent);
-        }
+      if (loc.parent != null && loc.isTransient && !loc.parent.isTransient) {
+        return toTransient(loc.parent);
+      } else {
+        return loc.parent;
       }
-      return loc.parent;
     }
   }
 
@@ -502,7 +503,7 @@ public class Rope {
       return true;
     }
 
-    return isBranch(loc) || !isRightmost(loc);
+    return !(isLeaf(loc) && isRightmost(loc));
   }
 
   public static <Metrics, Data> boolean hasPrev(Zipper<Metrics, Data> loc) {
@@ -734,4 +735,24 @@ public class Rope {
       }
     }
   }
+
+
+  public static <Metrics, Data> Zipper<Metrics, Data> insertLeft(Zipper<Metrics, Data> zipper, Object node) {
+    //assert !isRoot(zipper);
+    //Zipper<Metrics, Data> result = zipper.isTransient ? zipper : zipper.copy();
+    //
+    //ArrayList<Object> siblings = zipper.isTransient ? zipper
+    //
+    //result.siblings = zipper.isTransient
+    //                  ? zipper
+    //                  : null;
+    //result.idx = zipper.idx + 1;
+    //result.isChanged = true;
+    //result.acc = zipper.ops.rf(zipper.acc, (Metrics) metrics(node));
+    //
+    //return result;
+    return null;
+  }
+
+
 }
