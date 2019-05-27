@@ -30,6 +30,8 @@ public class Rope {
 
     Metrics emptyMetrics();
 
+    int splitThreshold();
+
     Metrics rf(Metrics m1, Metrics m2);
 
     default Metrics rf(List<Metrics> metrics) {
@@ -40,15 +42,21 @@ public class Rope {
       return r;
     }
 
-    boolean isLeafOverflown(Data leafData);
+    default boolean isLeafOverflown(Data leafData){
+      return false;
+    }
 
-    boolean isLeafUnderflown(Data leafData);
+    default boolean isLeafUnderflown(Data leafData){
+      return false;
+    }
 
-    Data mergeLeaves(Data leafData1, Data leafData22);
+    default Data mergeLeaves(Data leafData1, Data leafData22){
+      throw new UnsupportedOperationException();
+    }
 
-    List<Data> splitLeaf(Data leaf);
-
-    int splitThreshold();
+    default List<Data> splitLeaf(Data leaf){
+      throw new UnsupportedOperationException();
+    }
   }
 
   public static class Zipper<Metrics, Data> {
@@ -737,21 +745,20 @@ public class Rope {
   }
 
 
-  public static <Metrics, Data> Zipper<Metrics, Data> insertLeft(Zipper<Metrics, Data> zipper, Object node) {
-    //assert !isRoot(zipper);
-    //Zipper<Metrics, Data> result = zipper.isTransient ? zipper : zipper.copy();
-    //
-    //ArrayList<Object> siblings = zipper.isTransient ? zipper
-    //
-    //result.siblings = zipper.isTransient
-    //                  ? zipper
-    //                  : null;
-    //result.idx = zipper.idx + 1;
-    //result.isChanged = true;
-    //result.acc = zipper.ops.rf(zipper.acc, (Metrics) metrics(node));
-    //
-    //return result;
-    return null;
+  public static <Metrics, Data> Zipper<Metrics, Data> insertLeft(Zipper<Metrics, Data> zipper, Object newNode) {
+    assert !isRoot(zipper);
+    Zipper<Metrics, Data> result = zipper.isTransient ? zipper : zipper.copy();
+    ArrayList<Object> siblings = isChildrenMutable(zipper)
+                                 ? zipper.siblings
+                                 : (ArrayList<Object>)zipper.siblings.clone();
+    siblings.add(zipper.idx, newNode);
+
+    result.siblings = siblings;
+    result.idx = zipper.idx + 1;
+    result.isChanged = true;
+    result.acc = zipper.ops.rf(zipper.acc, (Metrics) metrics(newNode));
+    result.oacc = null;
+    return result;
   }
 
 

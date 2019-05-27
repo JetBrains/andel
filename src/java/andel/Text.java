@@ -212,7 +212,13 @@ public class Text {
     }
   }
 
-  //TODO it's off by one, isn't it?
+  /*
+  * this predicate may leave you in a leaf that does not contain exactly this offset
+  * it is used to scan to the end of the document
+  *
+  * <|> (0, 1, 2) (3, 4, 5) -> scanToOffset(3) -> (0, 1, 2 <|>) (3, 4 ,5)
+  *
+  * */
   public static BiFunction<TextMetrics, TextMetrics, Boolean> offsetPredicate(long offset) {
     return (acc, next) -> offset <= acc.length + next.length;
   }
@@ -410,6 +416,7 @@ public class Text {
         int charsStart = chunk.offsetByCodePoints(0, start);
         int charsEnd = chunk.offsetByCodePoints(0, end);
 
+        // TODO check if sb.append(string) is faster
         sb.append(chunk, charsStart, charsEnd);
         length -= (end - start);
         if (length > 0) {
@@ -490,7 +497,6 @@ public class Text {
 
     @Override
     public String toString() {
-      //TODO  Index out of bounds : to = length, no such offset
       Rope.Zipper<TextMetrics, String> fromLoc = scanToCharOffset(zipper(root), from);
       Rope.Zipper<TextMetrics, String> toLoc = scanToCharOffset(fromLoc, to);
       return text(fromLoc, (int)(offset(toLoc) - offset(fromLoc)));

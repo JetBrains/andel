@@ -5,7 +5,7 @@
             [clojure.spec.test.alpha :as stest]
             [clojure.test :refer :all]
             [clojure.test.check :as tc])
-  (:import [andel Text Rope Rope$Zipper Rope$Node Text$TextMetrics Text$TextOps Text$Sequence Text$Sequence2 Rope$ZipperOps]))
+  (:import [andel Text Rope Rope$Zipper Rope$Node Text$TextMetrics Text$TextOps Text$Sequence Rope$ZipperOps]))
 
 (defn codepoints-count [^String arg]
   (.codePointCount arg 0 (.length arg)))
@@ -189,6 +189,27 @@
          (-> (text/make-text "a")
              (text/zipper)
              (text/retain 1)))
+
+  )
+
+(comment
+  (def tree
+    (let [ops (Text$TextOps. 4 2)
+        text "0123456789abcdefgh"]
+    (Rope/growTree (doto (java.util.ArrayList.)
+                         (.add (Rope/makeLeaf text ops))) ops)))
+
+  (str (Text$Sequence. tree))
+
+  *e
+
+  (zp
+  (-> (Text/zipper tree)
+      (Text/scanToOffset 2)
+      (Text/text 1)))
+
+
+
 
   )
 
@@ -380,23 +401,5 @@
       (prn "IMMUTABLE TEXT")
       (onair.dev/benchmark
        (iterate-char-seq not-so-immaculate-text))))
-
-  "ITERATE CHAR SEQUENCE"
-  "CLJ VERSION"
-  Execution time mean : 13.998987 ms
-  Execution time std-deviation : 216.218613 µs
-  Execution time lower quantile : 13.719452 ms ( 2.5%)
-  "JAVA VERSION"
-  Execution time mean : 2.180040 ms
-  Execution time std-deviation : 111.428787 µs
-  Execution time lower quantile : 2.093185 ms ( 2.5%)
-  "JAVA VERSION WITHOUT TRANSIENTCE"
-  Execution time mean : 2.138835 ms
-  Execution time std-deviation : 54.539280 µs
-  Execution time lower quantile : 2.096352 ms ( 2.5%)
-  "IMMUTABLE TEXT"
-  Execution time mean : 1.244878 ms
-  Execution time std-deviation : 39.177076 µs
-  Execution time lower quantile : 1.221052 ms ( 2.5%)
 
   )
