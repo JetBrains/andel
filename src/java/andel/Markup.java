@@ -145,7 +145,7 @@ public class Markup {
   //}
   //
   //public AbsoluteMarker currentMarker(Rope.Zipper<MarkupMetrics, RelativeMarker> zipper) {
-  //  Rope.Leaf<MarkupMetrics, RelativeMarker> l = Rope.leaf(zipper);
+  //  Rope.Leaf<MarkupMetrics, RelativeMarker> l = Rope.data(zipper);
   //  RelativeMarker m = l.data;
   //  return new AbsoluteMarker(m.id,
   //                            treeBasisToOffset(absoluteFrom(zipper)),
@@ -197,7 +197,7 @@ public class Markup {
   //  );
   //
   //  Rope.Zipper<MarkupMetrics, RelativeMarker> zipper2 = Rope.insertLeft(insertLocation, relative);
-  //  return Rope.replace(zipper2, Rope.makeLeaf(Rope.leaf(zipper2).data.copyWithOffset(newROffset), zipper2.ops));
+  //  return Rope.replace(zipper2, Rope.makeLeaf(Rope.data(zipper2).data.copyWithOffset(newROffset), zipper2.ops));
   //}
 
 

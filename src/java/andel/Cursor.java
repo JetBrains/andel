@@ -3,7 +3,7 @@ package andel;
 public class Cursor {
 
   static String leafText(Rope.Zipper<Text.TextMetrics, String> zipper) {
-    return Rope.leaf(zipper).data;
+    return Rope.data(zipper);
   }
 
   static abstract class AbstractCursor {
@@ -58,7 +58,7 @@ public class Cursor {
                                  leafCharOffset,
                                  innerCharOffset,
                                  Text.offset(zipper),
-                                 Rope.leaf(zipper).data.length());
+                                 Rope.data(zipper).length());
     }
 
     public static ImmutableCursor create(Rope.Tree<Text.TextMetrics> text, long offset){
@@ -148,7 +148,7 @@ public class Cursor {
                                  leafCharOffset,
                                  innerCharOffset,
                                  Text.offset(zipper),
-                                 Rope.leaf(zipper).data.length());
+                                 Rope.data(zipper).length());
     }
 
     public static TransientCursor create(Rope.Tree<Text.TextMetrics> text, long offset) {

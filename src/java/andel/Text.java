@@ -11,13 +11,13 @@ public class Text {
 
   public final static class TextMetrics {
 
-    public final long length;
-    public final long geometricLength;
-    public final long linesCount;
-    public final long charsCount;
-    public final long newlinePrefixGeomLength;
-    public final long newlineSuffixGeomLength;
-    public final long maxLineLength;
+    public long length;
+    public long geometricLength;
+    public long linesCount;
+    public long charsCount;
+    public long newlinePrefixGeomLength;
+    public long newlineSuffixGeomLength;
+    public long maxLineLength;
 
     public TextMetrics(long length,
                        long geometricLength,
@@ -35,8 +35,6 @@ public class Text {
       this.maxLineLength = maxLineLength;
     }
 
-    public static final TextMetrics EMPTY = new TextMetrics();
-
     public TextMetrics() {
       this.length = 0;
       this.geometricLength = 0;
@@ -47,7 +45,7 @@ public class Text {
       this.maxLineLength = 0;
     }
 
-    public TextMetrics add(TextMetrics other) {
+    public void merge(TextMetrics other){
       long length = this.length + other.length;
       long geomLength = this.geometricLength + other.geometricLength;
       long linesCount = this.linesCount + other.linesCount;
@@ -60,14 +58,25 @@ public class Text {
       long newlineSuffixGeomLength = other.linesCount == 0
                                      ? this.newlineSuffixGeomLength + other.newlineSuffixGeomLength
                                      : other.newlineSuffixGeomLength;
+      this.length = length;
+      this.geometricLength = geomLength;
+      this.linesCount = linesCount;
+      this.charsCount = charsCount;
+      this.newlinePrefixGeomLength = newlinePrefixGeomLength;
+      this.newlineSuffixGeomLength = newlineSuffixGeomLength;
+      this.maxLineLength = maxLineLength;
+    }
 
-      return new TextMetrics(length,
-                             geomLength,
-                             linesCount,
-                             charsCount,
-                             newlinePrefixGeomLength,
-                             maxLineLength,
-                             newlineSuffixGeomLength);
+    public TextMetrics add(TextMetrics other) {
+      TextMetrics metrics = new TextMetrics(this.length,
+                                            this.geometricLength,
+                                            this.linesCount,
+                                            this.charsCount,
+                                            this.newlinePrefixGeomLength,
+                                            this.newlineSuffixGeomLength,
+                                            maxLineLength);
+      metrics.merge(other);
+      return metrics;
     }
   }
 
@@ -137,9 +146,11 @@ public class Text {
       return metricsTo(data, OffsetKind.Characters, data.length());
     }
 
+    private static final TextMetrics EMPTY_TEXT_METRICS = new TextMetrics();
+
     @Override
     public TextMetrics emptyMetrics() {
-      return TextMetrics.EMPTY;
+      return EMPTY_TEXT_METRICS;
     }
 
     @Override
@@ -147,24 +158,14 @@ public class Text {
       return o1.add(o2);
     }
 
-    //@Override
-    //public Object scanRf(Object o1, Object o2) {
-    //  TextMetrics m1 = (TextMetrics) o1;
-    //  TextMetrics m2 = (TextMetrics) o2;
-    //
-    //  long length = m1.length + m2.length;
-    //  long geomLength = m1.geometricLength + m2.geometricLength;
-    //  long linesCount = m1.linesCount + m2.linesCount;
-    //  long charsCount = m1.charsCount + m2.charsCount;
-    //
-    //  return new TextMetrics(length,
-    //                         geomLength,
-    //                         linesCount,
-    //                         charsCount,
-    //                         0,
-    //                         0,
-    //                         0);
-    //}
+    @Override
+    public TextMetrics rf(List<TextMetrics> metrics) {
+      TextMetrics acc = new TextMetrics();
+      for (TextMetrics metric : metrics) {
+        acc.merge(metric);
+      }
+      return acc;
+    }
 
     @Override
     public boolean isLeafOverflown(String leafData) {
@@ -213,7 +214,7 @@ public class Text {
   }
 
   /*
-  * this predicate may leave you in a leaf that does not contain exactly this offset
+  * this predicate may leave you in a data that does not contain exactly this offset
   * it is used to scan to the end of the document
   *
   * <|> (0, 1, 2) (3, 4, 5) -> scanToOffset(3) -> (0, 1, 2 <|>) (3, 4 ,5)
@@ -259,12 +260,11 @@ public class Text {
 
   @SuppressWarnings("unused")
   public static Rope.Tree<TextMetrics> makeText(String s, Rope.ZipperOps<TextMetrics, String> ops) {
-
-    Rope.Leaf<TextMetrics, String> leaf = new Rope.Leaf<>(s);
-    Rope.Node<TextMetrics> root = Rope.growTree(new Rope.Node<>(Rope.singletonList(leaf), Rope.singletonList(ops.calculateMetrics(leaf.data))), ops);
+    Rope.Node<TextMetrics> root = Rope.growTree(new Rope.Node<>(Rope.singletonList(s), Rope.singletonList(ops.calculateMetrics(s))), ops);
     return new Rope.Tree<>(root, ops.rf(root.metrics));
   }
 
+  @SuppressWarnings("unused")
   public static Rope.Tree<TextMetrics> makeText(String s){
     return makeText(s, TEXT_OPS);
   }
@@ -291,7 +291,7 @@ public class Text {
       return offsetLoc;
     }
     long o = nodeOffset(offsetLoc);
-    String s = Rope.leaf(offsetLoc).data;
+    String s = Rope.data(offsetLoc);
     offsetLoc.oacc = offsetLoc.acc.add(metricsTo(s, OffsetKind.CodePoints, offset - o));
     return offsetLoc;
   }
@@ -309,7 +309,7 @@ public class Text {
       return offsetLoc;
     }
     long o = nodeCharOffset(offsetLoc);
-    String s = Rope.leaf(offsetLoc).data;
+    String s = Rope.data(offsetLoc);
     offsetLoc.oacc = offsetLoc.acc.add(metricsTo(s, OffsetKind.Characters, offset - o));
     return offsetLoc;
   }
@@ -329,7 +329,7 @@ public class Text {
     Rope.Zipper<TextMetrics, String> leaf;
     Rope.Zipper<TextMetrics, String> branch = null;
 
-    // TODO i know that the only case when there is no leaf to insert is an empty tree
+    // TODO i know that the only case when there is no data to insert is an empty tree
 
     Rope.Zipper<TextMetrics, String> i = loc;
     while (i != null && Rope.isBranch(i)) {
@@ -342,7 +342,7 @@ public class Text {
       TextMetrics metrics = branch.ops.calculateMetrics(s);
       Rope.Zipper<TextMetrics, String> newRoot =
         Rope.replace(branch,
-                     new Rope.Node<>(Rope.singletonList(new Rope.Leaf<>(s)),
+                     new Rope.Node<>(Rope.singletonList(s),
                                      Rope.singletonList(metrics)),
                      metrics);
       return retain(newRoot, s.codePointCount(0, s.length()));
@@ -350,11 +350,11 @@ public class Text {
     else {
       int relCharOffset = (int)(charOffset(leaf) - nodeCharOffset(leaf));
       ZipperOps<TextMetrics, String> ops = leaf.ops;
-      String data = Rope.leaf(leaf).data;
+      String data = Rope.data(leaf);
       String newData = data.substring(0, relCharOffset)
         .concat(s)
         .concat(data.substring(relCharOffset));
-      return retain(Rope.replace(leaf, new Rope.Leaf<>(newData), ops.calculateMetrics(newData)),
+      return retain(Rope.replace(leaf, newData, ops.calculateMetrics(newData)),
                     s.codePointCount(0, s.length()));
     }
   }
@@ -370,7 +370,7 @@ public class Text {
       }
 
       long i = offset(loc);
-      String s = Rope.leaf(loc).data;
+      String s = Rope.data(loc);
       int relOffset = (int)(i - nodeOffset(loc));
       int chunkLength = s.codePointCount(0, s.length());
       int end = Math.min(chunkLength, relOffset + l);
@@ -383,7 +383,7 @@ public class Text {
       else {
         String news = s.substring(0, s.offsetByCodePoints(0, relOffset))
           .concat(s.substring(s.offsetByCodePoints(0, end)));
-        Rope.Zipper<TextMetrics, String> newLeaf = Rope.replace(loc, new Rope.Leaf<>(news), ops.calculateMetrics(news));
+        Rope.Zipper<TextMetrics, String> newLeaf = Rope.replace(loc, news, ops.calculateMetrics(news));
 
         if (end == chunkLength) {
           if (l == 0) {
@@ -417,7 +417,7 @@ public class Text {
       }
       else {
         long i = offset(loc);
-        String chunk = Rope.leaf(loc).data;
+        String chunk = Rope.data(loc);
         long chunkOffset = nodeOffset(loc);
         int start = (int)(i - chunkOffset);
         int end = (int)Math.min(Rope.metrics(loc).length, start + length);
@@ -454,6 +454,7 @@ public class Text {
       this.zipper = Rope.scan(z, byCharOffsetExclusive(from));
     }
 
+    @SuppressWarnings("unused")
     public Sequence(Rope.Tree<TextMetrics> root) {
       this(root, 0, (int)(root.metrics).charsCount);
     }
@@ -470,14 +471,14 @@ public class Text {
 
       int absoluteCharOffset = from + index;
       int nodeCharOffset = (int)nodeCharOffset(zipper);
-      String currentChunk = Rope.leaf(zipper).data;
+      String currentChunk = Rope.data(zipper);
       
       if (absoluteCharOffset < nodeCharOffset) {
         Rope.Zipper<TextMetrics, String> rootLoc = Rope.toTransient(zipper(root));
         Rope.Zipper<TextMetrics, String> offsetZipper = Rope.scan(rootLoc, byCharOffsetExclusive(absoluteCharOffset));
         assert offsetZipper != null;
         this.zipper = offsetZipper;
-        String newChunk = Rope.leaf(offsetZipper).data;
+        String newChunk = Rope.data(offsetZipper);
         return newChunk.charAt(absoluteCharOffset - (int) nodeCharOffset(offsetZipper));
       }
       else if (absoluteCharOffset < nodeCharOffset + currentChunk.length()) {
@@ -487,7 +488,7 @@ public class Text {
         Rope.Zipper<TextMetrics, String> offsetLoc = Rope.scan(zipper, byCharOffsetExclusive(absoluteCharOffset));
         assert offsetLoc != null;
         this.zipper = offsetLoc;
-        String newChunk = Rope.leaf(offsetLoc).data;
+        String newChunk = Rope.data(offsetLoc);
         return newChunk.charAt(absoluteCharOffset - (int)nodeCharOffset(offsetLoc));
       }
     }

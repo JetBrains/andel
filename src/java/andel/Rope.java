@@ -27,13 +27,6 @@ public class Rope {
     }
   }
 
-  public static class Leaf<Metrics, Data> {
-    public final Data data;
-    public Leaf(Data data){
-      this.data = data;
-    }
-  }
-
   public interface ZipperOps<Metrics, Data> {
 
     Metrics calculateMetrics(Data data);
@@ -129,9 +122,9 @@ public class Rope {
     return (Node<Metrics>)loc.siblings.get(loc.idx);
   }
 
-  public static <Metrics, Data> Leaf<Metrics, Data> leaf(Zipper<Metrics, Data> loc) {
+  public static <Metrics, Data> Data data(Zipper<Metrics, Data> loc) {
     //noinspection unchecked
-    return (Leaf<Metrics, Data>)loc.siblings.get(loc.idx);
+    return (Data)loc.siblings.get(loc.idx);
   }
 
   public static <Metrics, Data> Metrics currentAcc(Zipper<Metrics, Data> loc) {
@@ -149,7 +142,7 @@ public class Rope {
   }
 
   public static boolean isLeaf(Zipper loc) {
-    return loc.siblings.get(loc.idx) instanceof Leaf;
+    return !isBranch(loc);
   }
 
   public static boolean isRoot(Zipper loc) {
@@ -182,7 +175,7 @@ public class Rope {
     }
     else {
       for (Object child : children) {
-        if (ops.isLeafOverflown(((Leaf<Metrics, Data>)child).data)) {
+        if (ops.isLeafOverflown((Data)child)) {
           return true;
         }
       }
@@ -236,10 +229,10 @@ public class Rope {
         }
       } else {
         for (int i = 0; i < children.size(); i++) {
-          Leaf<Metrics, Data> child = (Leaf<Metrics, Data>)children.get(i);
-          if (ops.isLeafOverflown(child.data)) {
-            for (Data o : ops.splitLeaf(child.data)) {
-              newChildren.add(new Leaf<>(o));
+          Data child = (Data)children.get(i);
+          if (ops.isLeafOverflown(child)) {
+            for (Data o : ops.splitLeaf(child)) {
+              newChildren.add(o);
               newMetrics.add(ops.calculateMetrics(o));
             }
           }
@@ -265,7 +258,7 @@ public class Rope {
     }
     else {
       for (Object child : children) {
-        if (ops.isLeafUnderflown(((Leaf<Metrics, Data>)child).data)) {
+        if (ops.isLeafUnderflown((Data)child)) {
           return true;
         }
       }
@@ -330,10 +323,10 @@ public class Rope {
         newMetrics.add(leftMetrics);
       }
       else {
-        Data leftData = ((Leaf<Metrics, Data>)node.children.get(0)).data;
+        Data leftData = (Data)node.children.get(0);
         Metrics leftMetrics = node.metrics.get(0);
         for (int i = 1; i < node.children.size(); i++) {
-          Data rightData = ((Leaf<Metrics, Data>)node.children.get(i)).data;
+          Data rightData = (Data)node.children.get(i);
           Metrics rightMetrics = node.metrics.get(i);
           if (ops.isLeafUnderflown(leftData) || ops.isLeafUnderflown(rightData)) {
             Data mergedData = ops.mergeLeaves(leftData, rightData);
@@ -341,7 +334,7 @@ public class Rope {
               List<Data> split = ops.splitLeaf(mergedData);
               Data dataLeft = split.get(0);
               Data dataRight = split.get(1);
-              newChildren.add(new Leaf<>(dataLeft));
+              newChildren.add(dataLeft);
               newMetrics.add(ops.calculateMetrics(dataLeft));
               leftData = dataRight;
               leftMetrics = ops.calculateMetrics(dataRight);
@@ -352,13 +345,13 @@ public class Rope {
             }
           }
           else {
-            newChildren.add(new Leaf<>(leftData));
+            newChildren.add(leftData);
             newMetrics.add(leftMetrics);
             leftData = rightData;
             leftMetrics = rightMetrics;
           }
         }
-        newChildren.add(new Leaf<>(leftData));
+        newChildren.add(leftData);
         newMetrics.add(leftMetrics);
       }
       return new Node<>(newChildren, newMetrics);
@@ -652,7 +645,7 @@ public class Rope {
   }
 
   /*
-   * stops in a leaf or in root node if the tree is empty, should never return null
+   * stops in a data or in root node if the tree is empty, should never return null
    */
   public static <Metrics, Data> Zipper<Metrics, Data> scan(Zipper<Metrics, Data> zipper, BiFunction<Metrics, Metrics, Boolean> pred) {
     // TODO return null even if it is empty root
@@ -714,7 +707,7 @@ public class Rope {
    *
    * returns zipper pointing to right sibling of the deleted node
    * if the deleted node was rightest sibling zipper skips to `next` node
-   * will move to end position of nearest left leaf if there is no `next` node to go
+   * will move to end position of nearest left data if there is no `next` node to go
    * if parent node has no more children it will be removed recursively
    * */
   public static <Metrics, Data> Zipper<Metrics, Data> remove(Zipper<Metrics, Data> zipper) {
