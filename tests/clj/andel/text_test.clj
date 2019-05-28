@@ -100,13 +100,11 @@
         operations))])
    (g/tuple g/string-alphanumeric (g/vector (op-frames-gen size) 1 size))))
 
-(defn text-length [node]
-  (.-length ^Text$TextMetrics (Rope/metrics node)))
+(defn text-length [tree]
+  (Text/length tree))
 
 (defn make-text [text]
-  (let [ops (Text$TextOps. 4 5)]
-    (Rope/growTree (doto (java.util.ArrayList.)
-                         (.add (Rope/makeLeaf text ops))) ops)))
+  (Text/makeText text (Text$TextOps. 4 5)))
 
 (defn play-test [play-impl]
   (prop/for-all [[text operation] operations-gen]
@@ -393,10 +391,6 @@
       (prn "JAVA VERSION")
       (onair.dev/benchmark
         (iterate-char-seq (Text$Sequence. java-tree)))
-
-      (prn "JAVA VERSION WITHOUT TRANSIENTCE")
-      (onair.dev/benchmark
-        (iterate-char-seq (Text$Sequence2. java-tree)))
 
       (prn "IMMUTABLE TEXT")
       (onair.dev/benchmark

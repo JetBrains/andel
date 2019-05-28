@@ -61,7 +61,7 @@ public class Cursor {
                                  Rope.leaf(zipper).data.length());
     }
 
-    public static ImmutableCursor create(Rope.Node<Text.TextMetrics> text, long offset){
+    public static ImmutableCursor create(Rope.Tree<Text.TextMetrics> text, long offset){
       return create(Text.scanToOffset(Text.zipper(text), offset));
     }
   }
@@ -151,7 +151,7 @@ public class Cursor {
                                  Rope.leaf(zipper).data.length());
     }
 
-    public static TransientCursor create(Rope.Node<Text.TextMetrics> text, long offset) {
+    public static TransientCursor create(Rope.Tree<Text.TextMetrics> text, long offset) {
       return create(Text.scanToOffset(Text.zipper(text), offset));
     }
 

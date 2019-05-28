@@ -258,17 +258,23 @@ public class Text {
   }
 
   @SuppressWarnings("unused")
-  public static Rope.Node<TextMetrics> makeText(String s) {
-    Rope.ZipperOps<TextMetrics, String> ops = TEXT_OPS;
-    return Rope.growTree(Rope.singletonList(Rope.makeLeaf(s, ops)), ops);
+  public static Rope.Tree<TextMetrics> makeText(String s, Rope.ZipperOps<TextMetrics, String> ops) {
+
+    Rope.Leaf<TextMetrics, String> leaf = new Rope.Leaf<>(s);
+    Rope.Node<TextMetrics> root = Rope.growTree(new Rope.Node<>(Rope.singletonList(leaf), Rope.singletonList(ops.calculateMetrics(leaf.data))), ops);
+    return new Rope.Tree<>(root, ops.rf(root.metrics));
   }
 
-  public static Rope.Zipper<TextMetrics, String> zipper(Rope.Node<TextMetrics> root) {
-    return Rope.Zipper.zipper(root, TEXT_OPS);
+  public static Rope.Tree<TextMetrics> makeText(String s){
+    return makeText(s, TEXT_OPS);
+  }
+
+  public static Rope.Zipper<TextMetrics, String> zipper(Rope.Tree<TextMetrics> tree) {
+    return Rope.Zipper.zipper(tree, TEXT_OPS);
   }
 
   @SuppressWarnings("unused")
-  public static Rope.Node<TextMetrics> root(Rope.Zipper<TextMetrics, ?> loc) {
+  public static Rope.Tree<TextMetrics> root(Rope.Zipper<TextMetrics, ?> loc) {
     return Rope.root(loc);
   }
 
@@ -333,19 +339,22 @@ public class Text {
     leaf = i;
 
     if (leaf == null) {
-      ArrayList<Object> children = new ArrayList<>();
-      children.add(Rope.makeLeaf(s, branch.ops));
-      Rope.Zipper<TextMetrics, String> newRoot = Rope.replace(branch, Rope.makeNode(children, branch.ops));
+      TextMetrics metrics = branch.ops.calculateMetrics(s);
+      Rope.Zipper<TextMetrics, String> newRoot =
+        Rope.replace(branch,
+                     new Rope.Node<>(Rope.singletonList(new Rope.Leaf<>(s)),
+                                     Rope.singletonList(metrics)),
+                     metrics);
       return retain(newRoot, s.codePointCount(0, s.length()));
     }
     else {
       int relCharOffset = (int)(charOffset(leaf) - nodeCharOffset(leaf));
       ZipperOps<TextMetrics, String> ops = leaf.ops;
       String data = Rope.leaf(leaf).data;
-      return retain(Rope.replace(leaf, Rope.makeLeaf(data.substring(0, relCharOffset)
-                                                       .concat(s)
-                                                       .concat(data.substring(relCharOffset)),
-                                                     ops)),
+      String newData = data.substring(0, relCharOffset)
+        .concat(s)
+        .concat(data.substring(relCharOffset));
+      return retain(Rope.replace(leaf, new Rope.Leaf<>(newData), ops.calculateMetrics(newData)),
                     s.codePointCount(0, s.length()));
     }
   }
@@ -374,7 +383,7 @@ public class Text {
       else {
         String news = s.substring(0, s.offsetByCodePoints(0, relOffset))
           .concat(s.substring(s.offsetByCodePoints(0, end)));
-        Rope.Zipper<TextMetrics, String> newLeaf = Rope.replace(loc, Rope.makeLeaf(news, ops));
+        Rope.Zipper<TextMetrics, String> newLeaf = Rope.replace(loc, new Rope.Leaf<>(news), ops.calculateMetrics(news));
 
         if (end == chunkLength) {
           if (l == 0) {
@@ -408,11 +417,10 @@ public class Text {
       }
       else {
         long i = offset(loc);
-        Rope.Leaf<TextMetrics, String> leaf = Rope.leaf(loc);
-        String chunk = leaf.data;
+        String chunk = Rope.leaf(loc).data;
         long chunkOffset = nodeOffset(loc);
         int start = (int)(i - chunkOffset);
-        int end = (int)Math.min(leaf.metrics.length, start + length);
+        int end = (int)Math.min(Rope.metrics(loc).length, start + length);
         int charsStart = chunk.offsetByCodePoints(0, start);
         int charsEnd = chunk.offsetByCodePoints(0, end);
 
@@ -431,11 +439,11 @@ public class Text {
 
   public static class Sequence implements CharSequence {
 
-    Rope.Node<TextMetrics> root;
+    Rope.Tree<TextMetrics> root;
     Rope.Zipper<TextMetrics, String> zipper;
     final int from, to; // in chars
 
-    Sequence(Rope.Node<TextMetrics> root, int from, int to) {
+    Sequence(Rope.Tree<TextMetrics> root, int from, int to) {
       if (from < 0 || to > root.metrics.charsCount)
         throw new IllegalArgumentException();
 
@@ -446,7 +454,7 @@ public class Text {
       this.zipper = Rope.scan(z, byCharOffsetExclusive(from));
     }
 
-    public Sequence(Rope.Node<TextMetrics> root) {
+    public Sequence(Rope.Tree<TextMetrics> root) {
       this(root, 0, (int)(root.metrics).charsCount);
     }
 
@@ -503,7 +511,7 @@ public class Text {
     }
   }
 
-  public static long length(Rope.Node text) {
-    return ((TextMetrics)text.metrics).length;
+  public static long length(Rope.Tree<TextMetrics> text) {
+    return text.metrics.length;
   }
 }
