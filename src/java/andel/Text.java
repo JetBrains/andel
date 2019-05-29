@@ -214,7 +214,7 @@ public class Text {
   }
 
   /*
-  * this predicate may leave you in a data that does not contain exactly this offset
+  * this predicate may leave you in a leaf that does not contain exactly this offset
   * it is used to scan to the end of the document
   *
   * <|> (0, 1, 2) (3, 4, 5) -> scanToOffset(3) -> (0, 1, 2 <|>) (3, 4 ,5)

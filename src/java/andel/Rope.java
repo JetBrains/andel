@@ -18,8 +18,8 @@ public class Rope {
   }
 
   public static class Node<Metrics> {
-    public ArrayList<Object> children;
-    public ArrayList<Metrics> metrics;
+    public final ArrayList<Object> children;
+    public final ArrayList<Metrics> metrics;
 
     public Node(ArrayList<Object> children, ArrayList<Metrics> childrenMetrics) {
       this.children = children;
@@ -265,8 +265,14 @@ public class Rope {
     }
     return false;
   }
+  static <Metrics> Node<Metrics> createNode(int capacity){
+    return new Node<>(new ArrayList<>(capacity), new ArrayList<>(capacity));
+  }
 
-
+  static <Metrics> void fill(Node<Metrics> target, Node<Metrics> source, int from, int to){
+    target.children.addAll(source.children.subList(from, to));
+    target.metrics.addAll(source.metrics.subList(from, to));
+  }
 
   static <Metrics, Data> Node<Metrics> mergeChildren(Node<Metrics> node, ZipperOps<Metrics, Data> ops) {
     final int mergeThreshold = ops.splitThreshold() / 2;
@@ -281,31 +287,23 @@ public class Rope {
           Metrics rightMetrics = node.metrics.get(i);
           if (left.children.size() < mergeThreshold || right.children.size() < mergeThreshold) {
             if (left.children.size() + right.children.size() > ops.splitThreshold()) {
-              int n = (left.children.size() + right.children.size());
-              int halfn = n / 2;
-              ArrayList<Object> newLeft = new ArrayList<>(halfn);
-              ArrayList<Metrics> newLeftMetrics = new ArrayList<>(halfn);
-              ArrayList<Object> newRight = new ArrayList<>(n - halfn);
-              ArrayList<Metrics> newRightMetrics = new ArrayList<>(n - halfn);
-              int leftCesure = Math.min(halfn, left.children.size());
-              int rightCesure = Math.max(0, halfn - left.children.size());
+              int N = (left.children.size() + right.children.size());
+              int halfN = N / 2;
+              int leftCesure = Math.min(halfN, left.children.size());
+              int rightCesure = Math.max(0, halfN - left.children.size());
+              Node<Metrics> left2 = createNode(halfN);
+              fill(left2, left, 0, leftCesure);
+              fill(left2, right, 0, rightCesure);
+              Node<Metrics> right2 = createNode(N - halfN);
+              fill(right2, left, leftCesure, left.children.size());
+              fill(right2, right, rightCesure, right.children.size());
 
-              newLeft.addAll(left.children.subList(0, leftCesure));
-              newLeft.addAll(right.children.subList(0, rightCesure));
-              newLeftMetrics.addAll(left.metrics.subList(0, leftCesure));
-              newLeftMetrics.addAll(right.metrics.subList(0, rightCesure));
-
-              newRight.addAll(left.children.subList(leftCesure, left.children.size()));
-              newRight.addAll(right.children.subList(rightCesure, right.children.size()));
-              newRightMetrics.addAll(left.metrics.subList(leftCesure, left.children.size()));
-              newRightMetrics.addAll(right.metrics.subList(rightCesure, right.children.size()));
-
-              Node<Metrics> mergedLeft = mergeChildren(new Node<>(newLeft, newLeftMetrics), ops);
+              Node<Metrics> mergedLeft = mergeChildren(left2, ops);
               newChildren.add(mergedLeft);
               newMetrics.add(ops.rf(mergedLeft.metrics));
 
-              left = new Node<>(newRight, newRightMetrics);
-              leftMetrics = ops.rf(newRightMetrics);
+              left = right;
+              leftMetrics = ops.rf(right.metrics);
             }
             else {
               left = mergeChildren(new Node<>(join(left.children, right.children), join(left.metrics, right.metrics)), ops);
@@ -661,7 +659,7 @@ public class Rope {
     boolean isTransient = zipper.isTransient;
     zipper = toTransient(zipper);
     while (true) {
-
+      assert zipper != null;
       Zipper<Metrics, Data> found = null;
       Metrics acc = zipper.acc == null ? zipper.ops.emptyMetrics() : zipper.acc;
       int siblingsCount = zipper.siblings.size();

@@ -191,27 +191,6 @@
   )
 
 (comment
-  (def tree
-    (let [ops (Text$TextOps. 4 2)
-        text "0123456789abcdefgh"]
-    (Rope/growTree (doto (java.util.ArrayList.)
-                         (.add (Rope/makeLeaf text ops))) ops)))
-
-  (str (Text$Sequence. tree))
-
-  *e
-
-  (zp
-  (-> (Text/zipper tree)
-      (Text/scanToOffset 2)
-      (Text/text 1)))
-
-
-
-
-  )
-
-(comment
   (do
 
   (require '[onair.dev])
