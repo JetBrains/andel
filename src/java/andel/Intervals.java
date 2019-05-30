@@ -48,6 +48,13 @@ public class Intervals<T> {
                       new LongArrayList(capacity),
                       new ArrayList<>(capacity));
     }
+
+    public void add(long id, long start, long end, Object child){
+      this.ids.add(id);
+      this.starts.add(start);
+      this.ends.add(end);
+      this.children.add(child);
+    }
   }
 
   public static class Interval<T> {
@@ -507,11 +514,39 @@ public class Intervals<T> {
   }
 
   public static IntervalsIterator query(Intervals tree, long start, long end) {
-    return new IntervalsIterator(Zipper.create(tree.openRoot, tree.maxChildren, true), start, end);
+    return new IntervalsIterator(Zipper.create(tree.openRoot, tree.maxChildren, false), start, end);
   }
 
-  public static Intervals expand(Intervals tree, long start, long len) {
-    throw new UnsupportedOperationException();
+  static Node expand(Node node, long offset, long len){
+    Node result = Node.empty(node.children.size());
+    for (int i = 0; i < node.children.size(); i++) {
+      if (node.ends.get(i) < offset) {
+        result.add(node.ids.get(i),
+                   node.starts.get(i),
+                   node.ends.get(i),
+                   node.children.get(i));
+      }
+      else if (node.starts.get(i) < offset) {
+        Object child = node.children.get(i);
+        result.add(node.ids.get(i),
+                   node.starts.get(i),
+                   node.ends.get(i) + len,
+                   child instanceof Node
+                   ? expand((Node)child, offset - node.starts.get(i), len)
+                   : child);
+
+      } else {
+        result.add(node.ids.get(i),
+                   node.starts.get(i) + len,
+                   node.ends.get(i) + len,
+                   node.children.get(i));
+      }
+    }
+    return result;
+  }
+
+  public static <T> Intervals<T> expand(Intervals<T> tree, long start, long len) {
+    return new Intervals<T>(tree.maxChildren, expand(tree.openRoot, start, len), tree.closedRoot);
   }
 
   public static Intervals collapse(Intervals tree, long start, long len) {

@@ -219,7 +219,7 @@
 
 
 
-  (let [sample (sample (map (fn [i] {:from i :to (* 2 i) :data (str i "cm")}) (range 25)))
+  (let [sample(sample (map (fn [i] {:from i :to (* 2 i) :data (str i "cm")}) (range 25)))
         #_(sample
                  [{:from 0 :to 10}
                   {:from 1 :to 2}
@@ -228,7 +228,8 @@
                   {:from 50 :to 150}
                   {:from 70 :to 170}])
         t (-> (Intervals. 4)
-              (Intervals/insert sample))
+              (Intervals/insert sample)
+              (Intervals/expand 13 25))
         it (Intervals/query t 0 100000)]
     (loop [r []]
       (if (.next it)
@@ -239,11 +240,6 @@
 (tp
   (-> (Intervals. 4)
       (Intervals/insert sample)))
-
-  *e
-
-
-
 
 
 
