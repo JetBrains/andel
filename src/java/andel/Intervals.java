@@ -73,11 +73,10 @@ public class Intervals<T> {
     public boolean startsAreOpen;
     public int MAX_CHILDREN;
     public boolean changed = false;
+    public boolean hasRightCousin;
     public long delta = 0;
     public Zipper parent = null;
-    public long from;
-    public long to;
-    public long rightNeighbour;
+    public long rightCousinStart;
     public LongArrayList starts;
     public LongArrayList ends;
     public LongArrayList ids;
@@ -88,7 +87,8 @@ public class Intervals<T> {
       Zipper zipper = new Zipper();
       zipper.MAX_CHILDREN = maxChildren;
       zipper.startsAreOpen = greedyLeft;
-      zipper.rightNeighbour = Long.MAX_VALUE;
+      zipper.rightCousinStart = Long.MAX_VALUE;
+      zipper.hasRightCousin = false;
       zipper.starts = new LongArrayList(new long[]{0});
       zipper.ends = new LongArrayList(new long[]{Long.MAX_VALUE});
       zipper.ids = new LongArrayList(new long[]{0});
@@ -107,7 +107,7 @@ public class Intervals<T> {
       return z.children.get(z.idx) instanceof Node;
     }
 
-    public static Node node(Zipper z){
+    public static Node node(Zipper z) {
       return (Node)z.children.get(z.idx);
     }
 
@@ -119,13 +119,15 @@ public class Intervals<T> {
         }
         Zipper r = new Zipper();
         r.parent = z;
+        r.MAX_CHILDREN = z.MAX_CHILDREN;
         r.starts = child.starts;
         r.ends = child.ends;
         r.ids = child.ids;
         r.delta = z.delta + z.starts.get(z.idx);
-        r.rightNeighbour = z.idx + 1 < z.starts.size()
-                           ? z.starts.get(z.idx + 1)
-                           : z.rightNeighbour;
+        r.hasRightCousin = z.hasRightCousin || z.idx < z.children.size() - 1;
+        r.rightCousinStart = z.idx + 1 < z.starts.size()
+                             ? z.starts.get(z.idx + 1)
+                             : z.rightCousinStart;
         r.children = child.children;
         r.idx = 0;
         return r;
@@ -150,6 +152,16 @@ public class Intervals<T> {
       p.ends.set(p.idx, p.starts.get(p.idx) + delta + max(n.ends));
       p.changed = true;
       return p;
+    }
+
+    public static Zipper skip(Zipper z) {
+      if (z.idx + 1 < z.children.size()) {
+        z.idx += 1;
+        return z;
+      }
+      else {
+        return z.hasRightCousin ? skip(up(z)) : null;
+      }
     }
 
     public static Zipper up(Zipper z) {
@@ -341,17 +353,13 @@ public class Intervals<T> {
     return mergeChildren(splitChildren(node, maxChildren), maxChildren);
   }
 
-  public static class IntervalsIterator {
-
-  }
-
   private static boolean intersects(long s1, long e1, long s2, long e2) {
     return s1 <= s2 ? s2 < e1 : s1 < e2;
   }
 
   static Node growTree(Node node, int maxChildren) {
     Node balanced = balanceChildren(node, maxChildren);
-    if (balanced.children.size() > maxChildren){
+    if (balanced.children.size() > maxChildren) {
       ArrayList<Object> newChildren = new ArrayList<>();
       newChildren.add(balanced);
       // todo generate proper id, adopt
@@ -360,15 +368,17 @@ public class Intervals<T> {
                                new LongArrayList(new long[]{Long.MAX_VALUE}),
                                newChildren),
                       maxChildren);
-    } else {
+    }
+    else {
       return balanced;
     }
   }
 
-  static Node shrinkTree(Node node){
-    if (node.children.size() == 1 && node.children.get(0) instanceof Node){
+  static Node shrinkTree(Node node) {
+    if (node.children.size() == 1 && node.children.get(0) instanceof Node) {
       return shrinkTree((Node)node.children.get(0));
-    } else {
+    }
+    else {
       return node;
     }
   }
@@ -382,7 +392,7 @@ public class Intervals<T> {
 
   static <T> Zipper insert(Zipper z, long id, long from, long to, T data) {
     while (true) {
-      if (from <= z.rightNeighbour) { // TODO should i check left neighbour?
+      if (from <= z.rightCousinStart) { // TODO should i check left neighbour?
         int insertIdx = z.starts.binarySearch(from - z.delta);
         insertIdx = insertIdx < 0 ? ~insertIdx : insertIdx;
         if (Zipper.isBranch(z)) {
@@ -444,14 +454,60 @@ public class Intervals<T> {
     return new Intervals<>(tree.maxChildren, newRoot, tree.closedRoot);
   }
 
+  public static class IntervalsIterator<T> {
+    private Zipper z;
+    private final long queryFrom;
+    private final long queryTo;
+
+    public IntervalsIterator(Zipper z, long queryFrom, long queryTo) {
+      this.z = z;
+      this.queryFrom = queryFrom;
+      this.queryTo = queryTo;
+    }
+
+    public long from() {
+      return z.delta + z.starts.get(z.idx);
+    }
+
+    public long to() {
+      return z.delta + z.ends.get(z.idx);
+    }
+
+    public long id() {
+      return z.ids.get(z.idx);
+    }
+
+    public T data() {
+      //noinspection unchecked
+      return (T)z.children.get(z.idx);
+    }
+
+    public boolean next() {
+      Zipper next = Zipper.isRoot(z) ? z : Zipper.skip(z);
+      z = next == null ? null : findNextIntersection(next, queryFrom, queryTo);
+      return z != null;
+    }
+  }
+
+  static Zipper findNextIntersection(Zipper zipper, long from, long to) {
+    for (int i = zipper.idx; i < zipper.starts.size(); ++i) {
+      if (intersects(from, to, zipper.starts.get(i) + zipper.delta, zipper.ends.get(i) + zipper.delta)) {
+        zipper.idx = i;
+        if (Zipper.isBranch(zipper)) {
+          Zipper down = Zipper.down(zipper);
+          return down == null ? null : findNextIntersection(down, from, to);
+        }
+        else {
+          return zipper;
+        }
+      }
+    }
+    Zipper skip = Zipper.skip(Zipper.up(zipper));
+    return skip == null ? null : findNextIntersection(skip, from, to);
+  }
+
   public static IntervalsIterator query(Intervals tree, long start, long end) {
-    //Zipper z = Zipper.create(tree.openRoot);
-    //for(int i = 0, delta = 0; i < n.children.length; delta += n.deltas[i++]){
-    //  if (intersects(start, end, n.starts[i] + delta, n.ends[i] + delta)){
-    //
-    //  }
-    //}
-    throw new UnsupportedOperationException();
+    return new IntervalsIterator(Zipper.create(tree.openRoot, tree.maxChildren, true), start, end);
   }
 
   public static Intervals expand(Intervals tree, long start, long len) {

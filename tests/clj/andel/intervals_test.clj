@@ -32,14 +32,14 @@
                                                :attrs (>Attrs)))
                                     a b g-l? g-r? ids))))))
 
-(deftest bulk-insertion
+#_(deftest bulk-insertion
   (is (:result (tc/quick-check 1000
                                (prop/for-all [bulk intervals-bulk-gen]
                                              (let [itree (add-markers empty-tree bulk)]
                                                (= (tree->intervals itree)
                                                   bulk)))))))
 
-(deftest multiple-bulk-insertion
+#_(deftest multiple-bulk-insertion
   (is (:result (tc/quick-check 100
                                (prop/for-all [bulk-bulk (g/vector intervals-bulk-gen)]
                                              (let [itree (reduce add-markers
@@ -49,7 +49,7 @@
                                                   (set (tree->intervals itree)))))))))
 
 ;; [interval] -> [offset size] -> [interval]
-(defn play-type-in [model [offset size]]
+#_(defn play-type-in [model [offset size]]
   (vec (->> model
             (map (fn [{:keys [from to greedy-left? greedy-right?] :as interval}]
                    (cond
@@ -73,7 +73,7 @@
                      :else
                      interval))))))
 
-(def bulk-offset-size-gen
+#_(def bulk-offset-size-gen
   (g/bind intervals-bulk-gen
           (fn [bulk] (let [max-val (->> bulk
                                         (map :to)
@@ -82,12 +82,12 @@
                                 (g/vector (g/tuple (g/large-integer* {:min 0 :max max-val})
                                                    (g/large-integer* {:min 0 :max 10000}))))))))
 
-(defn bulk->tree [bulk]
+#_(defn bulk->tree [bulk]
   (-> empty-tree
       (add-markers bulk)))
 
 
-(deftest type-in-positive-test
+#_(deftest type-in-positive-test
   (is
    (:result
     (tc/quick-check
@@ -98,13 +98,13 @@
                             (reduce (fn [t [o s]] (type-in t o s))
                                     (bulk->tree bulk) qs)))))))))
 
-(defn drop-dead-markers [markers]
+#_(defn drop-dead-markers [markers]
   (remove (fn [marker]
             (and (= (:from marker) (:to marker)) (not (:greedy-left? marker)) (not (:greedy-right? marker))))
           markers))
 
 ;; model -> [offset size] -> model
-(defn play-delete-range [model [offset length]]
+#_(defn play-delete-range [model [offset length]]
   (map (fn [interval]
          (let [update-point (fn [point offset length] (if (< offset point)
                                                        (max offset (- point length))
@@ -114,7 +114,7 @@
                (update :to update-point offset length))))
        model))
 
-(deftest test-delete-range
+#_(deftest test-delete-range
   (is (:result
        (tc/quick-check 1000
                        (prop/for-all [[bulk qs] bulk-offset-size-gen]
@@ -122,24 +122,24 @@
                                         (set (drop-dead-markers (tree->intervals
                                                                  (reduce (fn [t [o s]] (delete-range t o s)) (bulk->tree bulk) qs))))))))))
 
-(defn play-query [model {:keys [from to]}]
+#_(defn play-query [model {:keys [from to]}]
   (vec (filter (fn [m] (intersects-inclusive? (.-from m) (.-to m) from to)) model)))
 
-(defn query-gen [max-val]
+#_(defn query-gen [max-val]
   (g/fmap (fn [[x y]]
             {:from (min x y)
              :to   (max x y)})
           (g/tuple (g/large-integer* {:min 0 :max max-val})
                    (g/large-integer* {:min 0 :max max-val}))))
 
-(def bulk-and-queries-gen
+#_(def bulk-and-queries-gen
   (g/bind intervals-bulk-gen
           (fn [bulk] (g/tuple (g/return bulk)
                               (g/vector (query-gen (->> bulk
                                                         (map :to)
                                                         (apply max 0))))))))
 
-(deftest query-test
+#_(deftest query-test
   (is
    (:result
     (tc/quick-check
@@ -151,13 +151,13 @@
                                (query-intervals (zipper itree) from to))
                              queries))))))))
 
-(def operation-gen
+#_(def operation-gen
   (g/tuple (g/one-of [(g/return [play-type-in type-in])
                       (g/return [play-delete-range delete-range])])
            (g/tuple (g/large-integer* {:min 0 :max 10000000})
                     (g/large-integer* {:min 0 :max 10000000}))))
 
-(deftest type-and-delete-test
+#_(deftest type-and-delete-test
   (is (:result
        (tc/quick-check
         1000
@@ -172,7 +172,7 @@
            (= (set (drop-dead-markers (tree->intervals tree)))
               (set (drop-dead-markers model)))))))))
 
-(deftest gc-test
+#_(deftest gc-test
   (is
    (:result
     (tc/quick-check
@@ -203,7 +203,7 @@
     {:open-root (np (.-openRoot tree))
      :closed-root (np (.-closedRoot tree))})
 
-  (def sample
+  (defn sample [input]
     (reduce
       (fn [al {:keys [from to data]}]
         (.add al
@@ -213,16 +213,29 @@
                                    data))
         al)
      (java.util.ArrayList.)
-     (map (fn [i] {:from i :to (* 2 i) :data (str i "cm")}) (range 25))
+     input))
 
-     ))
+  (sample (map (fn [i] {:from i :to (* 2 i) :data (str i "cm")}) (range 25)))
 
-  [{:from 0 :to 10}
-      {:from 1 :to 2}
-      {:from 15 :to 20}
-      {:from 25 :to 125}
-      {:from 50 :to 150}
-      {:from 70 :to 170}]
+
+
+  (let [sample (sample (map (fn [i] {:from i :to (* 2 i) :data (str i "cm")}) (range 25)))
+        #_(sample
+                 [{:from 0 :to 10}
+                  {:from 1 :to 2}
+                  {:from 15 :to 20}
+                  {:from 25 :to 125}
+                  {:from 50 :to 150}
+                  {:from 70 :to 170}])
+        t (-> (Intervals. 4)
+              (Intervals/insert sample))
+        it (Intervals/query t 0 100000)]
+    (loop [r []]
+      (if (.next it)
+        (recur (conj r {:from (.from it) :to (.to it) :id (.id it) :data (.data it)}))
+        r))
+    )
+
 (tp
   (-> (Intervals. 4)
       (Intervals/insert sample)))
