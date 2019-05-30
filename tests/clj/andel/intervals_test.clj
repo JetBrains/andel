@@ -5,7 +5,8 @@
             [andel.intervals :refer :all]
             [andel.tree :as tree]
             [clojure.test :refer :all]
-            [clojure.data.int-map :as i]))
+            [clojure.data.int-map :as i])
+  (:import [andel Intervals Intervals$Interval]))
 
 (defn compare-intervals [a b]
   (< (:from a) (:from b)))
@@ -14,7 +15,7 @@
 
 (defn tree->intervals [tree] (into [] (xquery-all tree)))
 
-(def intervals-bulk-gen
+#_(def intervals-bulk-gen
   (g/bind (g/large-integer* {:min 1 :max 1000})
           (fn [cnt]
             (g/let [a (g/vector (g/large-integer* {:min 0 :max 10000}) cnt)
@@ -187,5 +188,51 @@
                         (remove (fn [m] (to-delete (-> m (.-attrs) (.-id)))) bulk))
                      ))))))
 
+(comment
 
+  (defn np [node]
+    (if (instance? andel.Intervals$Node node)
+      (let [^andel.Intervals$Node node node]
+        {:starts (.-starts node)
+         :ends (.-ends node)
+         :ids (.-ids node)
+         :children (mapv np (.-children node))})
+      (str node)))
+
+  (defn tp [^Intervals tree]
+    {:open-root (np (.-openRoot tree))
+     :closed-root (np (.-closedRoot tree))})
+
+  (def sample
+    (reduce
+      (fn [al {:keys [from to data]}]
+        (.add al
+              (Intervals$Interval. (+ from to)
+                                   from
+                                   to
+                                   data))
+        al)
+     (java.util.ArrayList.)
+     (map (fn [i] {:from i :to (* 2 i) :data (str i "cm")}) (range 25))
+
+     ))
+
+  [{:from 0 :to 10}
+      {:from 1 :to 2}
+      {:from 15 :to 20}
+      {:from 25 :to 125}
+      {:from 50 :to 150}
+      {:from 70 :to 170}]
+(tp
+  (-> (Intervals. 4)
+      (Intervals/insert sample)))
+
+  *e
+
+
+
+
+
+
+  )
 

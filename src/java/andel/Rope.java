@@ -435,8 +435,8 @@ public class Rope {
         result.idx = 0;
         result.acc = null;
         result.oacc = null;
-        result.isChanged = false;  // this way we break recursion in root
-        //TODO move tree growth code to root?
+        result.isChanged = false;  // this way we break recursion in openRoot
+        //TODO move tree growth code to openRoot?
         Node<Metrics> node = shrinkTree(growTree(node(loc), loc.ops));
         result.siblings = singletonList(node);
         result.metrics = singletonList(loc.ops.rf(node.metrics));
@@ -643,10 +643,10 @@ public class Rope {
   }
 
   /*
-   * stops in a data or in root node if the tree is empty, should never return null
+   * stops in a data or in openRoot node if the tree is empty, should never return null
    */
   public static <Metrics, Data> Zipper<Metrics, Data> scan(Zipper<Metrics, Data> zipper, BiFunction<Metrics, Metrics, Boolean> pred) {
-    // TODO return null even if it is empty root
+    // TODO return null even if it is empty openRoot
     if (isRoot(zipper) && node(zipper).children.isEmpty()) {
       return zipper;
     }
