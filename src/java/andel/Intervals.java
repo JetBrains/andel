@@ -49,7 +49,7 @@ public class Intervals<T> {
                       new ArrayList<>(capacity));
     }
 
-    public void add(long id, long start, long end, Object child){
+    public void add(long id, long start, long end, Object child) {
       this.ids.add(id);
       this.starts.add(start);
       this.ends.add(end);
@@ -319,10 +319,7 @@ public class Intervals<T> {
                                               splitThreshold); // will split in two equals parts, but probably we should split mergeThresh, total - mergeThresh;
             assert split.size() == 2;
 
-            result.children.add(split.get(0));
-            result.starts.add(leftDelta);
-            result.ends.add(leftDelta + max(split.get(0).ends));
-            result.ids.add(leftId);
+            result.add(leftId, leftDelta, leftDelta + max(split.get(0).ends), split.get(0));
             // TODO some children may come from current right, should adopt them
 
             left = split.get(1);
@@ -337,16 +334,14 @@ public class Intervals<T> {
           }
         }
         else {
-          result.children.add(left);
-          result.starts.add(leftDelta);
-          result.ends.add(leftEnd);
-          result.ids.add(leftId);
+          result.add(leftId, leftDelta, leftEnd, left);
           left = right;
           leftDelta = rightDelta;
           leftId = rightId;
           leftEnd = rightEnd;
         }
       }
+      result.add(leftId, leftDelta, leftEnd, left);
       return result;
     }
     else {
@@ -383,7 +378,13 @@ public class Intervals<T> {
 
   static Node shrinkTree(Node node) {
     if (node.children.size() == 1 && node.children.get(0) instanceof Node) {
-      return shrinkTree((Node)node.children.get(0));
+      long delta = node.starts.get(0);
+      Node child = (Node)node.children.get(0);
+      for (int i = 0; i < child.starts.size(); i++) {
+        child.starts.set(i, child.starts.get(i) + delta);
+        child.ends.set(i, child.ends.get(i) + delta);
+      }
+      return shrinkTree(child);
     }
     else {
       return node;
@@ -517,7 +518,7 @@ public class Intervals<T> {
     return new IntervalsIterator(Zipper.create(tree.openRoot, tree.maxChildren, false), start, end);
   }
 
-  static Node expand(Node node, long offset, long len){
+  static Node expand(Node node, long offset, long len) {
     Node result = Node.empty(node.children.size());
     for (int i = 0; i < node.children.size(); i++) {
       if (node.ends.get(i) < offset) {
@@ -534,8 +535,8 @@ public class Intervals<T> {
                    child instanceof Node
                    ? expand((Node)child, offset - node.starts.get(i), len)
                    : child);
-
-      } else {
+      }
+      else {
         result.add(node.ids.get(i),
                    node.starts.get(i) + len,
                    node.ends.get(i) + len,
@@ -549,8 +550,73 @@ public class Intervals<T> {
     return new Intervals<T>(tree.maxChildren, expand(tree.openRoot, start, len), tree.closedRoot);
   }
 
-  public static Intervals collapse(Intervals tree, long start, long len) {
-    throw new UnsupportedOperationException();
+  static Node collapse(Node node, int maxChildren, long offset, long len) {
+    Node result = Node.empty(node.children.size());
+    for (int i = 0; i < node.children.size(); i++) {
+      if (node.ends.get(i) <= offset) {
+        // (interval)..............
+        // .........[deletion]
+        // interval is not affected by deletion range
+        result.add(node.ids.get(i),
+                   node.starts.get(i),
+                   node.ends.get(i),
+                   node.children.get(i));
+      }
+      else if (offset + len <= node.starts.get(i)) {
+        //.............(interval)....
+        //....[deletion].............
+        // interval will move left
+        result.add(node.ids.get(i),
+                   node.starts.get(i) - len,
+                   node.ends.get(i) - len,
+                   node.children.get(i));
+      }
+      else if (offset <= node.starts.get(i) && node.ends.get(i) <= offset + len) {
+        //........(interval)........
+        //....[....deletion....]....
+        // entire interval will be deleted
+        // just drop it on the floor
+
+        // TODO think about greedy?
+        // TODO remove this child from ids map
+      }
+      else {
+        //....(....interval....)....
+        //......[deletion]..........
+        // or
+        //........(interval)....
+        //....[deletion]........
+        // or
+        //....(....interval....).....
+        //................[deletion].
+
+        Object child = node.children.get(i);
+        if (child instanceof Node) {
+          Node c = (Node)child;
+          c = collapse(c, maxChildren, offset - node.starts.get(i), len);
+          long delta = normalize(c);
+          long newStart = node.starts.get(i) + delta;
+          result.add(node.ids.get(i),
+                     newStart,
+                     newStart + max(c.ends),
+                     c);
+        }
+        else {
+          long newStart = offset < node.starts.get(i)
+                          ? Math.max(offset, node.starts.get(i) - len)
+                          : node.starts.get(i);
+          long newEnd = Math.max(offset, node.ends.get(i) - len);
+          result.add(node.ids.get(i), newStart, newEnd, child);
+        }
+      }
+    }
+    return balanceChildren(result, maxChildren);
+  }
+
+  public static <T> Intervals<T> collapse(Intervals tree, long start, long len) {
+    Node collapsed = collapse(tree.openRoot, tree.maxChildren, start, len);
+    Node newRoot = shrinkTree(growTree(collapsed, tree.maxChildren));
+    return new Intervals<>(tree.maxChildren, newRoot, tree.closedRoot);
   }
 
   public static Node remove(Node n, Set<Integer> ids) {

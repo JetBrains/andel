@@ -219,7 +219,7 @@
 
 
 
-  (let [sample(sample (map (fn [i] {:from i :to (* 2 i) :data (str i "cm")}) (range 25)))
+  (let [sample (sample (map (fn [i] {:from i :to (* 2 i) :data (str i "cm")}) (range 25)))
         #_(sample
                  [{:from 0 :to 10}
                   {:from 1 :to 2}
@@ -229,8 +229,11 @@
                   {:from 70 :to 170}])
         t (-> (Intervals. 4)
               (Intervals/insert sample)
-              (Intervals/expand 13 25))
+              (Intervals/collapse 10 10)
+              ;;(Intervals/expand 13 25)
+              )
         it (Intervals/query t 0 100000)]
+    (tp t)
     (loop [r []]
       (if (.next it)
         (recur (conj r {:from (.from it) :to (.to it) :id (.id it) :data (.data it)}))
