@@ -181,7 +181,7 @@ public class Intervals<T> {
           p.children = new ArrayList<>(p.children);
         }
         Node n = new Node(z.ids, z.starts, z.ends, z.children);
-        long delta = normalize(n);
+        long delta = p.parent == null ? 0 : normalize(n);
         n = balanceChildren(n, z.MAX_CHILDREN);
 
         replace(p, n, delta);
@@ -401,7 +401,8 @@ public class Intervals<T> {
   static <T> Zipper insert(Zipper z, long id, long from, long to, T data) {
     while (true) {
       if (from <= z.rightCousinStart) { // TODO should i check left neighbour?
-        int insertIdx = z.starts.binarySearch(from - z.delta);
+        // find nearest interval with start greater than insertion offset to preserve insertion order
+        int insertIdx = z.starts.binarySearch(from - z.delta + 1);
         insertIdx = insertIdx < 0 ? ~insertIdx : insertIdx;
         if (Zipper.isBranch(z)) {
           z.idx = Math.max(0, insertIdx - 1);
@@ -510,12 +511,17 @@ public class Intervals<T> {
         }
       }
     }
-    Zipper skip = Zipper.skip(Zipper.up(zipper));
+    Zipper up = Zipper.up(zipper);
+    if (up == null) {
+      return null;
+    }
+
+    Zipper skip =  Zipper.skip(up);
     return skip == null ? null : findNextIntersection(skip, from, to);
   }
 
-  public static IntervalsIterator query(Intervals tree, long start, long end) {
-    return new IntervalsIterator(Zipper.create(tree.openRoot, tree.maxChildren, false), start, end);
+  public static IntervalsIterator query(Intervals tree, long from, long to) {
+    return new IntervalsIterator(Zipper.create(tree.openRoot, tree.maxChildren, false), from, to);
   }
 
   static Node expand(Node node, long offset, long len) {
@@ -719,6 +725,10 @@ public class Intervals<T> {
 
     public int binarySearch(long key) {
       return Arrays.binarySearch(buffer, 0, size, key);
+    }
+
+    public int binarySearch(int idx, long key) {
+      return Arrays.binarySearch(buffer, idx, size, key);
     }
 
     public LongArrayList subList(int from, int to) {
