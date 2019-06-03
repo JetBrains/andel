@@ -2,16 +2,11 @@
   (:require [clojure.test.check.generators :as g]
             [clojure.test.check.properties :as prop]
             [clojure.test.check :as tc]
-;            [andel.intervals :refer :all]
-            [andel.tree :as tree]
-            [clojure.test :refer :all]
-            [clojure.data.int-map :as i])
+            [clojure.test :refer :all])
   (:import [andel Intervals Intervals$Interval]))
 
-(defn compare-intervals [a b]
-  (< (:from a) (:from b)))
-
-(def sort-intervals (partial sort (comparator compare-intervals)))
+(def sort-intervals [intervals]
+  (sort-by :from intervals))
 
 (defn tree->intervals [tree]
   (let [it (Intervals/query tree 0 Long/MAX_VALUE)]
@@ -19,39 +14,40 @@
       (if (.next it)
         (recur (conj r {:from (.from it)
                         :to (.to it)
-                        ;:id (.id it)
+                        :id (.id it)
                         :data (.data it)}))
         r))))
 
 (def intervals-bulk-gen
-  (g/bind (g/large-integer* {:min 1 :max 1000})
-          (fn [cnt]
-            (g/let [a (g/vector (g/large-integer* {:min 0 :max 10000}) cnt)
-                    b (g/vector (g/large-integer* {:min 0 :max 10000}) cnt)
-                    g-l? (g/vector g/boolean cnt)
-                    g-r? (g/vector g/boolean cnt)
-                    ids (g/return (vec (range cnt)))]
-              (sort-intervals (mapv (fn [a b g-l? g-r? id]
-                                      {;:id id
-                                       :from (min a b)
-                                       :to (max a b)
-                                 ;      :greedy-left? g-l?
-                                  ;     :greedy-right? g-r?
-                                       :data nil})
-                                    a b g-l? g-r? ids))))))
+  (g/bind
+   (g/large-integer* {:min 1 :max 1000})
+   (fn [cnt]
+     (g/let [a (g/vector (g/large-integer* {:min 0 :max 10000}) cnt)
+             b (g/vector (g/large-integer* {:min 0 :max 10000}) cnt)
+             g-l? (g/vector g/boolean cnt)
+             g-r? (g/vector g/boolean cnt)
+             ids (g/return (vec (range cnt)))]
+       (->> (mapv (fn [a b g-l? g-r? id]
+                    {:id id
+                     :from (min a b)
+                     :to (max a b)
+                     ;      :greedy-left? g-l?
+                     ;     :greedy-right? g-r?
+                     :data nil})
+                  a b g-l? g-r? ids)
+            (sort-by :to))))))
 
 (defn ->interval [{:keys [id from to data]}]
   (Intervals$Interval. 0 from to data))
 
-(deftest bulk-insertion
-  (is (:result (tc/quick-check 1000
-                               (prop/for-all [bulk intervals-bulk-gen]
-                                             (let [itree (Intervals/insert  (Intervals. 4)
-                                                                            (into [] (map ->interval) bulk))]
-                                               (= (tree->intervals itree)
-                                                  bulk)))))))
+(def bulk-insertion-prop
+  (prop/for-all [bulk intervals-bulk-gen]
+    (let [tree (Intervals/insert (Intervals. 4)
+                                 (into [] (map ->interval) bulk))]
+      (= (tree->intervals tree) bulk))))
 
-*e
+(deftest intervals-test
+  (is (:result (tc/quick-check 1000 bulk-insertion-prop))))
 
 ;(deftest multiple-bulk-insertion
 ;  (is (:result (tc/quick-check 100
@@ -63,38 +59,38 @@
 ;                                                  (set (tree->intervals itree)))))))))
 
 ;; [interval] -> [offset size] -> [interval]
-(defn play-type-in [model [offset size]]
-  (vec (->> model
-            (map (fn [{:keys [from to greedy-left? greedy-right?] :as interval}]
-                   (cond
-                     (and greedy-left?
-                          (= offset from))
-                     (assoc interval :to (+ to size))
 
-                     (and greedy-right?
-                          (= offset to))
-                     (assoc interval :to (+ to size))
+(defn play-type-in [intervals [offset size]]
+  (mapv (fn [{:keys [from to greedy-left? greedy-right?] :as interval}]
+          (cond
+            (and greedy-left?
+                 (= offset from))
+            (assoc interval :to (+ to size))
 
-                     (and (< from offset)
-                          (< offset to))
-                     (assoc interval :to (+ to size))
+            (and greedy-right?
+                 (= offset to))
+            (assoc interval :to (+ to size))
 
-                     (<= offset from)
-                     (assoc interval
-                            :to (+ to size)
-                            :from (+ from size))
+            (and (< from offset)
+                 (< offset to))
+            (assoc interval :to (+ to size))
 
-                     :else
-                     interval))))))
+            (<= offset from)
+            (assoc interval
+                   :to (+ to size)
+                   :from (+ from size))
+
+            :else
+            interval))
+        intervals))
 
 (def bulk-offset-size-gen
   (g/bind intervals-bulk-gen
-          (fn [bulk] (let [max-val (->> bulk
-                                        (map :to)
-                                        (apply max 0))]
-                       (g/tuple (g/return bulk)
-                                (g/vector (g/tuple (g/large-integer* {:min 0 :max max-val})
-                                                   (g/large-integer* {:min 0 :max 10000}))))))))
+          (fn [bulk]
+            (let [max-val (transduce (map :to) max 0 bulk)]
+              (g/tuple (g/return bulk)
+                       (g/vector (g/tuple (g/large-integer* {:min 0 :max max-val})
+                                          (g/large-integer* {:min 0 :max 10000}))))))))
 
 (defn bulk->tree [bulk]
   (-> (Intervals. 32)
@@ -113,14 +109,11 @@
                             (reduce (fn [t [o s]] (Intervals/expand t o s))
                                     (bulk->tree bulk) qs)))))))))
 
-*e
-
 (defn drop-dead-markers [markers]
   (remove (fn [marker]
             (and (= (:from marker) (:to marker)) (not (:greedy-left? marker)) (not (:greedy-right? marker))))
           markers))
 
-;; model -> [offset size] -> model
 (defn play-delete-range [model [offset length]]
   (map (fn [interval]
          (let [update-point (fn [point offset length] (if (< offset point)
@@ -139,19 +132,10 @@
                                         (set (drop-dead-markers (tree->intervals
                                                                  (reduce (fn [t [o s]] (Intervals/collapse t o s)) (bulk->tree bulk) qs))))))))))
 
-#_(defn intersects? [^long from1 ^long to1 ^long from2 ^long to2]
+(defn intersects? [^long from1 ^long to1 ^long from2 ^long to2]
   (if (<= from1 from2)
     (< from2 to1)
     (< from1 to2)))
-
-(defn intersects? [^long from1 ^long to1 ^long from2 ^long to2]
-  (let [to-fst (if (< from1 from2) to1 to2)
-        from-snd   (max from1 from2)
-        len1       (- to1 from1)
-        len2       (- to2 from2)]
-    (if (or (= len1 0) (= len2 0))
-      false
-      (< from-snd to-fst))))
 
 (defn play-query [model {:keys [from to]}]
   (vec (filter (fn [m] (intersects? (:from m) (:to m) from to)) model)))
@@ -173,8 +157,6 @@
 (let [[bulk queries] [[{:from 0, :to 1, :data nil} {:from 0, :to 0, :data nil}]
                       [{:from 0, :to 1}]]]
   (map play-query (repeat bulk) queries))
-
-(intersects? 0 0 0 1)
 
 (deftest query-test
   (is
@@ -284,19 +266,5 @@
         r))
     )
 
-  *e
-
-(tp
-  (-> (Intervals. 4)
-      (Intervals/insert sample)))
-
-  (let [arr (long-array (mapv #(* 2 %) (range 32)))]
-    (onair.dev/benchmark
-     (java.util.Arrays/binarySearch arr 31))
-
-    (onair.dev/benchmark
-      (Intervals/indexOf arr 32)))
-
-*e
   )
 

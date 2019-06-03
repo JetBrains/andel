@@ -5,7 +5,9 @@
             [clojure.spec.test.alpha :as stest]
             [clojure.test :refer :all]
             [clojure.test.check :as tc])
-  (:import [andel Text Rope Rope$Zipper Rope$Node Text$TextMetrics Text$TextOps Text$Sequence Rope$ZipperOps]))
+  (:import [andel
+            Rope Rope$Zipper Rope$Node
+            Text Text$TextMetrics Text$TextOps Text$Sequence Rope$ZipperOps]))
 
 (defn codepoints-count [^String arg]
   (.codePointCount arg 0 (.length arg)))
@@ -125,8 +127,6 @@
                   (catch Throwable ex
                     (def my-ex ex)
                     false))))
-
-(def transient-play-many)
 
 (deftest generative
   (is (:result (tc/quick-check 3000 (play-test play))))

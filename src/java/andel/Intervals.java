@@ -1,9 +1,6 @@
 package andel;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 import io.lacuna.bifurcan.IntMap;
 
@@ -492,29 +489,53 @@ public class Intervals<T> {
     return delta;
   }
 
-  public static class Bulk<T> {
+  public static class Batch<T> {
     long lastSeenFrom = Long.MIN_VALUE;
+    Zipper closedZipper;
+    Zipper openZipper;
+    int maxChildren;
+    Context editingContext;
 
-    Bulk(Zipper closedZipper, Zipper openZipper) {
+    Batch(Zipper closedZipper, Zipper openZipper, Context editingContext, int maxChildren) {
+      this.closedZipper = closedZipper;
+      this.openZipper = openZipper;
+      this.maxChildren = maxChildren;
+      this.editingContext = editingContext;
     }
 
-    public Bulk<T> consume(long id, long from, long to, int greediness, T data) {
-      throw new UnsupportedOperationException();
+    public Batch<T> insert(long id, long from, long to, T data) {
+      if (from < lastSeenFrom) {
+        throw new IllegalArgumentException();
+      }
+      lastSeenFrom = from;
+
+      this.openZipper = Intervals.insert(this.openZipper, id, from, to, data);
+      return this;
     }
 
-    public Intervals<T> commit() {
-      throw new UnsupportedOperationException();
+    public Intervals<T> finish() {
+      return new Intervals<>(this.maxChildren,
+                             root(this.openZipper),
+                             root(this.closedZipper),
+                             editingContext.parentsMap.forked(),
+                             editingContext.nextId);
     }
   }
 
-  public static <T> Intervals<T> insert(Intervals<T> tree, List<Interval<T>> intervals) {
+  public static <T> Batch<T> batch(Intervals<T> tree) {
     Context ctx = new Context(tree.nextInnerId, tree.parentsMap.linear());
-    Zipper z = Zipper.create(tree.openRoot, ctx, tree.maxChildren, true);
+    return new Batch<>(Zipper.create(tree.openRoot, ctx, tree.maxChildren, true),
+                       Zipper.create(tree.closedRoot, ctx, tree.maxChildren, false),
+                       ctx,
+                       tree.maxChildren);
+  }
+
+  public static <T> Intervals<T> insert(Intervals<T> tree, List<Interval<T>> intervals) {
+    Batch<T> batch = batch(tree);
     for (Interval<T> interval : intervals) {
-      z = insert(z, interval.id, interval.from, interval.to, interval.data);
+      batch.insert(interval.id, interval.from, interval.to, interval.data);
     }
-    Node newRoot = root(z);
-    return new Intervals<>(tree.maxChildren, newRoot, tree.closedRoot, ctx.parentsMap.forked(), ctx.nextId);
+    return batch.finish();
   }
 
   public static class IntervalsIterator<T> {
@@ -576,6 +597,15 @@ public class Intervals<T> {
 
   public static IntervalsIterator query(Intervals tree, long from, long to) {
     return new IntervalsIterator(Zipper.create(tree.openRoot, null, tree.maxChildren, false), from, to);
+  }
+
+  public static List<Interval> queryAll(Intervals tree, long from, long to) {
+    ArrayList<Interval> result = new ArrayList<>();
+    IntervalsIterator it = query(tree, from, to);
+    while (it.next()) {
+      result.add(new Interval<>(it.id(), it.from(), it.to(), it.data()));
+    }
+    return result;
   }
 
   static Node expand(Node node, long offset, long len) {
@@ -695,8 +725,57 @@ public class Intervals<T> {
     throw new UnsupportedOperationException();
   }
 
+  static LongArrayList resolvePath(IntMap<Long> parents, long id) {
+    LongArrayList path = new LongArrayList(4);
+    while (true) {
+      Long p = parents.get(id, null);
+      if (p == null) {
+        throw new NoSuchElementException();
+      }
+      path.add(p);
+      if (p == OPEN_ROOT_ID || p == CLOSED_ROOT_ID) {
+        return path;
+      }
+    }
+  }
+
+  static Node chooseRoot(Intervals tree, long id) {
+    if (id == OPEN_ROOT_ID) {
+      return tree.openRoot;
+    }
+    else if (id == CLOSED_ROOT_ID) {
+      return tree.closedRoot;
+    }
+    else {
+      throw new IllegalArgumentException("given id:" + id);
+    }
+  }
+
   public static <T> Interval<T> getById(Intervals<T> tree, long id) {
-    throw new UnsupportedOperationException();
+    LongArrayList path = resolvePath(tree.parentsMap, id);
+    Node n = chooseRoot(tree, path.get(path.size() - 1));
+    int delta = 0;
+    for (int i = path.size() - 2; i > 0; --i) {
+      int idx = n.ids.indexOf(path.get(i));
+      if (idx == -1) {
+        throw new IllegalStateException();
+      }
+      else {
+        delta += n.starts.get(idx);
+        n = (Node)n.children.get(idx);
+      }
+    }
+    int idx = n.ids.indexOf(path.get(0));
+    if (idx == -1) {
+      throw new IllegalStateException();
+    }
+    else {
+      //noinspection unchecked
+      return new Interval<>(n.ids.get(idx),
+                            n.starts.get(idx) + delta,
+                            n.ends.get(idx) + delta,
+                            (T)n.children.get(idx));
+    }
   }
 
   private static long max(LongArrayList arr) {
@@ -802,6 +881,15 @@ public class Intervals<T> {
       System.arraycopy(this.buffer, from, r.buffer, 0, to - from);
       r.size = to - from;
       return r;
+    }
+
+    public int indexOf(long key) {
+      for (int i = 0; i < this.size; i++) {
+        if (this.buffer[i] == key) {
+          return i;
+        }
+      }
+      return -1;
     }
   }
 }
