@@ -5,9 +5,14 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
+import io.lacuna.bifurcan.IntMap;
+
+
 public class Intervals<T> {
 
-  // public PersistentIntMap parents;
+  private final static long OPEN_ROOT_ID = -1;
+  private final static long CLOSED_ROOT_ID = -2;
+  private final static long FIRST_ID = -3;
 
   /*
    * we employ two separate trees to store markers with greedy and not greedy start
@@ -15,18 +20,23 @@ public class Intervals<T> {
    * this order is hard to preserve in situations of open/closed intervals starting on the same offset
    * e.g. (0, 5) [1 3) -> collapse(0, 2) -> (0, 3) [0, 1] -> expand(0, 1) -> (1, 4) [0, 2] !!!
    * */
-  public Node openRoot;
-  public Node closedRoot;
-  public int maxChildren;
 
-  public Intervals(int maxChildren, Node openRoot, Node closedRoot) {
+  public final Node openRoot;
+  public final Node closedRoot;
+  public final int maxChildren;
+  public final IntMap<Long> parentsMap;
+  private final long nextInnerId;
+
+  public Intervals(int maxChildren, Node openRoot, Node closedRoot, IntMap<Long> parentsMap, long nextId) {
     this.maxChildren = maxChildren;
     this.openRoot = openRoot;
     this.closedRoot = closedRoot;
+    this.nextInnerId = nextId;
+    this.parentsMap = parentsMap;
   }
 
   public Intervals(int maxChildren) {
-    this(maxChildren, Node.empty(maxChildren / 2), Node.empty(maxChildren / 2));
+    this(maxChildren, Node.empty(maxChildren / 2), Node.empty(maxChildren / 2), new IntMap<>(), FIRST_ID);
   }
 
   public static class Node {
@@ -88,17 +98,24 @@ public class Intervals<T> {
     public LongArrayList ends;
     public LongArrayList ids;
     public ArrayList<Object> children;
+    public Context editingContext;
     public int idx = 0;
 
-    public static Zipper create(Node root, int maxChildren, boolean greedyLeft) {
+    private static final LongArrayList ROOT_ENDS = new LongArrayList(new long[]{Long.MAX_VALUE});
+    private static final LongArrayList ROOT_STARTS = new LongArrayList(new long[]{0});
+    private static final LongArrayList OPEN_ROOT_IDS = new LongArrayList(new long[]{Long.valueOf(OPEN_ROOT_ID)});
+    private static final LongArrayList CLOSED_ROOT_IDS = new LongArrayList(new long[]{Long.valueOf(CLOSED_ROOT_ID)});
+
+    public static Zipper create(Node root, Context editingContext, int maxChildren, boolean rootIsOpen) {
       Zipper zipper = new Zipper();
       zipper.MAX_CHILDREN = maxChildren;
-      zipper.startsAreOpen = greedyLeft;
+      zipper.startsAreOpen = rootIsOpen;
       zipper.rightCousinStart = Long.MAX_VALUE;
       zipper.hasRightCousin = false;
-      zipper.starts = new LongArrayList(new long[]{0});
-      zipper.ends = new LongArrayList(new long[]{Long.MAX_VALUE});
-      zipper.ids = new LongArrayList(new long[]{0});
+      zipper.starts = ROOT_STARTS;
+      zipper.ends = ROOT_ENDS;
+      zipper.ids = rootIsOpen ? OPEN_ROOT_IDS : CLOSED_ROOT_IDS;
+      zipper.editingContext = editingContext;
       ArrayList<Object> children = new ArrayList<>();
       children.add(root);
       zipper.children = children;
@@ -136,6 +153,7 @@ public class Intervals<T> {
                              ? z.starts.get(z.idx + 1)
                              : z.rightCousinStart;
         r.children = child.children;
+        r.editingContext = z.editingContext;
         r.idx = 0;
         return r;
       }
@@ -149,6 +167,7 @@ public class Intervals<T> {
       z.ends.add(idx, end - z.delta);
       z.ids.add(idx, id);
       z.children.add(idx, data);
+      z.editingContext.parentsMap = z.editingContext.parentsMap.put(id, ((Long)z.parent.ids.get(z.parent.idx)));
       z.changed = true;
       return z;
     }
@@ -182,8 +201,7 @@ public class Intervals<T> {
         }
         Node n = new Node(z.ids, z.starts, z.ends, z.children);
         long delta = p.parent == null ? 0 : normalize(n);
-        n = balanceChildren(n, z.MAX_CHILDREN);
-
+        n = balanceChildren(z.editingContext, n, z.MAX_CHILDREN);
         replace(p, n, delta);
         return p;
       }
@@ -234,29 +252,48 @@ public class Intervals<T> {
     return false;
   }
 
-  static Node splitChildren(Node node, int splitThreshold) {
+  private static IntMap<Long> adopt(IntMap<Long> parentsMap, long parentId, LongArrayList childrenIds) {
+    Long id = parentId;
+    for (int k = 0; k < childrenIds.size(); ++k) {
+      parentsMap = parentsMap.put(childrenIds.get(k), id);
+    }
+    return parentsMap;
+  }
+
+  static Node splitChildren(Context ctx, Node node, int splitThreshold) {
     if (childrenNeedSplitting(node, splitThreshold)) {
       Node result = Node.empty(splitThreshold / 2);
+      IntMap<Long> m = ctx.parentsMap;
+      long nextId = ctx.nextId;
       for (int i = 0; i < node.children.size(); i++) {
         Node child = (Node)node.children.get(i);
         long childDelta = node.starts.get(i);
+        long childId = node.ids.get(i);
         if (child.children.size() > splitThreshold) {
           ArrayList<Node> partition = splitNode(child, splitThreshold);
-          for (Node p : partition) {
+          for (int j = 0; j < partition.size(); j++) {
+            Node p = partition.get(j);
             long delta = normalize(p);
             result.children.add(p);
             result.starts.add(delta + childDelta);
             result.ends.add(max(p.ends) + childDelta + delta);
-            result.ids.add(0); // TODO assign meaningful id and adopt all children
+            if (j == 0) {
+              result.ids.add(childId);
+            }
+            else {
+              long newId = nextId--;
+              m = adopt(m, newId, p.ids);
+              m = m.put(newId, m.get(childId, null));
+              result.ids.add(newId);
+            }
           }
         }
         else {
-          result.children.add(child);
-          result.starts.add(node.starts.get(i));
-          result.ends.add(node.ends.get(i));
-          result.ids.add(node.ids.get(i));
+          result.add(childId, node.starts.get(i), node.ends.get(i), child);
         }
       }
+      ctx.nextId = nextId;
+      ctx.parentsMap = m;
       return result;
     }
     else {
@@ -299,7 +336,7 @@ public class Intervals<T> {
     return n;
   }
 
-  static Node mergeChildren(Node node, int splitThreshold) {
+  static Node mergeChildren(Context ctx, Node node, int splitThreshold) {
     int mergeThreshold = splitThreshold / 2;
     if (childrenNeedMerging(node, mergeThreshold)) {
       Node result = Node.empty(mergeThreshold);
@@ -313,24 +350,24 @@ public class Intervals<T> {
         long rightId = node.ids.get(i);
         long rightEnd = node.ends.get(i);
         if (left.children.size() < mergeThreshold || right.children.size() < mergeThreshold) {
-          Node merged = mergeChildren(mergeNodes(leftDelta, left, rightDelta, right), splitThreshold);
+          Node merged = mergeChildren(ctx, mergeNodes(leftDelta, left, rightDelta, right), splitThreshold);
           if (merged.children.size() > splitThreshold) {
-            ArrayList<Node> split = splitNode(merged,
-                                              splitThreshold); // will split in two equals parts, but probably we should split mergeThresh, total - mergeThresh;
+            ArrayList<Node> split = splitNode(merged, splitThreshold);
             assert split.size() == 2;
 
+            ctx.parentsMap = adopt(ctx.parentsMap, leftId, split.get(0).ids);
             result.add(leftId, leftDelta, leftDelta + max(split.get(0).ends), split.get(0));
-            // TODO some children may come from current right, should adopt them
 
+            ctx.parentsMap = adopt(ctx.parentsMap, rightId, split.get(1).ids);
             left = split.get(1);
             leftDelta += normalize(split.get(1));
             leftEnd = leftDelta + max(split.get(1).ends);
-            leftId = 0; // TODO assign meaningful id and adopt children
+            leftId = rightId;
           }
           else {
             left = merged;
             leftEnd = leftDelta + max(merged.ends);
-            // TODO adopt children from right
+            ctx.parentsMap = adopt(ctx.parentsMap, leftId, right.ids);
           }
         }
         else {
@@ -349,45 +386,58 @@ public class Intervals<T> {
     }
   }
 
-  static Node balanceChildren(Node node, int maxChildren) {
+  private static class Context {
+    public long nextId;
+    public IntMap<Long> parentsMap;
+
+    Context(long nextId, IntMap<Long> parentsMap) {
+      this.nextId = nextId;
+      this.parentsMap = parentsMap;
+    }
+  }
+
+  static Node balanceChildren(Context ctx, Node node, int maxChildren) {
     // TODO we can use the fact that insertions are separated from deletions
     // you don't need to assume both can happen on the same zipper
-    return mergeChildren(splitChildren(node, maxChildren), maxChildren);
+    return mergeChildren(ctx, splitChildren(ctx, node, maxChildren), maxChildren);
   }
 
   private static boolean intersects(long s1, long e1, long s2, long e2) {
     return s1 <= s2 ? s2 < e1 : s1 < e2;
   }
 
-  static Node growTree(Node node, int maxChildren) {
-    Node balanced = balanceChildren(node, maxChildren);
+  static Node growTree(Context ctx, Long rootId, Node node, int maxChildren) {
+    Node balanced = balanceChildren(ctx, node, maxChildren);
     if (balanced.children.size() > maxChildren) {
       ArrayList<Object> newChildren = new ArrayList<>();
       newChildren.add(balanced);
-      // todo generate proper id, adopt
-      return growTree(new Node(new LongArrayList(new long[]{-1}),
-                               new LongArrayList(new long[]{0}),
-                               new LongArrayList(new long[]{Long.MAX_VALUE}),
-                               newChildren),
-                      maxChildren);
+      long newLevelId = ctx.nextId--;
+      ctx.parentsMap = adopt(ctx.parentsMap, newLevelId, balanced.ids);
+      ctx.parentsMap = ctx.parentsMap.put(newLevelId, rootId);
+      Node newRoot = new Node(new LongArrayList(new long[]{newLevelId}),
+                              new LongArrayList(new long[]{0}),
+                              new LongArrayList(new long[]{Long.MAX_VALUE}),
+                              newChildren);
+      return growTree(ctx, rootId, newRoot, maxChildren);
     }
     else {
       return balanced;
     }
   }
 
-  static Node shrinkTree(Node node) {
-    if (node.children.size() == 1 && node.children.get(0) instanceof Node) {
-      long delta = node.starts.get(0);
-      Node child = (Node)node.children.get(0);
+  static Node shrinkTree(Context ctx, Long rootId, Node root) {
+    if (root.children.size() == 1 && root.children.get(0) instanceof Node) {
+      long delta = root.starts.get(0);
+      Node child = (Node)root.children.get(0);
       for (int i = 0; i < child.starts.size(); i++) {
         child.starts.set(i, child.starts.get(i) + delta);
         child.ends.set(i, child.ends.get(i) + delta);
       }
-      return shrinkTree(child);
+      ctx.parentsMap = adopt(ctx.parentsMap, rootId, child.ids);
+      return shrinkTree(ctx, rootId, child);
     }
     else {
-      return node;
+      return root;
     }
   }
 
@@ -395,12 +445,13 @@ public class Intervals<T> {
     while (!Zipper.isRoot(z)) {
       z = Zipper.up(z);
     }
-    return shrinkTree(growTree(Zipper.node(z), z.MAX_CHILDREN));
+    Long rootId = z.startsAreOpen ? Long.valueOf(OPEN_ROOT_ID) : Long.valueOf(CLOSED_ROOT_ID);
+    return shrinkTree(z.editingContext, rootId, growTree(z.editingContext, rootId, Zipper.node(z), z.MAX_CHILDREN));
   }
 
   static <T> Zipper insert(Zipper z, long id, long from, long to, T data) {
     while (true) {
-      if (from <= z.rightCousinStart) { // TODO should i check left neighbour?
+      if (from <= z.rightCousinStart) {
         // find nearest interval with start greater than insertion offset to preserve insertion order
         int insertIdx = z.starts.binarySearch(from - z.delta + 1);
         insertIdx = insertIdx < 0 ? ~insertIdx : insertIdx;
@@ -414,6 +465,8 @@ public class Intervals<T> {
             newRoot.ends.add(to);
             newRoot.ids.add(id);
             newRoot.children.add(data);
+            z.editingContext.parentsMap =
+              z.editingContext.parentsMap.put(id, z.startsAreOpen ? Long.valueOf(OPEN_ROOT_ID) : Long.valueOf(CLOSED_ROOT_ID));
             return Zipper.replace(z, newRoot, 0);
           }
           z = down;
@@ -455,12 +508,13 @@ public class Intervals<T> {
   }
 
   public static <T> Intervals<T> insert(Intervals<T> tree, List<Interval<T>> intervals) {
-    Zipper z = Zipper.create(tree.openRoot, tree.maxChildren, false);
+    Context ctx = new Context(tree.nextInnerId, tree.parentsMap.linear());
+    Zipper z = Zipper.create(tree.openRoot, ctx, tree.maxChildren, true);
     for (Interval<T> interval : intervals) {
       z = insert(z, interval.id, interval.from, interval.to, interval.data);
     }
     Node newRoot = root(z);
-    return new Intervals<>(tree.maxChildren, newRoot, tree.closedRoot);
+    return new Intervals<>(tree.maxChildren, newRoot, tree.closedRoot, ctx.parentsMap.forked(), ctx.nextId);
   }
 
   public static class IntervalsIterator<T> {
@@ -516,12 +570,12 @@ public class Intervals<T> {
       return null;
     }
 
-    Zipper skip =  Zipper.skip(up);
+    Zipper skip = Zipper.skip(up);
     return skip == null ? null : findNextIntersection(skip, from, to);
   }
 
   public static IntervalsIterator query(Intervals tree, long from, long to) {
-    return new IntervalsIterator(Zipper.create(tree.openRoot, tree.maxChildren, false), from, to);
+    return new IntervalsIterator(Zipper.create(tree.openRoot, null, tree.maxChildren, false), from, to);
   }
 
   static Node expand(Node node, long offset, long len) {
@@ -553,10 +607,21 @@ public class Intervals<T> {
   }
 
   public static <T> Intervals<T> expand(Intervals<T> tree, long start, long len) {
-    return new Intervals<T>(tree.maxChildren, expand(tree.openRoot, start, len), tree.closedRoot);
+    return new Intervals<T>(tree.maxChildren, expand(tree.openRoot, start, len), tree.closedRoot, tree.parentsMap, tree.nextInnerId);
   }
 
-  static Node collapse(Node node, int maxChildren, long offset, long len) {
+  private static IntMap<Long> extinct(IntMap<Long> parentsMap, long id, Object child) {
+    parentsMap = parentsMap.remove(id);
+    if (child instanceof Node) {
+      Node node = (Node)child;
+      for (int i = 0; i < node.ids.size(); ++i) {
+        parentsMap = extinct(parentsMap, node.ids.get(i), node.children.get(i));
+      }
+    }
+    return parentsMap;
+  }
+
+  static Node collapse(Context ctx, Node node, int maxChildren, long offset, long len) {
     Node result = Node.empty(node.children.size());
     for (int i = 0; i < node.children.size(); i++) {
       if (node.ends.get(i) <= offset) {
@@ -584,7 +649,7 @@ public class Intervals<T> {
         // just drop it on the floor
 
         // TODO think about greedy?
-        // TODO remove this child from ids map
+        ctx.parentsMap = extinct(ctx.parentsMap, node.ids.get(i), node.children.get(i));
       }
       else {
         //....(....interval....)....
@@ -599,7 +664,7 @@ public class Intervals<T> {
         Object child = node.children.get(i);
         if (child instanceof Node) {
           Node c = (Node)child;
-          c = collapse(c, maxChildren, offset - node.starts.get(i), len);
+          c = collapse(ctx, c, maxChildren, offset - node.starts.get(i), len);
           long delta = normalize(c);
           long newStart = node.starts.get(i) + delta;
           result.add(node.ids.get(i),
@@ -616,13 +681,14 @@ public class Intervals<T> {
         }
       }
     }
-    return balanceChildren(result, maxChildren);
+    return balanceChildren(ctx, result, maxChildren);
   }
 
-  public static <T> Intervals<T> collapse(Intervals tree, long start, long len) {
-    Node collapsed = collapse(tree.openRoot, tree.maxChildren, start, len);
-    Node newRoot = shrinkTree(growTree(collapsed, tree.maxChildren));
-    return new Intervals<>(tree.maxChildren, newRoot, tree.closedRoot);
+  public static <T> Intervals<T> collapse(Intervals<T> tree, long start, long len) {
+    Context ctx = new Context(tree.nextInnerId, tree.parentsMap.linear());
+    Node collapsed = collapse(ctx, tree.openRoot, tree.maxChildren, start, len);
+    Node newRoot = shrinkTree(ctx, Long.valueOf(OPEN_ROOT_ID), growTree(ctx, Long.valueOf(OPEN_ROOT_ID), collapsed, tree.maxChildren));
+    return new Intervals<>(tree.maxChildren, newRoot, tree.closedRoot, ctx.parentsMap.forked(), ctx.nextId);
   }
 
   public static Node remove(Node n, Set<Integer> ids) {
