@@ -114,22 +114,6 @@
               interval))
           intervals)))
 
-(comment
-
-  (def t
-    (let [intervals [{:id 0, :from 0, :to 0, :data nil}
-                     {:id 1, :from 0, :to 0, :data nil}
-                     {:id 2, :from 0, :to 0, :data nil}
-                     {:id 3, :from 0, :to 0, :data nil}
-                     {:id 4, :from 0, :to 0, :data nil}]
-          t (Intervals/insert empty-tree (into [] (map ->interval) intervals))]
-      t))
-
-  (Intervals/getById t 0)
-
-
-  )
-
 (defn type-in [tree [offset size]]
   (if (< size 0)
     (Intervals/collapse tree offset (Math/abs size))
@@ -256,6 +240,13 @@
 
   (sample (map (fn [i] {:from i :to (* 2 i) :data (str i "cm")}) (range 25)))
 
+  (doto (andel.Intervals$LongArrayList. 4)
+        (.add 1)
+        (.add 2)
+        (.add 3)
+        (.add 4)
+        (.remove 0)
+        (.remove 0))
 
 
   (let [sample #_(sample (map (fn [i] {:from i :to (* 2 i) :data (str i "cm")}) (range 25)))
@@ -270,16 +261,18 @@
                  {:from 0, :to 1, :id 7, :data nil}])
         t (-> (Intervals. 4)
               (Intervals/insert sample)
-              #_(Intervals/collapse 10 10)
+              (Intervals/remove [3 4 5])
               #_(Intervals/expand 1 1)
               )
         it (Intervals/query t 0 1)]
     (tp t)
-    #_(loop [r []]
+    (loop [r []]
       (if (.next it)
         (recur (conj r {:from (.from it) :to (.to it) :id (.id it) :data (.data it)}))
         r))
     )
 
+
+  *e
   )
 
