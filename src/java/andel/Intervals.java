@@ -160,6 +160,7 @@ public class Intervals<T> {
     }
 
     public static Zipper insert(Zipper z, int idx, long id, long start, long end, Object data) {
+      assert z.editingContext.parentsMap.get(id, null) == null;
       z.starts.add(idx, start - z.delta);
       z.ends.add(idx, end - z.delta);
       z.ids.add(idx, id);
@@ -446,12 +447,19 @@ public class Intervals<T> {
     return shrinkTree(z.editingContext, rootId, growTree(z.editingContext, rootId, Zipper.node(z), z.MAX_CHILDREN));
   }
 
+  private static int findInsertionPoint(LongArrayList ss, long o){
+    // find nearest interval with start greater than insertion offset to preserve insertion order
+    int i = 0;
+    while (i < ss.size() && ss.get(i) <= o) {
+      ++i;
+    }
+    return i;
+  }
+
   static <T> Zipper insert(Zipper z, long id, long from, long to, T data) {
     while (true) {
       if (from <= z.rightCousinStart) {
-        // find nearest interval with start greater than insertion offset to preserve insertion order
-        int insertIdx = z.starts.binarySearch(from - z.delta + 1);
-        insertIdx = insertIdx < 0 ? ~insertIdx : insertIdx;
+        int insertIdx = findInsertionPoint(z.starts, from - z.delta);
         if (Zipper.isBranch(z)) {
           z.idx = Math.max(0, insertIdx - 1);
           Zipper down = Zipper.down(z);
@@ -496,9 +504,9 @@ public class Intervals<T> {
     int maxChildren;
     Context editingContext;
 
-    Batch(Zipper closedZipper, Zipper openZipper, Context editingContext, int maxChildren) {
-      this.closedZipper = closedZipper;
+    Batch(Zipper openZipper, Zipper closedZipper, Context editingContext, int maxChildren) {
       this.openZipper = openZipper;
+      this.closedZipper = closedZipper;
       this.maxChildren = maxChildren;
       this.editingContext = editingContext;
     }
@@ -727,8 +735,9 @@ public class Intervals<T> {
 
   static LongArrayList resolvePath(IntMap<Long> parents, long id) {
     LongArrayList path = new LongArrayList(4);
+    Long p = id;
     while (true) {
-      Long p = parents.get(id, null);
+      p = parents.get((long)p, null);
       if (p == null) {
         throw new NoSuchElementException();
       }
@@ -755,7 +764,7 @@ public class Intervals<T> {
     LongArrayList path = resolvePath(tree.parentsMap, id);
     Node n = chooseRoot(tree, path.get(path.size() - 1));
     int delta = 0;
-    for (int i = path.size() - 2; i > 0; --i) {
+    for (int i = path.size() - 2; i >= 0; --i) {
       int idx = n.ids.indexOf(path.get(i));
       if (idx == -1) {
         throw new IllegalStateException();
@@ -765,7 +774,7 @@ public class Intervals<T> {
         n = (Node)n.children.get(idx);
       }
     }
-    int idx = n.ids.indexOf(path.get(0));
+    int idx = n.ids.indexOf(id);
     if (idx == -1) {
       throw new IllegalStateException();
     }

@@ -5,16 +5,21 @@
             [clojure.test :refer :all])
   (:import [andel Intervals Intervals$Interval]))
 
-(def sort-intervals [intervals]
-  (sort-by :from intervals))
+(defn assert-ids-are-sane [intervals tree]
+  (doseq [{:keys [id] :as interval} intervals]
+    (let [i (Intervals/getById tree id)]
+      (assert (= interval {:from (.-from i)
+                           :to (.-to i)
+                           :id (.-id i)
+                           :data (.-data i)})))))
 
 (defn tree->intervals [tree]
   (let [it (Intervals/query tree 0 Long/MAX_VALUE)]
     (loop [r []]
       (if (.next it)
-        (recur (conj r {:from (.from it)
+        (recur (conj r {:id (.id it)
+                        :from (.from it)
                         :to (.to it)
-                        :id (.id it)
                         :data (.data it)}))
         r))))
 
@@ -35,102 +40,116 @@
                      ;     :greedy-right? g-r?
                      :data nil})
                   a b g-l? g-r? ids)
-            (sort-by :to))))))
+            (sort-by :from)
+            (into []))))))
 
 (defn ->interval [{:keys [id from to data]}]
-  (Intervals$Interval. 0 from to data))
+  (Intervals$Interval. id from to data))
+
+(def empty-tree (Intervals. 4))
 
 (def bulk-insertion-prop
-  (prop/for-all [bulk intervals-bulk-gen]
-    (let [tree (Intervals/insert (Intervals. 4)
-                                 (into [] (map ->interval) bulk))]
-      (= (tree->intervals tree) bulk))))
+  (prop/for-all [intervals intervals-bulk-gen]
+    (let [tree (Intervals/insert empty-tree (into [] (map ->interval) intervals))]
+      (assert-ids-are-sane intervals tree)
+      (= (tree->intervals tree) intervals))))
+
+(def bulk-of-bulks-prop
+  (prop/for-all [bulk-of-bulks (g/fmap
+                                (fn [[intervals nums]]
+                                  (loop [intervals intervals
+                                         [n & nums] nums
+                                         result []]
+                                    (if (or (nil? n) (<= (count intervals) n))
+                                      (conj result (into [] intervals))
+                                      (recur
+                                        (drop n intervals)
+                                        nums
+                                        (conj result (into [] (take n) intervals))))))
+                                (g/tuple intervals-bulk-gen
+                                         (g/vector g/s-pos-int)))]
+    (let [itree (reduce
+                 (fn [t bulk]
+                   (Intervals/insert t (into [] (map ->interval) bulk)))
+                 empty-tree
+                 bulk-of-bulks)]
+      (= (sort-by :from (mapcat identity bulk-of-bulks))
+         (tree->intervals itree)))))
+
+(defn naive-type-in [intervals [offset length]]
+  (if (< length 0)
+    (into []
+          (comp (map (fn [interval]
+                       (let [update-point (fn [point offset length] (if (< offset point)
+                                                                      (max offset (- point length))
+                                                                      point))]
+                         (-> interval
+                             (update :from update-point offset length)
+                             (update :to update-point offset length)))))
+                (remove (fn [marker]
+                          (and (= (:from marker) (:to marker))
+                               (not (:greedy-left? marker))
+                               (not (:greedy-right? marker))))))
+          intervals)
+    (mapv (fn [{:keys [from to greedy-left? greedy-right?] :as interval}]
+            (cond
+              (and greedy-left?
+                   (= offset from))
+              (assoc interval :to (+ to length))
+
+              (and greedy-right?
+                   (= offset to))
+              (assoc interval :to (+ to length))
+
+              (and (< from offset)
+                   (< offset to))
+              (assoc interval :to (+ to length))
+
+              (<= offset from)
+              (assoc interval
+                     :to (+ to length)
+                     :from (+ from length))
+
+              :else
+              interval))
+          intervals)))
+
+(comment
+
+  (def t
+    (let [intervals [{:id 0, :from 0, :to 0, :data nil}
+                     {:id 1, :from 0, :to 0, :data nil}
+                     {:id 2, :from 0, :to 0, :data nil}
+                     {:id 3, :from 0, :to 0, :data nil}
+                     {:id 4, :from 0, :to 0, :data nil}]
+          t (Intervals/insert empty-tree (into [] (map ->interval) intervals))]
+      t))
+
+  (Intervals/getById t 0)
+
+
+  )
+
+(defn type-in [tree [offset size]]
+  (if (< size 0)
+    (Intervals/collapse tree offset (Math/abs size))
+    (Intervals/expand tree offset size)))
+
+(def type-in-prop
+  (prop/for-all [[intervals typings] (g/bind intervals-bulk-gen
+                                       (fn [bulk]
+                                         (let [max-val (transduce (map :to) max 0 bulk)]
+                                           (g/tuple (g/return bulk)
+                                                    (g/vector (g/tuple (g/large-integer* {:min 0 :max max-val})
+                                                                       g/int))))))]
+    (let [tree (Intervals/insert empty-tree (into [] (map ->interval) intervals))]
+      (= (reduce naive-type-in intervals typings)
+         (tree->intervals (reduce type-in tree typings))))))
 
 (deftest intervals-test
-  (is (:result (tc/quick-check 1000 bulk-insertion-prop))))
-
-;(deftest multiple-bulk-insertion
-;  (is (:result (tc/quick-check 100
-;                               (prop/for-all [bulk-bulk (g/vector intervals-bulk-gen)]
-;                                             (let [itree (reduce add-markers
-;                                                                 empty-tree
-;                                                                 bulk-bulk)]
-;                                               (= (set (mapcat vec bulk-bulk))
-;                                                  (set (tree->intervals itree)))))))))
-
-;; [interval] -> [offset size] -> [interval]
-
-(defn play-type-in [intervals [offset size]]
-  (mapv (fn [{:keys [from to greedy-left? greedy-right?] :as interval}]
-          (cond
-            (and greedy-left?
-                 (= offset from))
-            (assoc interval :to (+ to size))
-
-            (and greedy-right?
-                 (= offset to))
-            (assoc interval :to (+ to size))
-
-            (and (< from offset)
-                 (< offset to))
-            (assoc interval :to (+ to size))
-
-            (<= offset from)
-            (assoc interval
-                   :to (+ to size)
-                   :from (+ from size))
-
-            :else
-            interval))
-        intervals))
-
-(def bulk-offset-size-gen
-  (g/bind intervals-bulk-gen
-          (fn [bulk]
-            (let [max-val (transduce (map :to) max 0 bulk)]
-              (g/tuple (g/return bulk)
-                       (g/vector (g/tuple (g/large-integer* {:min 0 :max max-val})
-                                          (g/large-integer* {:min 0 :max 10000}))))))))
-
-(defn bulk->tree [bulk]
-  (-> (Intervals. 32)
-      (Intervals/insert (into [] (map ->interval)
-                              bulk))))
-
-
-(deftest type-in-positive-test
-  (is
-   (:result
-    (tc/quick-check
-     1000
-     (prop/for-all [[bulk qs] bulk-offset-size-gen]
-                   (= (set (reduce play-type-in bulk qs))
-                      (set (tree->intervals
-                            (reduce (fn [t [o s]] (Intervals/expand t o s))
-                                    (bulk->tree bulk) qs)))))))))
-
-(defn drop-dead-markers [markers]
-  (remove (fn [marker]
-            (and (= (:from marker) (:to marker)) (not (:greedy-left? marker)) (not (:greedy-right? marker))))
-          markers))
-
-(defn play-delete-range [model [offset length]]
-  (map (fn [interval]
-         (let [update-point (fn [point offset length] (if (< offset point)
-                                                       (max offset (- point length))
-                                                       point))]
-           (-> interval
-               (update :from update-point offset length)
-               (update :to update-point offset length))))
-       model))
-
-(deftest test-delete-range
-  (is (:result
-       (tc/quick-check 1000
-                       (prop/for-all [[bulk qs] bulk-offset-size-gen]
-                                     (= (set (drop-dead-markers (reduce play-delete-range bulk qs)))
-                                        (set (drop-dead-markers (tree->intervals
-                                                                 (reduce (fn [t [o s]] (Intervals/collapse t o s)) (bulk->tree bulk) qs))))))))))
+  (is (:result (tc/quick-check 1000 bulk-insertion-prop)))
+  (is (:result (tc/quick-check 1000 bulk-of-bulks-prop)))
+  (is (:result (tc/quick-check 1000 type-in-prop))))
 
 (defn intersects? [^long from1 ^long to1 ^long from2 ^long to2]
   (if (<= from1 from2)
@@ -154,11 +173,7 @@
                                                         (map :to)
                                                         (apply max 0))))))))
 
-(let [[bulk queries] [[{:from 0, :to 1, :data nil} {:from 0, :to 0, :data nil}]
-                      [{:from 0, :to 1}]]]
-  (map play-query (repeat bulk) queries))
-
-(deftest query-test
+#_(deftest query-test
   (is
    (:result
     (tc/quick-check
