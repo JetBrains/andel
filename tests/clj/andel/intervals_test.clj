@@ -36,15 +36,15 @@
                     {:id id
                      :from (min a b)
                      :to (max a b)
-                     ;      :greedy-left? g-l?
-                     ;     :greedy-right? g-r?
+                     :greedy-left? g-l?
+                     :greedy-right? g-r?
                      :data nil})
                   a b g-l? g-r? ids)
             (sort-by :from)
             (into []))))))
 
-(defn ->interval [{:keys [id from to data]}]
-  (Intervals$Interval. id from to data))
+(defn ->interval [{:keys [id from to data greedy-left? greedy-right?]}]
+  (Intervals$Interval. id from to greedy-left? greedy-right? data))
 
 (def empty-tree (Intervals. 4))
 
@@ -228,11 +228,13 @@
 
   (defn sample [input]
     (reduce
-      (fn [al {:keys [id from to data]}]
+      (fn [al {:keys [id from to greedy-left? greedy-right? data]}]
         (.add al
               (Intervals$Interval. id
                                    from
                                    to
+                                   greedy-left?
+                                   greedy-left?
                                    data))
         al)
      (java.util.ArrayList.)
@@ -251,26 +253,30 @@
 
   (let [sample #_(sample (map (fn [i] {:from i :to (* 2 i) :data (str i "cm")}) (range 25)))
         (sample [
-                  {:from 0, :to 0, :id 0, :data nil}
-                 {:from 0, :to 0, :id 1, :data nil}
-                 {:from 0, :to 0, :id 2, :data nil}
-                 {:from 0, :to 0, :id 3, :data nil}
-                 {:from 0, :to 0, :id 4, :data nil}
-                 {:from 0, :to 0, :id 5, :data nil}
-                 {:from 0, :to 1, :id 6 :data nil}
-                 {:from 0, :to 1, :id 7, :data nil}])
+                 {:from 0 :to 0 :id 0 :greedy-left? true :greedy-right? true :data nil}
+                 {:from 1 :to 2 :id 1 :greedy-left? true :greedy-right? true :data nil}
+                 {:from 2 :to 4 :id 2 :greedy-left? true :greedy-right? true :data nil}
+                 {:from 3 :to 6 :id 3 :greedy-left? true :greedy-right? false :data nil}
+                 {:from 4 :to 8 :id 4 :greedy-left? true :greedy-right? false :data nil}
+                 ;{:from 0 :to 0 :id 5 :greedy-left? true :greedy-right? true :data nil}
+                 ;{:from 0 :to 1 :id 6 :greedy-left? true :greedy-right? true :data nil}
+                 ;{:from 0 :to 1 :id 7 :greedy-left? true :greedy-right? true :data nil}
+                 ])
         t (-> (Intervals. 4)
               (Intervals/insert sample)
-              (Intervals/remove [3 4 5])
+              #_(Intervals/remove [3 4 5])
               #_(Intervals/expand 1 1)
               )
-        it (Intervals/query t 0 1)]
+        it (Intervals/query t 2 4)]
     (tp t)
     (loop [r []]
       (if (.next it)
         (recur (conj r {:from (.from it) :to (.to it) :id (.id it) :data (.data it)}))
         r))
     )
+
+   (Math/abs (rem -1 2))
+
 
 
   *e

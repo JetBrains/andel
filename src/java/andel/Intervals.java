@@ -70,7 +70,6 @@ public class Intervals<T> {
                       this.ends.copy(),
                       (ArrayList<Object>)this.children.clone());
     }
-
   }
 
   public static class Interval<T> {
@@ -78,21 +77,25 @@ public class Intervals<T> {
     public long from;
     public long to;
     public T data;
+    public boolean closedLeft;
+    public boolean closedRight;
 
-    public Interval(long id, long from, long to, T data) {
+    public Interval(long id, long from, long to, boolean closedLeft, boolean closedRight, T data) {
       this.id = id;
       this.from = from;
       this.to = to;
       this.data = data;
+      this.closedLeft = closedLeft;
+      this.closedRight = closedRight;
     }
 
     @Override
     public String toString() {
-      return "[id=" + id + ", from=" + from + ", to=" + to + "]";
+      return "id=" + id + (closedLeft ? "[" : "(") + from + ", " + to + (closedRight ? "]" : ")");
     }
   }
 
-  public static class Zipper {
+  static class Zipper {
     public boolean startsAreOpen;
     public boolean changed = false;
     public boolean hasRightCousin;
@@ -165,7 +168,7 @@ public class Intervals<T> {
       }
     }
 
-    public static Zipper insert(Zipper z, int idx, long id, long start, long end, Object data) {
+    static Zipper insert(Zipper z, int idx, long id, long start, long end, Object data) {
       assert z.editingContext.parentsMap.get(id, null) == null;
       z.starts.add(idx, start - z.delta);
       z.ends.add(idx, end - z.delta);
@@ -457,7 +460,7 @@ public class Intervals<T> {
     return shrinkTree(z.editingContext, rootId, growTree(z.editingContext, rootId, Zipper.node(z)));
   }
 
-  private static int findInsertionPoint(LongArrayList ss, long o){
+  private static int findInsertionPoint(LongArrayList ss, long o) {
     // find nearest interval with start greater than insertion offset to preserve insertion order
     int i = 0;
     while (i < ss.size() && ss.get(i) <= o) {
@@ -519,13 +522,19 @@ public class Intervals<T> {
       this.editingContext = editingContext;
     }
 
-    public Batch<T> insert(long id, long from, long to, T data) {
+    public Batch<T> insert(long id, long from, long to, boolean closedLeft, boolean closedRight, T data) {
       if (from < lastSeenFrom) {
         throw new IllegalArgumentException();
       }
       lastSeenFrom = from;
-
-      this.openZipper = Intervals.insert(this.openZipper, id, from, to, data);
+      from = from * 2 - (closedLeft ? 1 : 0);
+      to = to * 2 + (closedRight ? 1 : 0);
+      if (closedLeft) {
+        this.closedZipper = Intervals.insert(this.closedZipper, id, from, to, data);
+      }
+      else {
+        this.openZipper = Intervals.insert(this.openZipper, id, from, to, data);
+      }
       return this;
     }
 
@@ -548,43 +557,165 @@ public class Intervals<T> {
   public static <T> Intervals<T> insert(Intervals<T> tree, List<Interval<T>> intervals) {
     Batch<T> batch = batch(tree);
     for (Interval<T> interval : intervals) {
-      batch.insert(interval.id, interval.from, interval.to, interval.data);
+      batch.insert(interval.id,
+                   interval.from, interval.to,
+                   interval.closedLeft, interval.closedRight,
+                   interval.data);
     }
     return batch.finish();
   }
 
-  public static class IntervalsIterator<T> {
+  public interface IntervalsIterator<T> {
+    boolean closedLeft();
+
+    boolean closedRight();
+
+    long from();
+
+    long to();
+
+    long id();
+
+    T data();
+
+    boolean next();
+  }
+
+  static class Iterator<T> implements IntervalsIterator<T> {
     private Zipper z;
     private final long queryFrom;
     private final long queryTo;
 
-    public IntervalsIterator(Zipper z, long queryFrom, long queryTo) {
+    Iterator(Zipper z, long queryFrom, long queryTo) {
       this.z = z;
       this.queryFrom = queryFrom;
       this.queryTo = queryTo;
     }
 
+    @Override
+    public boolean closedLeft() {
+      return z.delta + z.starts.get(z.idx) % 2 != 0;
+    }
+
+    @Override
+    public boolean closedRight() {
+      return z.delta + z.ends.get(z.idx) % 2 != 0;
+    }
+
+    @Override
     public long from() {
-      return z.delta + z.starts.get(z.idx);
+      long from = z.delta + z.starts.get(z.idx);
+      return from / 2 + Math.max(0, from % 2);
     }
 
+    @Override
     public long to() {
-      return z.delta + z.ends.get(z.idx);
+      return (z.delta + z.ends.get(z.idx)) / 2;
     }
 
+    @Override
     public long id() {
       return z.ids.get(z.idx);
     }
 
+    @Override
     public T data() {
       //noinspection unchecked
       return (T)z.children.get(z.idx);
     }
 
+    @Override
     public boolean next() {
       Zipper next = Zipper.isRoot(z) ? z : Zipper.skip(z);
       z = next == null ? null : findNextIntersection(next, queryFrom, queryTo);
       return z != null;
+    }
+  }
+
+  public static class MergingIterator<T> implements IntervalsIterator<T> {
+
+    private IntervalsIterator<T> first;
+    private IntervalsIterator<T> second;
+    private boolean myFirstTime = true;
+
+    public MergingIterator(IntervalsIterator<T> left, IntervalsIterator<T> right) {
+      this.first = left;
+      this.second = right;
+    }
+
+    @Override
+    public boolean closedLeft() {
+      return first.closedLeft();
+    }
+
+    @Override
+    public boolean closedRight() {
+      return first.closedRight();
+    }
+
+    @Override
+    public long from() {
+      return first.from();
+    }
+
+    @Override
+    public long to() {
+      return first.to();
+    }
+
+    @Override
+    public long id() {
+      return first.id();
+    }
+
+    @Override
+    public T data() {
+      return first.data();
+    }
+
+    @Override
+    public boolean next() {
+      if (myFirstTime) {
+        myFirstTime = false;
+        boolean firstNext = first.next();
+        boolean secondNext = second.next();
+        if (firstNext && secondNext) {
+          if (first.from() > second.from()) {
+            IntervalsIterator<T> tmp = second;
+            second = first;
+            first = tmp;
+          }
+          return true;
+        }
+        else if (firstNext) {
+          second = null;
+          return true;
+        }
+        else if (secondNext) {
+          first = second;
+          second = null;
+          return true;
+        }
+        else {
+          return false;
+        }
+      }
+      else {
+        if (first.next()){
+          if (second != null) {
+            if (first.from() > second.from()) {
+              IntervalsIterator<T> tmp = second;
+              second = first;
+              first = tmp;
+            }
+          }
+          return true;
+        } else {
+          first = second;
+          second = null;
+          return first != null;
+        }
+      }
     }
   }
 
@@ -611,14 +742,16 @@ public class Intervals<T> {
   }
 
   public static IntervalsIterator query(Intervals tree, long from, long to) {
-    return new IntervalsIterator(Zipper.create(tree.openRoot, null, false), from, to);
+    return new MergingIterator<>(
+      new Iterator<>(Zipper.create(tree.openRoot, null, false), from * 2, to * 2),
+      new Iterator<>(Zipper.create(tree.closedRoot, null, true), from * 2, to * 2));
   }
 
   public static List<Interval> queryAll(Intervals tree, long from, long to) {
     ArrayList<Interval> result = new ArrayList<>();
     IntervalsIterator it = query(tree, from, to);
     while (it.next()) {
-      result.add(new Interval<>(it.id(), it.from(), it.to(), it.data()));
+      result.add(new Interval<>(it.id(), it.from(), it.to(), it.closedLeft(), it.closedRight(), it.data()));
     }
     return result;
   }
@@ -652,7 +785,11 @@ public class Intervals<T> {
   }
 
   public static <T> Intervals<T> expand(Intervals<T> tree, long start, long len) {
-    return new Intervals<T>(tree.maxChildren, expand(tree.openRoot, start, len), tree.closedRoot, tree.parentsMap, tree.nextInnerId);
+    return new Intervals<>(tree.maxChildren,
+                           expand(tree.openRoot, start * 2, len * 2),
+                           expand(tree.closedRoot, start * 2, len * 2),
+                           tree.parentsMap,
+                           tree.nextInnerId);
   }
 
   private static IntMap<Long> extinct(IntMap<Long> parentsMap, long id, Object child) {
@@ -666,7 +803,7 @@ public class Intervals<T> {
     return parentsMap;
   }
 
-  static Node collapse(Context ctx, Node node, int maxChildren, long offset, long len) {
+  static Node collapse(Context ctx, Node node, long offset, long len) {
     Node result = Node.empty(node.children.size());
     for (int i = 0; i < node.children.size(); i++) {
       if (node.ends.get(i) <= offset) {
@@ -709,7 +846,7 @@ public class Intervals<T> {
         Object child = node.children.get(i);
         if (child instanceof Node) {
           Node c = (Node)child;
-          c = collapse(ctx, c, maxChildren, offset - node.starts.get(i), len);
+          c = collapse(ctx, c, offset - node.starts.get(i), len);
           long delta = normalize(c);
           long newStart = node.starts.get(i) + delta;
           result.add(node.ids.get(i),
@@ -731,9 +868,13 @@ public class Intervals<T> {
 
   public static <T> Intervals<T> collapse(Intervals<T> tree, long start, long len) {
     Context ctx = new Context(tree.nextInnerId, tree.maxChildren, tree.parentsMap.linear());
-    Node collapsed = collapse(ctx, tree.openRoot, tree.maxChildren, start, len);
-    Node newRoot = shrinkTree(ctx, Long.valueOf(OPEN_ROOT_ID), growTree(ctx, Long.valueOf(OPEN_ROOT_ID), collapsed));
-    return new Intervals<>(tree.maxChildren, newRoot, tree.closedRoot, ctx.parentsMap.forked(), ctx.nextId);
+    Node openRoot = shrinkTree(ctx, Long.valueOf(OPEN_ROOT_ID),
+                               growTree(ctx, Long.valueOf(OPEN_ROOT_ID),
+                                        collapse(ctx, tree.openRoot, start * 2, len * 2)));
+    Node closedRoot = shrinkTree(ctx, Long.valueOf(CLOSED_ROOT_ID),
+                                 growTree(ctx, Long.valueOf(CLOSED_ROOT_ID),
+                                          collapse(ctx, tree.closedRoot, start * 2, len * 2)));
+    return new Intervals<>(tree.maxChildren, openRoot, closedRoot, ctx.parentsMap.forked(), ctx.nextId);
   }
 
   private static Node remove(Context ctx, Node node, long nodeId, HashMap<Long, LongArrayList> subtree) {
@@ -828,10 +969,14 @@ public class Intervals<T> {
       throw new IllegalStateException();
     }
     else {
+      long from = n.starts.get(idx) + delta;
+      long to = n.ends.get(idx) + delta;
       //noinspection unchecked
       return new Interval<>(n.ids.get(idx),
-                            n.starts.get(idx) + delta,
-                            n.ends.get(idx) + delta,
+                            from / 2 + Math.max(0, from % 2),
+                            to / 2,
+                            from % 2 != 0,
+                            from % 2 != 0,
                             (T)n.children.get(idx));
     }
   }
@@ -841,12 +986,12 @@ public class Intervals<T> {
 
     for (Long id : toBeDeleted) {
       long cid = id;
-      if (id < 0){
+      if (id < 0) {
         throw new IllegalArgumentException("id:" + id);
       }
       while (cid != OPEN_ROOT_ID && cid != CLOSED_ROOT_ID) {
         Long pid = parents.get(cid, null);
-        if (pid == null){
+        if (pid == null) {
           throw new NoSuchElementException("id:" + cid);
         }
 
@@ -927,9 +1072,10 @@ public class Intervals<T> {
     }
 
     public void removeRange(int from, int to) {
-      if (to > this.size)
+      if (to > this.size) {
         throw new IndexOutOfBoundsException();
-      if (to < this.size){
+      }
+      if (to < this.size) {
         System.arraycopy(buffer, to, buffer, from, size - to);
       }
       size -= to - from;
