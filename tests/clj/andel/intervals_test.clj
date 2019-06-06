@@ -214,7 +214,7 @@
                       (set (tree->intervals tree))))))
 
 (deftest intervals-test
-  (is (:result (tc/quick-check 100 intervals-prop))))
+  (is (:result (tc/quick-check 1000 intervals-prop :max-size 10))))
 
 
 
@@ -234,15 +234,59 @@
      :closed-root (np (.-closedRoot tree))
      :mapping (.-parentsMap tree)})
 
-  (def fail)
+  (def fail
+    [[[:insert
+    [{:id 1,
+      :from 0,
+      :to 24,
+      :greedy-left? true,
+      :greedy-right? true,
+      :data nil}]]
+   [:insert
+    [{:id 4,
+      :from 0,
+      :to 0,
+      :greedy-left? true,
+      :greedy-right? false,
+      :data nil}
+     {:id 3,
+      :from 0,
+      :to 6,
+      :greedy-left? true,
+      :greedy-right? false,
+      :data nil}
+     {:id 5,
+      :from 1,
+      :to 1,
+      :greedy-left? true,
+      :greedy-right? false,
+      :data nil}
+     {:id 2,
+      :from 2,
+      :to 8,
+      :greedy-left? true,
+      :greedy-right? false,
+      :data nil}
 
-  (def tree-before (reduce play-op empty-tree (second (first fail))))
+     #_{:id 5,
+      :from 2,
+      :to 7,
+      :greedy-left? true,
+      :greedy-right? true,
+      :data nil}]]
+   [:type-in [1 -4]]
+   [:type-in [1 -3]]
+   #_[:delete #{5}]
+   #_[:insert
+    [{:id 5,
+      :from 1,
+      :to 1,
+      :greedy-left? true,
+      :greedy-right? false,
+      :data nil}]]
+   [:type-in [1 1]]]])
 
-  {:before (tp tree-before)
-   :after
-   (tp (Intervals/collapse tree-before 0 5))}
-
-  (let [[[_ ops]] fail
+  (let [[ops] fail
         naive (reduce naive-play-op [] ops)
         tree (reduce play-op empty-tree ops)
         actual (tree->intervals tree)]

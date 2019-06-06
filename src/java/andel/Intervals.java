@@ -534,7 +534,7 @@ public class Intervals<T> {
 
     public Batch<T> insert(long id, long from, long to, boolean closedLeft, boolean closedRight, T data) {
       if (from < lastSeenFrom) {
-        throw new IllegalArgumentException();
+        throw new IllegalArgumentException("batch is not sorted");
       }
       if (from == to && !closedLeft && !closedRight) {
         throw new IllegalArgumentException();
