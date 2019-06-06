@@ -155,9 +155,12 @@ public class Intervals<T> {
         r.ids = child.ids;
         r.delta = z.delta + z.starts.get(z.idx);
         r.hasRightCousin = z.hasRightCousin || z.idx < z.children.size() - 1;
-        r.rightCousinStart = z.idx + 1 < z.starts.size()
-                             ? z.starts.get(z.idx + 1)
-                             : z.rightCousinStart;
+        r.rightCousinStart = r.hasRightCousin
+                             ? (z.idx + 1 < z.starts.size()
+                                ? z.starts.get(z.idx + 1)
+                                : z.rightCousinStart) - z.starts.get(z.idx)
+                             : Long.MAX_VALUE;
+        assert r.rightCousinStart >= 0 : "rightCousinStart:" + r.rightCousinStart;
         r.children = child.children;
         r.editingContext = z.editingContext;
         r.idx = 0;
@@ -461,7 +464,7 @@ public class Intervals<T> {
   }
 
   private static int findInsertionPoint(LongArrayList ss, long o) {
-    // find nearest interval with start greater than insertion offset to preserve insertion order
+    // find nearest interval with start greater than insertion offset to preserve insertion order of markers with same start
     int i = 0;
     while (i < ss.size() && ss.get(i) <= o) {
       ++i;
@@ -470,8 +473,11 @@ public class Intervals<T> {
   }
 
   static <T> Zipper insert(Zipper z, long id, long from, long to, T data) {
+    int retries = 0;
     while (true) {
-      if (from <= z.rightCousinStart) {
+      //noinspection AssertWithSideEffects
+      assert ++retries < 1000;
+      if (from - z.delta <= z.rightCousinStart) {
         int insertIdx = findInsertionPoint(z.starts, from - z.delta);
         if (Zipper.isBranch(z)) {
           z.idx = Math.max(0, insertIdx - 1);
@@ -500,14 +506,18 @@ public class Intervals<T> {
   }
 
   private static long normalize(Node node) {
-    long delta = node.starts.get(0);
-    if (delta != 0) {
-      for (int i = 0; i < node.starts.size(); i++) {
-        node.starts.set(i, node.starts.get(i) - delta);
-        node.ends.set(i, node.ends.get(i) - delta);
+    if (node.starts.size() == 0){
+      return 0;
+    } else {
+      long delta = node.starts.get(0);
+      if (delta != 0) {
+        for (int i = 0; i < node.starts.size(); i++) {
+          node.starts.set(i, node.starts.get(i) - delta);
+          node.ends.set(i, node.ends.get(i) - delta);
+        }
       }
+      return delta;
     }
-    return delta;
   }
 
   public static class Batch<T> {
@@ -840,7 +850,7 @@ public class Intervals<T> {
         // (1, 1] stored as (2, 3) delete (1, 2) which means (2, 4)
         // [2, 2) stored as (3, 4) delete (1, 2) which means (2, 4)
         // ==> will be removed without this case
-        if (offset <= start){
+        if (offset < start){
           result.add(id, start - len, end - len, child);
         } else {
           result.add(id, start, end, child);
@@ -944,8 +954,8 @@ public class Intervals<T> {
     HashMap<Long, LongArrayList> deletionSubtree = deletionSubtree(tree.parentsMap, ids);
     Context ctx = new Context(tree.nextInnerId, tree.maxChildren, tree.parentsMap.linear());
 
-    Node openRoot = remove(ctx, tree.openRoot, OPEN_ROOT_ID, deletionSubtree);
-    Node closedRoot = remove(ctx, tree.closedRoot, CLOSED_ROOT_ID, deletionSubtree);
+    Node openRoot = shrinkTree(ctx, OPEN_ROOT_ID, remove(ctx, tree.openRoot, OPEN_ROOT_ID, deletionSubtree));
+    Node closedRoot = shrinkTree(ctx, CLOSED_ROOT_ID, remove(ctx, tree.closedRoot, CLOSED_ROOT_ID, deletionSubtree));
 
     return new Intervals<>(tree.maxChildren,
                            openRoot,
@@ -1016,10 +1026,10 @@ public class Intervals<T> {
     HashMap<Long, LongArrayList> subtree = new HashMap<>();
 
     for (Long id : toBeDeleted) {
-      long cid = id;
       if (id < 0) {
         throw new IllegalArgumentException("id:" + id);
       }
+      long cid = id;
       if (parents.get(cid, null) != null) {
         while (cid != OPEN_ROOT_ID && cid != CLOSED_ROOT_ID) {
           Long pid = parents.get(cid, null);

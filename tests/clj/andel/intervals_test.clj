@@ -57,50 +57,10 @@
 
 (def empty-tree (Intervals. 4))
 
-(def bulk-insertion-prop
-  (prop/for-all [intervals (intervals-bulk-gen)]
-    (let [tree (Intervals/insert empty-tree (into [] (map ->interval) intervals))]
-      (assert-ids-are-sane intervals tree)
-      (= (tree->intervals tree) intervals))))
-
-(def bulk-of-bulks-prop
-  (prop/for-all [bulk-of-bulks (g/fmap
-                                (fn [[intervals nums]]
-                                  (loop [intervals intervals
-                                         [n & nums] nums
-                                         result []]
-                                    (if (or (nil? n) (<= (count intervals) n))
-                                      (conj result (into [] intervals))
-                                      (recur
-                                        (drop n intervals)
-                                        nums
-                                        (conj result (into [] (take n) intervals))))))
-                                (g/tuple (intervals-bulk-gen)
-                                         (g/vector g/s-pos-int)))]
-    (let [itree (reduce
-                 (fn [t bulk]
-                   (Intervals/insert t (into [] (map ->interval) bulk)))
-                 empty-tree
-                 bulk-of-bulks)]
-      (= (sort-by :from (mapcat identity bulk-of-bulks))
-         (tree->intervals itree)))))
-
 (defn naive-type-in [intervals [offset length]]
-  (if (< length 0)
+  (if (< 0 length)
     (into []
-          (comp (map (fn [interval]
-                       (let [update-point (fn [point offset length] (if (< offset point)
-                                                                      (max offset (+ point length))
-                                                                      point))]
-                         (-> interval
-                             (update :from update-point offset length)
-                             (update :to update-point offset length)))))
-                (remove (fn [marker]
-                          (and (= (:from marker) (:to marker))
-                               (not (:greedy-left? marker))
-                               (not (:greedy-right? marker))))))
-          intervals)
-    (mapv (fn [{:keys [from to greedy-left? greedy-right?] :as interval}]
+          (map (fn [{:keys [from to greedy-left? greedy-right?] :as interval}]
             (cond
               (and greedy-left?
                    (= offset from))
@@ -120,8 +80,28 @@
                      :from (+ from length))
 
               :else
-              interval))
-          intervals)))
+              interval)))
+          intervals)
+    (let [length (- length)]
+      (into []
+            (comp (remove
+                   (fn [{:keys [from to greedy-left? greedy-right?]}]
+                     (or (and (< offset from) (< to (+ offset length)))
+                         (and (not= from to)
+                              (or (and greedy-left? (not greedy-right?) (< offset from) (<= to (+ offset length)))
+                                  (and (not greedy-left?) greedy-right? (<= offset from) (< to (+ offset length))))))))
+                  (map (fn [interval]
+                         (let [update-point (fn [point] (if (< offset point)
+                                                          (max offset (- point length))
+                                                          point))]
+                           (-> interval
+                               (update :from update-point)
+                               (update :to update-point)))))
+                  (remove (fn [marker]
+                            (and (= (:from marker) (:to marker))
+                                 (not (:greedy-left? marker))
+                                 (not (:greedy-right? marker))))))
+            intervals))))
 
 (defn type-in [tree [offset size]]
   (if (< size 0)
@@ -138,11 +118,6 @@
     (let [tree (Intervals/insert empty-tree (into [] (map ->interval) intervals))]
       (= (reduce naive-type-in intervals typings)
          (tree->intervals (reduce type-in tree typings))))))
-
-(deftest intervals-test
-  (is (:result (tc/quick-check 1000 bulk-insertion-prop)))
-  (is (:result (tc/quick-check 1000 bulk-of-bulks-prop)))
-  (is (:result (tc/quick-check 1000 type-in-prop))))
 
 (defn intersects? [^long from1 ^long to1 ^long from2 ^long to2]
   (if (<= from1 from2)
@@ -225,16 +200,19 @@
               tree
               arg)))
 
-(tc/quick-check
- 10
- (prop/for-all [[_ ops] (my-gen (g/return [#{} []]))]
-               (let [naive (reduce naive-play-op [] ops)
-                     tree  (reduce play-op empty-tree ops)]
-                 (assert-ids-are-sane naive tree)
+(def intervals-prop
+  (prop/for-all [[_ ops] (my-gen (g/return [#{} []]))]
+                 (let [naive (reduce naive-play-op [] ops)
+                       tree  (reduce play-op empty-tree ops)]
+                   (assert-ids-are-sane naive tree)
 
-                 ;;todo assert intervals are ordered
-                 (= (set naive)
-                    (set (tree->intervals tree))))))
+                   ;;todo assert intervals are ordered
+                   (= (set naive)
+                      (set (tree->intervals tree))))))
+
+(deftest intervals-test
+  (is (:result (tc/quick-check 100 intervals-prop))))
+
 
 
 (comment
@@ -253,48 +231,13 @@
      :closed-root (np (.-closedRoot tree))
      :mapping (.-parentsMap tree)})
 
-  (def fail
-    [[#{1 4 6 3 2 5}
-            [[:insert
-              [{:id 3,
-                :from 0,
-                :to 0,
-                :greedy-left? true,
-                :greedy-right? false,
-                :data nil}
-               {:id 2,
-                :from 0,
-                :to 0,
-                :greedy-left? true,
-                :greedy-right? false,
-                :data nil}
-               {:id 1,
-                :from 1,
-                :to 1,
-                :greedy-left? true,
-                :greedy-right? true,
-                :data nil}]]
-             [:insert
-              [{:id 4,
-                :from 0,
-                :to 0,
-                :greedy-left? true,
-                :greedy-right? false,
-                :data nil}
-               {:id 5,
-                :from 0,
-                :to 1,
-                :greedy-left? false,
-                :greedy-right? false,
-                :data nil}]]
-             [:insert
-              [{:id 6,
-                :from 0,
-                :to 0,
-                :greedy-left? true,
-                :greedy-right? false,
-                :data nil}]]
-             [:type-in [[0 -1]]]]]])
+  (def fail)
+
+  (def tree-before (reduce play-op empty-tree (second (first fail))))
+
+  {:before (tp tree-before)
+   :after
+   (tp (Intervals/collapse tree-before 0 5))}
 
   (let [[[_ ops]] fail
         naive (reduce naive-play-op [] ops)
@@ -303,41 +246,10 @@
     {:success? (= (set naive) (set actual))
      :naive naive
      :actual actual
-     :diff (clojure.data/diff (set naive) (set actual))
+     :diff-naive-vs-actual (clojure.data/diff (set naive) (set actual))
      :tree (tp tree)})
 
-
-  (let [sample #_(sample (map (fn [i] {:from i :to (* 2 i) :data (str i "cm")}) (range 25)))
-        (sample [{:from 0 :to 1 :id 0 :greedy-left? false :greedy-right? true :data nil}
-;                 {:from 0 :to 1 :id 1 :greedy-left? true :greedy-right? false :data nil}
- ;                {:from 0 :to 1 :id 2 :greedy-left? true :greedy-right? false :data nil}
-                 ;{:from 1 :to 2 :id 1 :greedy-left? false :greedy-right? true :data nil}
-                 ;{:from 2 :to 4 :id 2 :greedy-left? true :greedy-right? true :data nil}
-                 ;{:from 3 :to 6 :id 3 :greedy-left? true :greedy-right? false :data nil}
-                 ;{:from 4 :to 8 :id 4 :greedy-left? true :greedy-right? false :data nil}
-                 ;{:from 5 :to 10 :id 5 :greedy-left? true :greedy-right? true :data nil}
-                 ;{:from 6 :to 12 :id 6 :greedy-left? false :greedy-right? true :data nil}
-                 ;{:from 7 :to 14 :id 7 :greedy-left? false :greedy-right? true :data nil}
-                 ])
-        t (-> (Intervals. 4)
-              (Intervals/insert sample)
-              #_(Intervals/remove [3 4 5])
-              #_(Intervals/expand 1 1)
-              )
-        ;it (Intervals/query t 2 4)
-        ]
-    (tp t)
-    (tree->intervals t)
-    #_(loop [r []]
-      (if (.next it)
-        (recur (conj r {:from (.from it) :to (.to it) :gl? (.closedLeft it) :gr? (.closedRight it) :id (.id it) :data (.data it)}))
-        r))
-    )
-
-   (Math/abs (rem -1 2))
-
-
-
   *e
+
   )
 
