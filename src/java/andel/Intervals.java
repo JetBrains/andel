@@ -172,6 +172,12 @@ public class Intervals<T> {
     }
 
     static Zipper insert(Zipper z, int idx, long id, long start, long end, Object data) {
+      if (!z.changed) {
+        z.ids = z.ids.copy();
+        z.starts = z.starts.copy();
+        z.ends = z.ends.copy();
+        z.children = new ArrayList<>(z.children);
+      }
       assert z.editingContext.parentsMap.get(id, null) == null;
       z.starts.add(idx, start - z.delta);
       z.ends.add(idx, end - z.delta);
@@ -183,9 +189,16 @@ public class Intervals<T> {
     }
 
     public static Zipper replace(Zipper p, Node n, long delta) {
+      if (!p.changed) {
+        p.ids = p.ids.copy();
+        p.starts = p.starts.copy();
+        p.ends = p.ends.copy();
+        p.children = new ArrayList<>(p.children);
+      }
       p.children.set(p.idx, n);
-      p.starts.set(p.idx, p.starts.get(p.idx) + delta);
-      p.ends.set(p.idx, p.starts.get(p.idx) + delta + max(n.ends));
+      long newStart = p.starts.get(p.idx) + delta;
+      p.starts.set(p.idx, newStart);
+      p.ends.set(p.idx, newStart + max(n.ends));
       p.changed = true;
       return p;
     }
@@ -203,13 +216,7 @@ public class Intervals<T> {
     public static Zipper up(Zipper z) {
       if (z.changed) {
         Zipper p = z.parent;
-        if (!p.changed) {
-          p.ids = p.ids.copy();
-          p.starts = p.starts.copy();
-          p.ends = p.ends.copy();
-          p.children = new ArrayList<>(p.children);
-        }
-        Node n = new Node(z.ids, z.starts, z.ends, z.children);
+        Node n = new Node(z.ids.copy(), z.starts.copy(), z.ends.copy(), new ArrayList<>(z.children));
         long delta = p.parent == null ? 0 : normalize(n);
         n = balanceChildren(z.editingContext, n);
         replace(p, n, delta);
@@ -485,10 +492,7 @@ public class Intervals<T> {
           if (down == null) {
             assert Zipper.isRoot(z);
             Node newRoot = Node.empty(z.editingContext.maxChildren);
-            newRoot.starts.add(from);
-            newRoot.ends.add(to);
-            newRoot.ids.add(id);
-            newRoot.children.add(data);
+            newRoot.add(id, from, to, data);
             z.editingContext.parentsMap =
               z.editingContext.parentsMap.put(id, z.startsAreOpen ? Long.valueOf(OPEN_ROOT_ID) : Long.valueOf(CLOSED_ROOT_ID));
             return Zipper.replace(z, newRoot, 0);
@@ -783,22 +787,18 @@ public class Intervals<T> {
       long start = node.starts.get(i);
       long end = node.ends.get(i);
       Object child = node.children.get(i);
-      if (end - start == 1 && (end == offset || start == offset)) {
-        // special case to handle markers with zero length and (closedLeft or closedRight)
-        // examples:
-        // (1, 1] stored as (2, 3) and (offset*2)=2
-        // [1, 1) stored as (1, 2) and (offset*2)=2
-        Object c = child instanceof Node
-                   ? expand((Node)child, offset - start, len)
-                   : child;
-        result.add(id, start, end + len, c);
-      }
-      else if (end <= offset) {
-        //....(interval)....
-        //...............o....
-        result.add(id, start, end, child);
-      }
-      else if (start < offset) {
+      //if (end - start == 1 && (end == offset || start == offset)) {
+      //  // special case to handle markers with zero length and (closedLeft or closedRight)
+      //  // examples:
+      //  // (1, 1] stored as (2, 3) and (offset*2)=2
+      //  // [1, 1) stored as (1, 2) and (offset*2)=2
+      //  Object c = child instanceof Node
+      //             ? expand((Node)child, offset - start, len)
+      //             : child;
+      //  result.add(id, start, end + len, c);
+      //}
+      //else
+      if (start < offset && offset < end) {
         //....(interval)....
         //........o.........
         Object c = child instanceof Node
@@ -806,10 +806,14 @@ public class Intervals<T> {
                    : child;
         result.add(id, start, end + len, c);
       }
-      else {
+      else if (offset <= start){
         //......(interval)....
         //....o...............
         result.add(id, start + len, end + len, child);
+      } else {
+        //....(interval)....
+        //...............o....
+        result.add(id, start, end, child);
       }
     }
     return result;
@@ -844,19 +848,20 @@ public class Intervals<T> {
       long end = node.ends.get(i);
       Object child = node.children.get(i);
       long id = node.ids.get(i);
-      if (end - start == 1 && (start + 1 == offset + len || end - 1 == offset)) {
-        // special case to distinguish markers of zero length closed on one side
-        // and save them from removing
-        // (1, 1] stored as (2, 3) delete (1, 2) which means (2, 4)
-        // [2, 2) stored as (3, 4) delete (1, 2) which means (2, 4)
-        // ==> will be removed without this case
-        if (offset < start){
-          result.add(id, start - len, end - len, child);
-        } else {
-          result.add(id, start, end, child);
-        }
-      }
-      else if (end <= offset) {
+      //if (end - start == 1 && (start + 1 == offset + len || end - 1 == offset)) {
+      //  // special case to distinguish markers of zero length closed on one side
+      //  // and save them from removing
+      //  // (1, 1] stored as (2, 3) delete (1, 2) which means (2, 4)
+      //  // [2, 2) stored as (3, 4) delete (1, 2) which means (2, 4)
+      //  // ==> will be removed without this case
+      //  if (offset < start){
+      //    result.add(id, start - len, end - len, child);
+      //  } else {
+      //    result.add(id, start, end, child);
+      //  }
+      //}
+      //else
+      if (end <= offset) {
         // (interval)..............
         // .........[deletion]
         // interval is not affected by deletion range
@@ -897,7 +902,11 @@ public class Intervals<T> {
                           ? Math.max(offset - (d + start) % 2, start - len)
                           : start;
           long newEnd = Math.max(offset + (d + end) % 2, end - len);
-          result.add(id, newStart, newEnd, child);
+          if (newEnd - newStart < 2){
+            ctx.parentsMap = extinct(ctx.parentsMap, id, child);
+          } else {
+            result.add(id, newStart, newEnd, child);
+          }
         }
       }
     }
@@ -918,14 +927,13 @@ public class Intervals<T> {
     return new Intervals<>(tree.maxChildren, openRoot, closedRoot, ctx.parentsMap.forked(), ctx.nextId);
   }
 
-  private static Node remove(Context ctx, Node node, long nodeId, HashMap<Long, LongArrayList> subtree) {
-    LongArrayList victims = subtree.get(nodeId);
+  private static Node remove(Context ctx, Node node, long nodeId, HashMap<Long, HashSet<Long>> subtree) {
+    HashSet<Long> victims = subtree.get(nodeId);
     if (victims == null) {
       return node;
     }
     Node copy = node.copy();
-    for (int i = 0; i < victims.size(); i++) {
-      long vid = victims.get(i);
+    for (Long vid : victims) {
       int vidx = copy.ids.indexOf(vid);
       // victims list might contain duplicates
       if (vidx >= 0) {
@@ -951,7 +959,7 @@ public class Intervals<T> {
   }
 
   public static <T> Intervals<T> remove(Intervals<T> tree, Iterable<Long> ids) {
-    HashMap<Long, LongArrayList> deletionSubtree = deletionSubtree(tree.parentsMap, ids);
+    HashMap<Long, HashSet<Long>> deletionSubtree = deletionSubtree(tree.parentsMap, ids);
     Context ctx = new Context(tree.nextInnerId, tree.maxChildren, tree.parentsMap.linear());
 
     Node openRoot = shrinkTree(ctx, OPEN_ROOT_ID, remove(ctx, tree.openRoot, OPEN_ROOT_ID, deletionSubtree));
@@ -970,7 +978,7 @@ public class Intervals<T> {
     while (true) {
       p = parents.get((long)p, null);
       if (p == null) {
-        throw new NoSuchElementException();
+        throw new NoSuchElementException("id: " + id + " not found in tree");
       }
       path.add(p);
       if (p == OPEN_ROOT_ID || p == CLOSED_ROOT_ID) {
@@ -1022,8 +1030,8 @@ public class Intervals<T> {
     }
   }
 
-  private static HashMap<Long, LongArrayList> deletionSubtree(IntMap<Long> parents, Iterable<Long> toBeDeleted) {
-    HashMap<Long, LongArrayList> subtree = new HashMap<>();
+  private static HashMap<Long, HashSet<Long>> deletionSubtree(IntMap<Long> parents, Iterable<Long> toBeDeleted) {
+    HashMap<Long, HashSet<Long>> subtree = new HashMap<>();
 
     for (Long id : toBeDeleted) {
       if (id < 0) {
@@ -1037,7 +1045,7 @@ public class Intervals<T> {
             throw new NoSuchElementException("id:" + cid);
           }
 
-          LongArrayList sibs = subtree.getOrDefault(pid, new LongArrayList());
+          HashSet<Long> sibs = subtree.getOrDefault(pid, new HashSet<Long>());
           sibs.add(cid);
           subtree.put(pid, sibs);
 

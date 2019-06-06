@@ -46,7 +46,7 @@
                         :from (min a b)
                         :to (max a b)
                         :greedy-left? (or (= a b) g-l?)
-                        :greedy-right? g-r?
+                        :greedy-right? (or (= a b) g-r?)
                         :data nil})
                      a b g-l? g-r? ids)
                (sort-by :from)
@@ -55,7 +55,7 @@
 (defn ->interval [{:keys [id from to data greedy-left? greedy-right?]}]
   (Intervals$Interval. id from to (boolean greedy-left?) (boolean greedy-right?) data))
 
-(def empty-tree (Intervals. 4))
+(def empty-tree (Intervals. 32))
 
 (defn naive-type-in [intervals [offset length]]
   (if (< 0 length)
@@ -86,7 +86,8 @@
       (into []
             (comp (remove
                    (fn [{:keys [from to greedy-left? greedy-right?]}]
-                     (or (and (< offset from) (< to (+ offset length)))
+                     (and (< offset from) (< to (+ offset length)))
+                     #_(or (and (< offset from) (< to (+ offset length)))
                          (and (not= from to)
                               (or (and greedy-left? (not greedy-right?) (< offset from) (<= to (+ offset length)))
                                   (and (not greedy-left?) greedy-right? (<= offset from) (< to (+ offset length))))))))
@@ -99,8 +100,8 @@
                                (update :to update-point)))))
                   (remove (fn [marker]
                             (and (= (:from marker) (:to marker))
-                                 (not (:greedy-left? marker))
-                                 (not (:greedy-right? marker))))))
+                                 (not (and (:greedy-left? marker)
+                                           (:greedy-right? marker)))))))
             intervals))))
 
 (defn type-in [tree [offset size]]
@@ -214,7 +215,7 @@
                       (set (tree->intervals tree))))))
 
 (deftest intervals-test
-  (is (:result (tc/quick-check 1000 intervals-prop :max-size 10))))
+  (is (:result (tc/quick-check 100 intervals-prop :max-size 1000))))
 
 
 
@@ -236,55 +237,173 @@
 
   (def fail
     [[[:insert
-    [{:id 1,
-      :from 0,
-      :to 24,
-      :greedy-left? true,
+    [{:id 6,
+      :from 1,
+      :to 242,
+      :greedy-left? false,
       :greedy-right? true,
-      :data nil}]]
-   [:insert
-    [{:id 4,
-      :from 0,
-      :to 0,
-      :greedy-left? true,
-      :greedy-right? false,
       :data nil}
-     {:id 3,
-      :from 0,
-      :to 6,
+     {:id 8,
+      :from 1,
+      :to 5,
       :greedy-left? true,
       :greedy-right? false,
       :data nil}
      {:id 5,
-      :from 1,
-      :to 1,
+      :from 2,
+      :to 4,
+      :greedy-left? false,
+      :greedy-right? false,
+      :data nil}
+     {:id 9,
+      :from 6,
+      :to 44,
       :greedy-left? true,
+      :greedy-right? true,
+      :data nil}
+     {:id 7,
+      :from 10,
+      :to 11,
+      :greedy-left? false,
+      :greedy-right? true,
+      :data nil}
+     {:id 1,
+      :from 49,
+      :to 979,
+      :greedy-left? false,
       :greedy-right? false,
       :data nil}
      {:id 2,
-      :from 2,
-      :to 8,
+      :from 53,
+      :to 73,
+      :greedy-left? false,
+      :greedy-right? true,
+      :data nil}
+     {:id 10,
+      :from 55,
+      :to 737,
+      :greedy-left? true,
+      :greedy-right? true,
+      :data nil}
+     {:id 3,
+      :from 88,
+      :to 101,
+      :greedy-left? true,
+      :greedy-right? true,
+      :data nil}
+     {:id 4,
+      :from 1773,
+      :to 1975,
+      :greedy-left? true,
+      :greedy-right? false,
+      :data nil}]]
+   [:type-in [6 8]]
+   [:type-in [7 10]]
+   [:type-in [2 -3]]
+   [:insert
+    [{:id 13,
+      :from 0,
+      :to 13,
+      :greedy-left? false,
+      :greedy-right? false,
+      :data nil}
+     {:id 14,
+      :from 0,
+      :to 1,
+      :greedy-left? true,
+      :greedy-right? true,
+      :data nil}
+     {:id 16,
+      :from 0,
+      :to 11,
+      :greedy-left? false,
+      :greedy-right? false,
+      :data nil}
+     {:id 15,
+      :from 1,
+      :to 30,
       :greedy-left? true,
       :greedy-right? false,
       :data nil}
-
-     #_{:id 5,
-      :from 2,
-      :to 7,
+     {:id 17,
+      :from 1,
+      :to 3,
+      :greedy-left? false,
+      :greedy-right? true,
+      :data nil}
+     {:id 12,
+      :from 1,
+      :to 95,
+      :greedy-left? true,
+      :greedy-right? true,
+      :data nil}
+     {:id 11,
+      :from 3,
+      :to 43,
       :greedy-left? true,
       :greedy-right? true,
       :data nil}]]
-   [:type-in [1 -4]]
-   [:type-in [1 -3]]
-   #_[:delete #{5}]
-   #_[:insert
-    [{:id 5,
+   [:insert
+    [{:id 20,
+      :from 0,
+      :to 4,
+      :greedy-left? false,
+      :greedy-right? false,
+      :data nil}
+     {:id 19,
       :from 1,
+      :to 1,
+      :greedy-left? true,
+      :greedy-right? true,
+      :data nil}
+     {:id 18,
+      :from 2,
+      :to 2,
+      :greedy-left? true,
+      :greedy-right? true,
+      :data nil}]]
+   [:insert
+    [{:id 21,
+      :from 1,
+      :to 21,
+      :greedy-left? false,
+      :greedy-right? true,
+      :data nil}
+     {:id 22,
+      :from 2,
+      :to 2,
+      :greedy-left? true,
+      :greedy-right? true,
+      :data nil}
+     {:id 23,
+      :from 8,
+      :to 15,
+      :greedy-left? true,
+      :greedy-right? false,
+      :data nil}]]
+   [:delete #{15 13 14 10 18}]
+   [:delete #{6 12}]
+  [:insert
+    [{:id 24,
+      :from 0,
       :to 1,
       :greedy-left? true,
       :greedy-right? false,
       :data nil}]]
-   [:type-in [1 1]]]])
+
+
+   [:type-in [1 -2]]
+   [:type-in [0 -1]]]])
+
+  (def t (reduce play-op empty-tree (first fail)))
+
+  (Intervals/insert t [(->interval {:id 24,
+                          :from 0,
+                          :to 1,
+                          :greedy-left? true,
+                          :greedy-right? false,
+                          :data nil})
+                       ])
 
   (let [[ops] fail
         naive (reduce naive-play-op [] ops)
