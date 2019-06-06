@@ -141,67 +141,70 @@
                                                         (map :to)
                                                         (apply max 0))))))))
 
-(defn insert-step-gen [[ids generated]]
-  (let [next-id (inc (reduce max 0 ids))]
-    (g/bind
-     (g/not-empty
-      (g/sized (fn [size] (g/return (set (range next-id (+ next-id size)))))))
-     (fn [new-ids]
+(defn insert-step-gen [{:keys [ids generated]}]
+  (g/sized
+   (fn [size]
+     (let [next-id (inc (reduce max 0 ids))
+           new-ids (set (range next-id (+ next-id (inc (rand-int size)))))]
        (g/fmap
         (fn [bulk]
-          [(clojure.set/union ids new-ids)
-           (conj generated [:insert bulk])])
+          {:ids (clojure.set/union ids new-ids)
+           :generated (conj generated [:insert bulk])})
         (intervals-bulk-gen (g/return new-ids)))))))
 
-(defn delete-step-gen [[ids generated]]
+(defn delete-step-gen [{:keys [ids generated]}]
   (g/fmap
    (fn [ids-to-delete]
-     [(clojure.set/difference ids ids-to-delete)
-      (conj generated [:delete ids-to-delete])])
-   (g/not-empty (g/set (g/elements ids)))))
+     {:ids (clojure.set/difference ids ids-to-delete)
+      :generated (conj generated [:delete ids-to-delete])})
+    (g/not-empty (g/set (g/elements ids)))))
 
-(defn type-in-step-gen [[ids generated]]
+(defn type-in-step-gen [{:keys [ids generated]}]
   (g/fmap
     (fn [typings]
-      [ids
-       (conj generated [:type-in typings])])
-   (g/not-empty
-    (g/vector (g/tuple (g/large-integer* {:min 0 :max 10000})
-                       g/int)))))
+      {:ids ids
+       :generated (conj generated [:type-in typings])})
+   (g/tuple (g/large-integer* {:min 0 :max 10000})
+            (g/such-that (fn [i] (not= 0 i)) g/int))))
 
 (defn my-gen [s-gen]
   (g/bind s-gen
-          (fn [[ids generated :as state]]
+          (fn [{:keys [ids generated] :as state}]
             (g/sized
              (fn [size]
                (if (= 0 size)
                  (g/return state)
-                 (let [next-gen (g/one-of (concat [(insert-step-gen state)]
-                                                  (when (seq ids)
-                                                    [(delete-step-gen state)
-                                                     (type-in-step-gen state)])))]
+                 (let [next-gen (g/frequency (concat [[1 (insert-step-gen state)]]
+                                                     (when (seq ids)
+                                                       [[1 (delete-step-gen state)]
+                                                        [3 (type-in-step-gen state)]])))]
                    (g/resize (dec size) (my-gen next-gen)))))))))
+
+(def tree-actions-generator
+  (g/fmap
+   (fn [{:keys [ids generated]}] generated)
+   (g/sized
+    (fn [size]
+      (my-gen (g/return {:ids #{}
+                         :generated []}))))))
 
 (defn naive-play-op [intervals-vec [op arg]]
   (case op
     :insert (sort-by :from (concat intervals-vec arg))
     :delete (into [] (remove (fn [i] (contains? arg (:id i)))) intervals-vec)
-    :type-in (reduce naive-type-in intervals-vec arg)))
+    :type-in (naive-type-in intervals-vec arg)))
 
 (defn play-op [tree [op arg]]
   (case op
     :insert (Intervals/insert tree (into [] (map ->interval) arg))
     :delete (Intervals/remove tree arg)
-    :type-in (reduce
-               (fn [tree [from len]]
-                 (if (< 0 len)
-                   (Intervals/expand tree from len)
-                   (Intervals/collapse tree from (- len))))
-              tree
-              arg)))
+    :type-in (let [[from len] arg]
+               (if (< 0 len)
+                 (Intervals/expand tree from len)
+                 (Intervals/collapse tree from (- len))))))
 
 (def intervals-prop
-  (prop/for-all [[_ ops] (my-gen (g/return [#{} []]))]
+  (prop/for-all [ops tree-actions-generator]
                  (let [naive (reduce naive-play-op [] ops)
                        tree  (reduce play-op empty-tree ops)]
                    (assert-ids-are-sane naive tree)
