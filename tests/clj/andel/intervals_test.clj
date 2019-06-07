@@ -31,10 +31,10 @@
         r))))
 
 (defn intervals-bulk-gen
-  ([] (intervals-bulk-gen (g/sized (fn [size] (g/return (range size))))))
-  ([ids-gen]
+  ([] (intervals-bulk-gen 1))
+  ([next-id]
    (g/bind
-    ids-gen
+    (g/fmap (fn [size] (range next-id (+ next-id size))) g/nat)
     (fn [ids]
       (let [cnt (count ids)]
         (g/let [a (g/vector (g/large-integer* {:min 0 :max 10000}) cnt)
@@ -142,33 +142,31 @@
                                                         (map :to)
                                                         (apply max 0))))))))
 
-(defn insert-step-gen [{:keys [ids generated]}]
-  (g/sized
-   (fn [size]
-     (let [next-id (inc (reduce max 0 ids))
-           new-ids (set (range next-id (+ next-id (inc (rand-int size)))))]
-       (g/fmap
-        (fn [bulk]
-          {:ids (clojure.set/union ids new-ids)
-           :generated (conj generated [:insert bulk])})
-        (intervals-bulk-gen (g/return new-ids)))))))
+(defn insert-step-gen [{:keys [ids next-id] :as state}]
+  (def state state)
+  (g/fmap
+   (fn [new-intervals]
+     [(assoc state
+                   :ids (clojure.set/union ids
+                                           (into #{} (map :id) new-intervals))
+                   :next-id (+ next-id (count new-intervals)))
+      [:insert new-intervals]])
+   (intervals-bulk-gen next-id)))
 
-(defn delete-step-gen [{:keys [ids generated]}]
+(defn delete-step-gen [{:keys [ids] :as state}]
   (g/fmap
    (fn [ids-to-delete]
-     {:ids (clojure.set/difference ids ids-to-delete)
-      :generated (conj generated [:delete ids-to-delete])})
+     [(assoc state :ids (clojure.set/difference ids ids-to-delete))
+      [:delete ids-to-delete]])
     (g/not-empty (g/set (g/elements ids)))))
 
-(defn type-in-step-gen [{:keys [ids generated]}]
+(defn type-in-step-gen [state]
   (g/fmap
-    (fn [typings]
-      {:ids ids
-       :generated (conj generated [:type-in typings])})
+   (fn [typings] [state [:type-in typings]])
    (g/tuple (g/large-integer* {:min 0 :max 10000})
             (g/such-that (fn [i] (not= 0 i)) g/int))))
 
-(defn my-gen [s-gen]
+(defn recursive-intervals [s-gen]
   (g/bind s-gen
           (fn [{:keys [ids generated] :as state}]
             (g/sized
@@ -179,15 +177,121 @@
                                                      (when (seq ids)
                                                        [[1 (delete-step-gen state)]
                                                         [3 (type-in-step-gen state)]])))]
-                   (g/resize (dec size) (my-gen next-gen)))))))))
+                   (g/resize (dec size) (recursive-intervals next-gen)))))))))
 
-(def tree-actions-generator
+ (def tree-actions-generator
+    (let [op-gen (fn [state]
+                   (g/frequency (concat [[1 (insert-step-gen state)]]
+                                      (when (seq (:ids state))
+                                        [[1 (delete-step-gen state)]
+                                         [1 (type-in-step-gen state)]]))))]
+    (clojure.test.check.generators.Generator.
+     (fn [rnd size]
+       (loop [state {:ids #{} :next-id 0}
+              r []
+              size size]
+         (if (= 0 size)
+           (rose/shrink (fn [& roses] (into [] (map second) roses)) r)
+           (let [next-rose (g/call-gen (op-gen state) rnd size)
+                 [state']  (rose/root next-rose)]
+             (recur state' (conj r next-rose) (dec size)))))))))
+
+(comment
+
+
+
+  (def r (call-gen g 10))
+
+  (.-children r)
+
+  *e
+
+  (def r(call-gen (g/gen-bind g/boolean (fn [rose] (g/gen-pure rose))) 100))
+
+  (def r (call-gen g/boolean))
+
+  (defn huj [r c]
+    (let [op (str "huj " c)
+          c (inc c)
+          t (conj r op)]
+
+      (lazy-seq
+        (cons t (huj t c)))))
+
+  (take 20 (huj [] 1))
+
+
+
+  (map #(.-root %) (tree-seq #(seq (.-children %)) #(seq (.-children %)) r))
+
+  (defn my-gen [g]
+    (g/gen-bind g
+            (fn [s]
+              (g/sized
+                (fn [size]
+                  (if (= 0 size)
+                    (g/return s)
+                    (g/resize (dec size) (my-gen (g/return (conj s (rand-int 100)))))))))))
+
+  (defn call-gen[gen size]
+    (let [[created-seed rng] (make-rng 100)]
+      (g/call-gen gen rng size)))
+
+  (def r (call-gen (g/bind g/nat (fn [i] g/boolean))))
+
+  (map #(.-children %)
+   (.-children r))
+state
+
+  (def g (my-gen (g/return [])))
+
+  (g/sample g)
+
+  (import '[java.util Random])
+  (require '[clojure.test.check.random :as random])
+  (require ' [clojure.test.check.impl :refer [get-current-time-millis]])
+  (require '[clojure.test.check.rose-tree :as rose])
+
+  (defn- make-rng
+    [seed]
+    (if seed
+      [seed (random/make-random seed)]
+      (let [non-nil-seed (get-current-time-millis)]
+        [non-nil-seed (random/make-random non-nil-seed)])))
+
+  (def my-rose
+    )
+
+  (.-root my-rose)
+
+  (.-children my-rose)
+
+
+  (def his-rose
+    (let [[created-seed rng] (make-rng 100)
+          size 10]
+      (g/call-gen (g/vector g/int) rng size)))
+
+
+  (.-root his-rose)
+  (.-root (first (.-children (.-root (nth (.-children his-rose) 4)))))
+
+  (rose/root rose)
+
+
+
+
+
+  )
+
+#_(def tree-actions-generator
   (g/fmap
    (fn [{:keys [ids generated]}] generated)
    (g/sized
     (fn [size]
-      (my-gen (g/return {:ids #{}
-                         :generated []}))))))
+      (recursive-intervals
+        (g/return {:ids #{}
+                   :generated []}))))))
 
 (defn naive-play-op [intervals-vec [op arg]]
   (case op
@@ -215,9 +319,7 @@
                       (set (tree->intervals tree))))))
 
 (deftest intervals-test
-  (is (:result (tc/quick-check 100 intervals-prop :max-size 1000))))
-
-
+  (is (:result (tc/quick-check 1000 intervals-prop :max-size 100))))
 
 (comment
 
@@ -234,166 +336,6 @@
     {:open-root (np (.-openRoot tree))
      :closed-root (np (.-closedRoot tree))
      :mapping (.-parentsMap tree)})
-
-  (def fail
-    [[[:insert
-    [{:id 6,
-      :from 1,
-      :to 242,
-      :greedy-left? false,
-      :greedy-right? true,
-      :data nil}
-     {:id 8,
-      :from 1,
-      :to 5,
-      :greedy-left? true,
-      :greedy-right? false,
-      :data nil}
-     {:id 5,
-      :from 2,
-      :to 4,
-      :greedy-left? false,
-      :greedy-right? false,
-      :data nil}
-     {:id 9,
-      :from 6,
-      :to 44,
-      :greedy-left? true,
-      :greedy-right? true,
-      :data nil}
-     {:id 7,
-      :from 10,
-      :to 11,
-      :greedy-left? false,
-      :greedy-right? true,
-      :data nil}
-     {:id 1,
-      :from 49,
-      :to 979,
-      :greedy-left? false,
-      :greedy-right? false,
-      :data nil}
-     {:id 2,
-      :from 53,
-      :to 73,
-      :greedy-left? false,
-      :greedy-right? true,
-      :data nil}
-     {:id 10,
-      :from 55,
-      :to 737,
-      :greedy-left? true,
-      :greedy-right? true,
-      :data nil}
-     {:id 3,
-      :from 88,
-      :to 101,
-      :greedy-left? true,
-      :greedy-right? true,
-      :data nil}
-     {:id 4,
-      :from 1773,
-      :to 1975,
-      :greedy-left? true,
-      :greedy-right? false,
-      :data nil}]]
-   [:type-in [6 8]]
-   [:type-in [7 10]]
-   [:type-in [2 -3]]
-   [:insert
-    [{:id 13,
-      :from 0,
-      :to 13,
-      :greedy-left? false,
-      :greedy-right? false,
-      :data nil}
-     {:id 14,
-      :from 0,
-      :to 1,
-      :greedy-left? true,
-      :greedy-right? true,
-      :data nil}
-     {:id 16,
-      :from 0,
-      :to 11,
-      :greedy-left? false,
-      :greedy-right? false,
-      :data nil}
-     {:id 15,
-      :from 1,
-      :to 30,
-      :greedy-left? true,
-      :greedy-right? false,
-      :data nil}
-     {:id 17,
-      :from 1,
-      :to 3,
-      :greedy-left? false,
-      :greedy-right? true,
-      :data nil}
-     {:id 12,
-      :from 1,
-      :to 95,
-      :greedy-left? true,
-      :greedy-right? true,
-      :data nil}
-     {:id 11,
-      :from 3,
-      :to 43,
-      :greedy-left? true,
-      :greedy-right? true,
-      :data nil}]]
-   [:insert
-    [{:id 20,
-      :from 0,
-      :to 4,
-      :greedy-left? false,
-      :greedy-right? false,
-      :data nil}
-     {:id 19,
-      :from 1,
-      :to 1,
-      :greedy-left? true,
-      :greedy-right? true,
-      :data nil}
-     {:id 18,
-      :from 2,
-      :to 2,
-      :greedy-left? true,
-      :greedy-right? true,
-      :data nil}]]
-   [:insert
-    [{:id 21,
-      :from 1,
-      :to 21,
-      :greedy-left? false,
-      :greedy-right? true,
-      :data nil}
-     {:id 22,
-      :from 2,
-      :to 2,
-      :greedy-left? true,
-      :greedy-right? true,
-      :data nil}
-     {:id 23,
-      :from 8,
-      :to 15,
-      :greedy-left? true,
-      :greedy-right? false,
-      :data nil}]]
-   [:delete #{15 13 14 10 18}]
-   [:delete #{6 12}]
-  [:insert
-    [{:id 24,
-      :from 0,
-      :to 1,
-      :greedy-left? true,
-      :greedy-right? false,
-      :data nil}]]
-
-
-   [:type-in [1 -2]]
-   [:type-in [0 -1]]]])
 
   (def t (reduce play-op empty-tree (first fail)))
 
