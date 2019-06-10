@@ -643,10 +643,11 @@ public class Rope {
   }
 
   /*
-   * stops in a data or in openRoot node if the tree is empty, should never return null
+   * stops in a data node satisfying predicate or in a root node if the tree is empty
+   * will return null if scan to the right found no value satisfying the predicate
    */
   public static <Metrics, Data> Zipper<Metrics, Data> scan(Zipper<Metrics, Data> zipper, BiFunction<Metrics, Metrics, Boolean> pred) {
-    // TODO return null even if it is empty openRoot
+    // TODO return null even if it is empty root
     if (isRoot(zipper) && node(zipper).children.isEmpty()) {
       return zipper;
     }

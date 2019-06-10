@@ -62,7 +62,12 @@ public class Cursor {
     }
 
     public static ImmutableCursor create(Rope.Tree<Text.TextMetrics> text, long offset){
-      return create(Text.scanToOffset(Text.zipper(text), offset));
+      if (offset < 0 && offset >= Text.length(text)) {
+        throw new IllegalArgumentException("offset: " + offset + ", text length: " + Text.length(text));
+      }
+      Rope.Zipper<Text.TextMetrics, String> leaf = Rope.scan(Text.zipper(text), Text.byOffsetExclusive(offset));
+      assert leaf != null && Rope.isLeaf(leaf);
+      return create(leaf);
     }
   }
 

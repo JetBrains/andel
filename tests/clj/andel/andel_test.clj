@@ -4,8 +4,11 @@
             [andel.text :as text]
             [andel.controller :refer :all]))
 
+(defn- chars->codepoints ^long [^String s ^long chars-offset]
+  (.codePointCount s 0 chars-offset))
+
 (defn preprocess-test-string [s]
-  (let [caret-offset (text/chars->codepoints s (.indexOf s "|"))]
+  (let [caret-offset (chars->codepoints s (.indexOf s "|"))]
     {:caret-offset caret-offset
      :test-string  (.replace s "|" "")}))
 

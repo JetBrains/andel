@@ -13,7 +13,7 @@ public class Text {
 
     public long length;
     public long geometricLength;
-    public long linesCount;
+    public long newlinesCounts;
     public long charsCount;
     public long newlinePrefixGeomLength;
     public long newlineSuffixGeomLength;
@@ -28,7 +28,7 @@ public class Text {
                        long maxLineLength) {
       this.length = length;
       this.geometricLength = geometricLength;
-      this.linesCount = linesCount;
+      this.newlinesCounts = linesCount;
       this.charsCount = charsCount;
       this.newlinePrefixGeomLength = newlinePrefixGeomLength;
       this.newlineSuffixGeomLength = newlineSuffixGeomLength;
@@ -38,7 +38,7 @@ public class Text {
     public TextMetrics() {
       this.length = 0;
       this.geometricLength = 0;
-      this.linesCount = 0;
+      this.newlinesCounts = 0;
       this.charsCount = 0;
       this.newlinePrefixGeomLength = 0;
       this.newlineSuffixGeomLength = 0;
@@ -48,19 +48,19 @@ public class Text {
     public void merge(TextMetrics other){
       long length = this.length + other.length;
       long geomLength = this.geometricLength + other.geometricLength;
-      long linesCount = this.linesCount + other.linesCount;
+      long linesCount = this.newlinesCounts + other.newlinesCounts;
       long charsCount = this.charsCount + other.charsCount;
-      long newlinePrefixGeomLength = this.linesCount == 0
+      long newlinePrefixGeomLength = this.newlinesCounts == 0
                                      ? this.newlinePrefixGeomLength + other.newlinePrefixGeomLength
                                      : this.newlinePrefixGeomLength;
       long maxLineLength = Math.max(Math.max(this.maxLineLength, other.maxLineLength),
                                     this.newlineSuffixGeomLength + other.newlinePrefixGeomLength);
-      long newlineSuffixGeomLength = other.linesCount == 0
+      long newlineSuffixGeomLength = other.newlinesCounts == 0
                                      ? this.newlineSuffixGeomLength + other.newlineSuffixGeomLength
                                      : other.newlineSuffixGeomLength;
       this.length = length;
       this.geometricLength = geomLength;
-      this.linesCount = linesCount;
+      this.newlinesCounts = linesCount;
       this.charsCount = charsCount;
       this.newlinePrefixGeomLength = newlinePrefixGeomLength;
       this.newlineSuffixGeomLength = newlineSuffixGeomLength;
@@ -70,7 +70,7 @@ public class Text {
     public TextMetrics add(TextMetrics other) {
       TextMetrics metrics = new TextMetrics(this.length,
                                             this.geometricLength,
-                                            this.linesCount,
+                                            this.newlinesCounts,
                                             this.charsCount,
                                             this.newlinePrefixGeomLength,
                                             this.newlineSuffixGeomLength,
@@ -78,12 +78,26 @@ public class Text {
       metrics.merge(other);
       return metrics;
     }
+
+    @Override
+    public String toString() {
+      return "TextMetrics{" +
+             "length=" + length +
+             ", geometricLength=" + geometricLength +
+             ", newlinesCounts=" + newlinesCounts +
+             ", charsCount=" + charsCount +
+             ", newlinePrefixGeomLength=" + newlinePrefixGeomLength +
+             ", newlineSuffixGeomLength=" + newlineSuffixGeomLength +
+             ", maxLineLength=" + maxLineLength +
+             '}';
+    }
   }
 
   public enum OffsetKind {
     CodePoints,
     Characters,
-    Geom
+    Geom,
+    Lines
   }
 
   public static TextMetrics metricsTo(String str, OffsetKind kind, long offset) {
@@ -97,7 +111,8 @@ public class Text {
 
     while (kind == OffsetKind.CodePoints && codePointsCount < offset ||
            kind == OffsetKind.Characters && charsCount < offset ||
-           kind == OffsetKind.Geom && geometricLength < offset) {
+           kind == OffsetKind.Geom && geometricLength < offset ||
+           kind == OffsetKind.Lines && linesCount < offset) {
       int codepoint = str.codePointAt(charsCount);
 
       if (codepoint == '\n') {
@@ -224,42 +239,61 @@ public class Text {
     return (acc, next) -> offset <= acc.length + next.length;
   }
 
+  public static BiFunction<TextMetrics, TextMetrics, Boolean> geomOffsetPredicate(long offset) {
+    return (acc, next) -> offset <= acc.geometricLength + next.geometricLength;
+  }
+
   public static BiFunction<TextMetrics, TextMetrics, Boolean> charOffsetPredicate(long offset) {
     return (acc, next) -> offset <= acc.charsCount + next.charsCount;
   }
 
-  public static BiFunction<TextMetrics, TextMetrics, Boolean> byCharOffsetExclusive(int offset) {
+  public static BiFunction<TextMetrics, TextMetrics, Boolean> byOffsetExclusive(long offset) {
+    return (o, o2) -> o.length <= offset && offset < o.length + o2.length;
+  }
+
+  public static BiFunction<TextMetrics, TextMetrics, Boolean> byCharOffsetExclusive(long offset) {
     return (o, o2) -> o.charsCount <= offset && offset < o.charsCount + o2.charsCount;
   }
 
-  public static long offset(Rope.Zipper<TextMetrics, String> loc) {
-    if (loc.oacc != null) {
-      return loc.oacc.length;
-    }
-    else if (loc.acc != null) {
-      return loc.acc.length;
-    }
-    else {
-      return 0;
-    }
+  public static BiFunction<TextMetrics, TextMetrics, Boolean> linePredicate(long offset) {
+    return (acc, next) -> offset <= acc.newlinesCounts + next.newlinesCounts;
   }
 
-  public static long nodeOffset(Rope.Zipper<TextMetrics, String> loc) {
-    TextMetrics acc = loc.acc;
+  public static long offset(Rope.Zipper<TextMetrics, String> zipper) {
+    return Rope.currentAcc(zipper).length;
+  }
+
+  public static long geomOffset(Rope.Zipper<TextMetrics, String> zipper) {
+    return Rope.currentAcc(zipper).geometricLength;
+  }
+
+  public static long nodeOffset(Rope.Zipper<TextMetrics, String> zipper) {
+    TextMetrics acc = zipper.acc;
     return acc == null ? 0 : acc.length;
   }
 
-  public static long charOffset(Rope.Zipper<TextMetrics, ?> loc) {
-    return Rope.currentAcc(loc).charsCount;
+  public static long nodeGeomOffset(Rope.Zipper<TextMetrics, String> zipper) {
+    TextMetrics acc = zipper.acc;
+    return acc == null ? 0 : acc.geometricLength;
   }
 
-  public static long nodeCharOffset(Rope.Zipper<TextMetrics, ?> loc) {
-    TextMetrics acc = loc.acc;
+
+  public static long charOffset(Rope.Zipper<TextMetrics, ?> zipper) {
+    return Rope.currentAcc(zipper).charsCount;
+  }
+
+  public static long nodeCharOffset(Rope.Zipper<TextMetrics, ?> zipper) {
+    TextMetrics acc = zipper.acc;
     return acc == null ? 0 : acc.charsCount;
+  }
+
+  public static long line(Rope.Zipper<TextMetrics, ?> zipper) {
+    return Rope.currentAcc(zipper).newlinesCounts;
   }
 
   @SuppressWarnings("unused")
   public static Rope.Tree<TextMetrics> makeText(String s, Rope.ZipperOps<TextMetrics, String> ops) {
+    // TODO Optimize: instead of growing tree from the root, make bunch of leaves and build the tree bottom up
     Rope.Node<TextMetrics> root = Rope.growTree(new Rope.Node<>(Rope.singletonList(s), Rope.singletonList(ops.calculateMetrics(s))), ops);
     return new Rope.Tree<>(root, ops.rf(root.metrics));
   }
@@ -278,40 +312,70 @@ public class Text {
     return Rope.root(loc);
   }
 
-  public static Rope.Zipper<TextMetrics, String> scanToOffset(Rope.Zipper<TextMetrics, String> zipper, long offset) {
-    if (offset < Rope.currentAcc(zipper).length)
-      throw new IllegalArgumentException("Backwards scan");
+  private static BiFunction<TextMetrics, TextMetrics, Boolean> predicate(OffsetKind kind, long offset){
+    switch (kind) {
+      case CodePoints:
+        return offsetPredicate(offset);
+      case Characters:
+        return charOffsetPredicate(offset);
+      case Geom:
+        return geomOffsetPredicate(offset);
+      case Lines:
+        return linePredicate(offset);
+    }
+    throw new IllegalArgumentException(kind.toString());
+  }
 
-    Rope.Zipper<TextMetrics, String> offsetLoc = Rope.scan(zipper, offsetPredicate(offset));
+  private static long getOffset(TextMetrics metrics, OffsetKind kind){
+    switch (kind) {
+      case CodePoints:
+        return metrics.length;
+      case Characters:
+        return metrics.charsCount;
+      case Geom:
+        return metrics.geometricLength;
+      case Lines:
+        return metrics.newlinesCounts;
+    }
+    throw new IllegalArgumentException(kind.toString());
+
+  }
+
+  private static Rope.Zipper<TextMetrics, String> scan(Rope.Zipper<TextMetrics, String> zipper, long offset, OffsetKind kind){
+    long currentOffset = getOffset(Rope.currentAcc(zipper), kind);
+    if (offset < currentOffset)
+      throw new IllegalArgumentException("Backwards scan: current is " + currentOffset + ", scanning to " + offset);
+
+    boolean isTransient = zipper.isTransient;
+    zipper = Rope.toTransient(zipper);
+    Rope.Zipper<TextMetrics, String> offsetLoc = Rope.scan(zipper, predicate(kind, offset));
     if (offsetLoc == null){
-      throw new IndexOutOfBoundsException();
+      throw new IndexOutOfBoundsException("Kind: " + kind + ", looking for offset " + offset);
     }
 
     if (Rope.isRoot(offsetLoc)) {
       return offsetLoc;
     }
-    long o = nodeOffset(offsetLoc);
+    long o = getOffset(offsetLoc.acc, kind);
     String s = Rope.data(offsetLoc);
-    offsetLoc.oacc = offsetLoc.acc.add(metricsTo(s, OffsetKind.CodePoints, offset - o));
-    return offsetLoc;
+    offsetLoc.oacc = offsetLoc.acc.add(metricsTo(s, kind, offset - o));
+    return isTransient ? offsetLoc : Rope.toPersistent(offsetLoc);
+  }
+
+  public static Rope.Zipper<TextMetrics, String> scanToOffset(Rope.Zipper<TextMetrics, String> zipper, long offset) {
+    return scan(zipper, offset, OffsetKind.CodePoints);
+  }
+
+  public static Rope.Zipper<TextMetrics, String> scanToGeomOffset(Rope.Zipper<TextMetrics, String> zipper, long offset) {
+    return scan(zipper, offset, OffsetKind.Geom);
   }
 
   public static Rope.Zipper<TextMetrics, String> scanToCharOffset(Rope.Zipper<TextMetrics, String> zipper, long offset) {
-    if (offset < Rope.currentAcc(zipper).charsCount)
-      throw new IllegalArgumentException("Backwards scan");
+    return scan(zipper, offset, OffsetKind.Characters);
+  }
 
-    Rope.Zipper<TextMetrics, String> offsetLoc = Rope.scan(zipper, charOffsetPredicate(offset));
-    if (offsetLoc == null){
-      throw new IndexOutOfBoundsException();
-    }
-
-    if (Rope.isRoot(offsetLoc)) {
-      return offsetLoc;
-    }
-    long o = nodeCharOffset(offsetLoc);
-    String s = Rope.data(offsetLoc);
-    offsetLoc.oacc = offsetLoc.acc.add(metricsTo(s, OffsetKind.Characters, offset - o));
-    return offsetLoc;
+  public static Rope.Zipper<TextMetrics, String> scanToLineStart(Rope.Zipper<TextMetrics, String> zipper, long offset) {
+    return scan(zipper, offset, OffsetKind.Lines);
   }
 
   public static Rope.Zipper<TextMetrics, String> retain(Rope.Zipper<TextMetrics, String> loc, long l) {
@@ -445,7 +509,7 @@ public class Text {
 
     Sequence(Rope.Tree<TextMetrics> root, int from, int to) {
       if (from < 0 || to > root.metrics.charsCount)
-        throw new IllegalArgumentException();
+        throw new IllegalArgumentException("from " + from + ", to " + to + ", total " + root.metrics.charsCount);
 
       this.root = root;
       this.from = from;
@@ -497,9 +561,9 @@ public class Text {
     public CharSequence subSequence(int start, int end) {
       int length = to - from;
       if (start > length || end > length)
-        throw new IndexOutOfBoundsException();
+        throw new IndexOutOfBoundsException("start " + start + ", end " + end + ", length " + length);
       if (start > end)
-        throw new IllegalArgumentException();
+        throw new IllegalArgumentException("start " + start + " > end " + end);
 
       return new Sequence(root, from + start, from + end);
     }
@@ -515,4 +579,17 @@ public class Text {
   public static long length(Rope.Tree<TextMetrics> text) {
     return text.metrics.length;
   }
+
+  public static long linesCount(Rope.Tree<TextMetrics> text) {
+    return text.metrics.newlinesCounts + 1;
+  }
+
+  public static long charsCount(Rope.Tree<TextMetrics> text) {
+    return text.metrics.charsCount;
+  }
+
+  public static long maxLineLength(Rope.Tree<TextMetrics> text) {
+    return text.metrics.maxLineLength;
+  }
+
 }

@@ -4,11 +4,12 @@
             [andel.text :as text]
             [andel.intervals :as intervals]
             [clojure.spec.alpha :as s]
-            [andel.tree :as tree]))
+            [andel.tree :as tree])
+  (:import [andel Rope$Tree]))
 
-(s/def :andel/tree tree/node?)
+(s/def :andel/tree #(instance? Rope$Tree %))
 (s/def :andel/text :andel/tree)
-(s/def :andel/markup :andel/tree)
+(s/def :andel/markup any?)
 (s/def :andel/lexer any?)
 (s/def :andel/document (s/keys :req [:andel/text
                                      :andel/markup

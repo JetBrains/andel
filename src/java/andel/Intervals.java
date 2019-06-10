@@ -15,7 +15,7 @@ public class Intervals<T> {
    * we employ two separate trees to store markers with greedy and not greedy start
    * this is necessary because we store intervals sorted by start offset
    * this order is hard to preserve in situations of open/closed intervals starting on the same offset
-   * e.g. (0, 5) [1 3) -> collapse(0, 2) -> (0, 3) [0, 1] -> expand(0, 1) -> (1, 4) [0, 2] !!!
+   * e.g. (0, 5) [1 3] -> collapse(0, 2) -> (0, 3) [0, 1] -> expand(0, 1) -> (1, 4) [0, 2] !!!
    * */
 
   public final Node openRoot;

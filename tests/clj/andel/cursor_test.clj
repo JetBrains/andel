@@ -80,11 +80,11 @@
             [(.getChar prev-cursor) prev-cursor]
             [nil jtcursor])))
 
-(def cursor-test
+(def cursor-prop
   (prop/for-all
    [[t o] text-offset-pair-gen
     ops multiple-operations-gen]
-   (let [cursor (cursor/make-cursor t o)
+   (let [cursor (cursor/cursor t o)
          t-cursor (cursor/transient cursor)
          j-cursor (Cursor$ImmutableCursor.
                     (Text/makeText (text/as-string t))
@@ -119,4 +119,5 @@
                  2)]
      result)))
 
-(tc/quick-check 10000 cursor-test)
+(deftest cursor-test
+  (tc/quick-check 10000 cursor-prop))

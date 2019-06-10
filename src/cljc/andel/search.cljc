@@ -1,9 +1,8 @@
 (ns andel.search
   (:require [andel.text :as text]
-            [andel.cursor :as cursor])
-  #?(:clj (:import [andel.tree ZipperLocation]
-                   [andel.cursor TransientCursor])))
+            [andel.cursor :as cursor]))
 
+;; TODO WAT?
 (def ^:dynamic j)
 
 (def special-char (char 0))
@@ -49,12 +48,11 @@
         tl (text/text-length text)
         p #^ints (make-array Integer/TYPE tl)
         get-char (if match-case?
-                   (fn [^TransientCursor cursor]
-                     (.getChar cursor))
-                   (fn [^TransientCursor cursor]
-                     (Character/toLowerCase (.getChar cursor))))]
-    (let [i-cursor ^TransientCursor (cursor/transient (cursor/make-cursor text 1))
-          j-cursor ^TransientCursor (cursor/transient (cursor/make-cursor text 0))]
+                   (fn [cursor] (cursor/char cursor))
+                   (fn [cursor]
+                     (Character/toLowerCase (cursor/char cursor))))]
+    (let [i-cursor (cursor/transient (cursor/cursor text 1))
+          j-cursor (cursor/transient (cursor/cursor text 0))]
       (binding [j 0]
         (doall
          (for [i (range 1 tl)]
@@ -63,7 +61,7 @@
                         (not= (get-char i-cursor)
                               (get-char j-cursor)))
                  (do (set! j (aget p (dec j)))
-                     (cursor/set-to-offset! j-cursor j)))
+                     (cursor/move-to-offset! j-cursor j)))
                (when (= (get-char i-cursor)
                         (get-char j-cursor))
                  (set! j (inc j))

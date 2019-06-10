@@ -1,442 +1,96 @@
 (ns andel.text
-  (:require [andel.tree :as tree]
-            [andel.array-list :as al])
-  (:import [andel.tree ZipperLocation Leaf]
-           [andel Text]
+  (:refer-clojure :exclude [transient persistent!])
+  (:import [andel Text Text$Sequence]
+           [andel Rope Rope$Zipper]
            [java.lang CharSequence]))
 
 (defn codepoints-count ^long [^String s]
   (.codePointCount s 0 (.length s)))
 
-(defn chars->codepoints ^long [^String s ^long chars-offset]
-  (.codePointCount s 0 chars-offset))
+(defn transient [zipper]
+  (Rope/toTransient zipper))
 
-(defn codepoints->chars ^long [^String s ^long codepoints-offset]
-  (.offsetByCodePoints s 0 codepoints-offset))
-
-(defrecord TextMetrics [^long length ;; in codepoints
-                        ^long geometric-length
-                        ^long lines-count
-                        ^long chars-count
-                        ^long newline-prefix-length
-                        ^long max-line-length
-                        ^long newline-suffix-length])
-
-(defn geom-metrics-pred [^long to]
-  (fn ^long [^long offset ^long geom-offset ^long char-offset]
-    (if (<= to geom-offset) 1 0)))
-
-(defn offset-metrics-pred [^long to]
-  (fn ^long [^long offset ^long geom-offset ^long char-offset]
-    (if (<= to offset) 1 0)))
-
-(defn char-metrics-pred [^long to]
-  (fn ^long [^long offset ^long geom-offset ^long char-offset]
-    (if (<= to char-offset) 1 0)))
-
-(defn geom-map ^ints [^String str]
-  (let [l (.length str)
-        m (int-array (inc l))]
-    (aset m 0 0)
-    (loop [i 0
-           o 0]
-      (if (< i l)
-        (let [c (.charAt str i)
-              o' (if (= c \tab) (+ o 4) (inc o))]
-          (aset m (inc i) o')
-          (recur (inc i) o'))
-        m))))
-
-(defn metrics-to [^String str kind offset]
-  (let [kind (case kind
-               :offset andel.Text$OffsetKind/CodePoints
-               :characters andel.Text$OffsetKind/Characters
-               :geom andel.Text$OffsetKind/Geom)
-         metrics (Text/metricsTo str kind offset)]
-    (TextMetrics.
-      (.-length metrics)
-      (.-geometricLength metrics)
-      (.-linesCount metrics)
-      (.-charsCount metrics)
-      (.-newlinePrefixGeomLength metrics)
-      (.-maxLineLength metrics)
-      (.-newlineSuffixGeomLength metrics))))
-
-(defn metrics [^String str]
-  (metrics-to str :offset (.codePointCount str 0 (.length str))))
-
-(defn ^TextMetrics scan-r-f
-  ([] (TextMetrics. 0 0 0 0 0 0 0))
-  ([^TextMetrics acc ^TextMetrics metrics]
-   (TextMetrics. (+ (.-length acc) (.-length metrics))
-                 (+ (.-geometric-length acc) (.-geometric-length metrics))
-                 (+ (.-lines-count acc) (.-lines-count metrics))
-                 (+ (.-chars-count acc) (.-chars-count metrics))
-                 0
-                 0
-                 0)))
-
-(defn build-r-f
-  ([] (TextMetrics. 0 0 0 0 0 0 0))
-  ([^TextMetrics acc ^TextMetrics metrics]
-   (let [l-length (.-length acc)
-         l-lines-count (.-lines-count acc)
-         l-prefix (.-newline-prefix-length acc)
-         l-maxlen (.-max-line-length acc)
-         l-suffix (.-newline-suffix-length acc)
-         r-length (.-length acc)
-         r-lines-count (.-lines-count metrics)
-         r-prefix (.-newline-prefix-length metrics)
-         r-maxlen (.-max-line-length metrics)
-         r-suffix (.-newline-suffix-length metrics)]
-     (TextMetrics. (+ (.-length acc) (.-length metrics))
-                   (+ (.-geometric-length acc) (.-geometric-length metrics))
-                   (+ (.-lines-count acc) (.-lines-count metrics))
-                   (+ (.-chars-count acc) (.-chars-count metrics))
-                   (if (= l-lines-count 0)
-                     (+ l-prefix r-prefix)
-                     l-prefix)
-                   (max l-maxlen
-                        r-maxlen
-                        (+ l-suffix
-                           r-prefix))
-                   (if (= r-lines-count 0)
-                     (+ l-suffix r-suffix)
-                     r-suffix)))))
-
-(defn split-count [^long i ^long j ^long thresh]
-  (let [x (- j i)]
-    (if (< x thresh)
-      [[i j]]
-      (let [x-h (quot x 2)]
-        (concat (split-count i (+ i x-h) thresh) (split-count (+ i x-h) j thresh))))))
-
-(def ^{:tag 'long} string-thresh 64)
-(def ^{:tag 'long} string-merge-thresh (quot string-thresh 2))
-
-(defn split-string [x]
-  ;; TODO codepoints->chars is linear, maybe it will be a problem on large strings
-  (assert (<= string-thresh (codepoints-count x)))
-  (map (fn [[i j]] (subs x (codepoints->chars x i) (codepoints->chars x j)))
-       (split-count 0 (codepoints-count x) string-thresh)))
-
-(def tree-config {:make-node (fn [children]
-                               (tree/->Node (reduce (fn [acc x] (build-r-f acc (tree/metrics x)))
-                                                    (build-r-f) children)
-                                            children))
-                  :reducing-fn build-r-f
-                  :metrics-fn metrics
-                  :leaf-overflown? (fn [x] (<= string-thresh (codepoints-count x)))
-                  :split-thresh 32
-                  :split-leaf split-string
-                  :leaf-underflown? (fn [s] (< (codepoints-count s) string-merge-thresh))
-                  :merge-leafs (fn [s1 s2] (str s1 s2))})
-
-(defn- reduce-string [^String s]
-  (let [last-idx (codepoints-count s)
-        leaf-vec (if (= last-idx 0)
-                   [(tree/make-leaf "" tree-config)]
-                   (let [leaf-vec (transient [])]
-                     (loop [idx 0]
-                       (if (= idx last-idx)
-                         (persistent! leaf-vec)
-                         (let [idx' (min (+ idx string-thresh) last-idx)]
-                           (conj! leaf-vec (tree/make-leaf (subs s
-                                                                 (codepoints->chars s idx)
-                                                                 (codepoints->chars s idx')) tree-config))
-                           (recur idx'))))))]
-    leaf-vec))
-
-(defn- reduce-nodes [nodes-vec]
-  (let [p (:split-thresh tree-config)]
-    (mapv (fn [nodes]
-            (tree/make-node (al/into-array-list nodes) tree-config))
-          (partition p p nil nodes-vec))))
-
-(defn- reduce-tree [node-vec]
-  (loop [node-vec' (reduce-nodes node-vec)]
-    (if (= 1 (count node-vec'))
-      (first node-vec')
-      (recur (reduce-nodes node-vec')))))
+(defn persistent! [zipper]
+  (Rope/toPersistent zipper))
 
 (defn make-text [s]
-  (reduce-tree (reduce-string s)))
+  (Text/makeText s))
 
 (defn zipper [tree]
-  (tree/zipper tree tree-config))
+  (Text/zipper tree))
 
-(defn root [^ZipperLocation loc]
-  (let [root (tree/root loc)]
-    (if-not (empty? (.-children root))
-      root
-      (make-text ""))))
+(defn root [zipper]
+  (Text/root zipper))
 
-(defn metrics-offset ^long [^TextMetrics m]
-  (.-length m))
+(defn offset ^long [zipper]
+  (Text/offset zipper))
 
-(defn metrics-geom-offset ^long [^TextMetrics m]
-  (.-geometric-length m))
+(defn geom-offset ^long [zipper]
+  (Text/geomOffset zipper))
 
-(defn metrics-char-offset ^long [^TextMetrics m]
-  (.-chars-count m))
+(defn line ^long [zipper]
+  (Text/line zipper))
 
-(defn metrics-line ^long [^TextMetrics m]
-  (.-lines-count m))
+(defn char-offset ^long [zipper]
+  (Text/charOffset zipper))
 
-(defn node-offset
-  "Returns offset of the current node ignoring overriding accumulator"
-  ^long [loc]
-  (metrics-offset (tree/acc loc)))
+(defn scan-to-offset [zipper ^long i]
+  (Text/scanToOffset zipper i))
 
-(defn node-geom-offset ^long [loc]
-  (metrics-geom-offset (tree/acc loc)))
+(defn scan-to-geom-offset [zipper ^long i]
+  (Text/scanToGeomOffset zipper i))
 
-(defn node-char-offset ^long [loc]
-  (metrics-char-offset (tree/acc loc)))
+(defn scan-to-char-offset [zipper ^long i]
+  (Text/scanToCharOffset zipper i))
 
-(defn by-offset [^long i]
-  (fn [acc m] (<= i (metrics-offset (scan-r-f acc m)))))
+(defn retain [zipper ^long l]
+  (Text/retain zipper l))
 
-(defn by-geom-offset [^long i]
-  (fn [acc m] (<= i (metrics-geom-offset (scan-r-f acc m)))))
-
-(defn by-char-offset [^long i]
-  (fn [acc m] (<= i (metrics-char-offset (scan-r-f acc m)))))
-
-(defn by-char-offset-exclusive [^long i]
-  (fn [acc m] (< i (metrics-char-offset (scan-r-f acc m)))))
-
-(defn by-line [^long i]
-  (fn [acc m] (<= i (metrics-line (scan-r-f acc m)))))
-
-(defn offset ^long [^ZipperLocation loc]
-  (cond
-    (tree/end? loc) (metrics-offset (tree/metrics (tree/node loc)))
-    (.-o-acc loc) (metrics-offset (.-o-acc loc))
-    (.-acc loc) (metrics-offset (.-acc loc))
-    :else 0))
-
-(defn geom-offset ^long [^ZipperLocation loc]
-  (cond
-    (tree/end? loc) (metrics-geom-offset (tree/metrics (tree/node loc)))
-    (.-o-acc loc) (metrics-geom-offset (.-o-acc loc))
-    (.-acc loc) (metrics-geom-offset (.-acc loc))
-    :else 0))
-
-(defn line ^long [^ZipperLocation loc]
-  (cond
-    (tree/end? loc) (metrics-line (tree/metrics (tree/node loc)))
-    (.-o-acc loc) (metrics-line (.-o-acc loc))
-    (.-acc loc) (metrics-line (.-acc loc))
-    :else 0))
-
-(defn char-offset ^long [^ZipperLocation loc]
-  (cond
-    (tree/end? loc) (metrics-char-offset (tree/metrics (tree/node loc)))
-    (.-o-acc loc) (metrics-char-offset (.-o-acc loc))
-    (.-acc loc) (metrics-char-offset (.-acc loc))
-    :else 0))
-
-(defn node-line
-  "Returns offset of the current node ignoring overriding accumulator"
-  ^long [loc]
-  (metrics-line (tree/acc loc)))
-
-(defn nth-index [s c ^long n]
-  (if (= n 0)
-    0
-    (chars->codepoints s
-     (loop [from 0
-           n n]
-      (let [i (clojure.string/index-of s c from)]
-        (if (= n 1)
-          i
-          (when (some? i)
-            (recur (inc (long i)) (dec n)))))))))
-
-(defn forget-acc [loc]
-  (tree/assoc-o-acc loc nil))
-
-(defn- at-the-right-border? [loc]
-  (let [s (.-data ^Leaf (tree/node loc))
-        o (char-offset loc)
-        loc-offset (node-char-offset loc)
-        rel-offset (- o loc-offset)]
-    (= rel-offset (count s))))
-
-(defn scan-to-offset [loc ^long i]
-  (let [offset-loc (tree/scan loc (by-offset i))]
-    (if (tree/end? offset-loc)
-      offset-loc
-      (let [o (node-offset offset-loc)
-            s (.-data ^Leaf (tree/node offset-loc))
-            a (.-acc ^ZipperLocation offset-loc)
-            offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s :offset (- i o))))
-            next-node (tree/next-leaf offset-loc)]
-        (if (and (at-the-right-border? offset-loc)
-                 (not (tree/end? next-node)))
-          next-node
-          offset-loc)))))
-
-(defn scan-to-geom-offset [loc ^long i]
-  (let [offset-loc (tree/scan loc (by-geom-offset i))]
-    (if (tree/end? offset-loc)
-      offset-loc
-      (let [o (node-geom-offset offset-loc)
-            s (.-data ^Leaf (tree/node offset-loc))
-            a (.-acc ^ZipperLocation offset-loc)
-            offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s :geom  (- i o))))
-            next-node (tree/next-leaf offset-loc)]
-        (if (and (at-the-right-border? offset-loc)
-                 (not (tree/end? next-node)))
-          next-node
-          offset-loc)))))
-
-(defn scan-to-char-offset [loc ^long i]
-  (let [offset-loc (tree/scan loc (by-char-offset i))]
-    (if (tree/end? offset-loc)
-      offset-loc
-      (let [o (node-char-offset offset-loc)
-            s (.-data ^Leaf (tree/node offset-loc))
-            a (.-acc ^ZipperLocation offset-loc)
-            offset-loc (tree/assoc-o-acc offset-loc (scan-r-f a (metrics-to s :characters (- i o))))
-            next-node (tree/next-leaf offset-loc)]
-        (if (and (at-the-right-border? offset-loc)
-                 (not (tree/end? next-node)))
-          next-node
-          offset-loc)))))
-
-(defn retain [loc ^long l]
-  (scan-to-offset loc (+ (offset loc) l)))
-
-(defn scan-to-line-start [loc ^long n]
-  (let [nth-eol-loc (tree/scan loc (by-line n))]
-    (if (or (tree/end? nth-eol-loc) (<= n 0))
-      nth-eol-loc
-      (let [o (node-offset nth-eol-loc)
-            l (node-line nth-eol-loc)
-            data (.-data ^Leaf (tree/node nth-eol-loc))
-            eol-idx (nth-index data
-                               \newline
-                               (- n l))
-            s (.-data ^Leaf (tree/node nth-eol-loc))
-            a (.-acc ^ZipperLocation nth-eol-loc)
-            prev-line-end (tree/assoc-o-acc nth-eol-loc (scan-r-f a (metrics-to s :offset eol-idx)))]
-        (-> prev-line-end
-            (retain 1))))))
+(defn scan-to-line-start [zipper ^long n]
+  (Text/scanToLineStart zipper n))
 
 (defn distance-to-EOL ^long [loc]
   (let [next-loc (scan-to-line-start loc (inc (line loc)))
         len (- (offset next-loc)
                (offset loc))]
-    (if (tree/end? next-loc)
+    (if (not (Rope/hasNext next-loc))
       len
       (dec len))))
 
 (defn lines-count [t]
-  (if t
-    (inc (.-lines-count ^TextMetrics (tree/metrics t)))
-    0))
+  (Text/linesCount t))
 
 (defn text-length ^long [t]
-  (if t
-    (metrics-offset (tree/metrics t))
-    0))
+  (Text/length t))
 
 (defn chars-count [t]
-  (if t
-    (metrics-char-offset (tree/metrics t))
-    0))
+  (Text/charsCount t))
 
-(defn text ^String [loc ^long l]
-  (loop [loc loc
-         l l
-         sb (StringBuilder.)]
-    (if (< 0 l)
-      (if (tree/end? loc)
-        (throw (ex-info "Length is out of bounds" {:l l}))
-        (if (tree/branch? loc)
-          (recur (tree/down-forward loc) l sb)
-          (let [i (offset loc)
-                text (.-data ^Leaf (tree/node loc))
-                base-offset (metrics-offset (tree/loc-acc loc))
-                start (- i base-offset)
-                end (min (codepoints-count text) (+ start l))
-                s-len (- end start)
-                chars-start (codepoints->chars text start)
-                chars-end (codepoints->chars text end)]
-            (recur (tree/next (forget-acc loc))
-              (- l s-len)
-              (.append sb ^java.lang.CharSequence text chars-start chars-end)))))
-      (.toString sb))))
+(defn text ^String [zipper ^long l]
+  (Text/text zipper l))
 
 (defn as-string [text-tree]
-  (text (zipper text-tree)
-             (text-length text-tree)))
+  (Text/text (Text/zipper text-tree) (Text/length text-tree)))
 
-(defn insert [loc ^String s]
-  (if (tree/branch? loc)
-    (recur (tree/down-forward loc) s)
-    (let [rel-char-offset (- (char-offset loc) (node-char-offset loc))]
-      (-> loc
-          (tree/edit (fn [^Leaf node]
-                       (let [data (or (some-> node (.-data)) "")]
-                         (tree/make-leaf (str (subs data 0 rel-char-offset)
-                                              s
-                                              (subs data rel-char-offset)) tree-config))))
-          (retain (codepoints-count s))))))
+(defn insert [zipper ^String s]
+  (Text/insert zipper s))
 
-(defn delete [loc ^long l]
-  (if (tree/branch? loc)
-    (recur (tree/down-forward loc) l)
-    (let [i (offset loc)
-          rel-offset (- i (node-offset loc))
-          chunk-l (codepoints-count (.-data ^Leaf (tree/node loc)))
-          end (min chunk-l (+ rel-offset l))
-          next-loc  (if (and (= rel-offset 0) (= end chunk-l))
-                      (tree/remove (forget-acc loc))
-                      (-> loc
-                          (tree/edit (fn [node]
-                                       (let [s (.-data ^Leaf node)]
-                                         (tree/make-leaf
-                                          (str (subs s 0 (codepoints->chars s rel-offset))
-                                               (subs s (codepoints->chars s end)))
-                                          tree-config))))
-                          (scan-to-offset i)))
-          deleted-c (- end rel-offset)]
-      (if (< deleted-c l)
-        (recur next-loc (- l deleted-c))
-        next-loc))))
-
-(defn play [t operation]
-  (root (reduce (fn [loc [code arg]]
-                  (case code
-                    :retain (retain loc arg)
-                    :insert (insert loc arg)
-                    :delete (delete loc (if (string? arg) (codepoints-count arg) arg))))
-                (zipper t)
-                operation)))
-
-
-(defn line-text [t i]
-  (let [loc (scan-to-line-start (zipper t) i)]
-    (text loc (distance-to-EOL loc))))
+(defn delete [zipper ^long l]
+  (Text/delete zipper l))
 
 (defn text-range [tree ^long from ^long to]
   (assert (<= from to) {:from from :to to})
   (if (= from to)
     ""
-    (-> (zipper tree)
-        (scan-to-offset from)
-        (text (- to from)))))
+    (-> (Text/zipper tree)
+        (Text/scanToOffset from)
+        (Text/text (- to from)))))
 
 (defn max-line-length ^long [text]
-  (.-max-line-length ^TextMetrics (tree/metrics text)))
-
-(defn- leaf-data ^String [loc]
-  (.-data ^Leaf (tree/node loc)))
+  (Text/maxLineLength text))
 
 (defn skip-to-line-end [loc]
+  (def loc loc)
   (let [offset (offset loc)
         delta (distance-to-EOL loc)]
     (scan-to-offset loc (+ offset delta))))
@@ -449,50 +103,13 @@
       loc'
       (skip-to-line-end loc))))
 
-(defn column ^long [^ZipperLocation loc]
+(defn column ^long [loc]
   (let [cur-line (line loc)
         start-loc (scan-to-line-start (zipper (root loc)) cur-line)]
     (- (geom-offset loc) (geom-offset start-loc))))
 
-(deftype TextSequence [t ^{:volatile-mutable true} loc ^long from-char ^long to-char]
-  CharSequence
-  (^int length [this]
-    (- to-char from-char))
-  (^char charAt [this ^int char-index]
-    (assert (< char-index (- to-char from-char)) "Index out of range")
-    (let [absolute-index (+ char-index from-char)
-          base (node-char-offset loc)
-          text (leaf-data loc)]
-      (cond
-        (< absolute-index base)
-        (let [new-loc (tree/scan (zipper t) (by-char-offset-exclusive absolute-index))
-              base (node-char-offset new-loc)
-              text (leaf-data new-loc)]
-          (set! loc new-loc)
-          (.charAt text (- absolute-index base)))
-
-        (< absolute-index (+ base (count text)))
-        (.charAt text (- absolute-index base))
-
-        (<= (+ base (count text)) absolute-index)
-        (let [new-loc (tree/scan loc (by-char-offset-exclusive absolute-index))
-              base (node-char-offset new-loc)
-              text (leaf-data new-loc)]
-          (set! loc new-loc)
-          (.charAt text (- absolute-index base)))
-
-        :else (throw (ex-info "No way" {:from from-char :to to-char :index char-index})))))
-  (^CharSequence subSequence [this ^int from' ^int to']
-    (assert (<= from' (- to-char from-char)) "From index out of range")
-    (assert (<= to' (- to-char from-char)) "To index out of range")
-    (TextSequence. t (tree/scan (zipper t) (by-char-offset-exclusive 0)) (+ from-char from') (+ from-char to')))
-  (^String toString [this]
-    (let [from-loc (scan-to-char-offset (zipper t) from-char)
-          to-loc (scan-to-char-offset from-loc to-char)]
-      (text from-loc (- (offset to-loc) (offset from-loc))))))
-
 (defn ^CharSequence text->char-seq [t]
-  (TextSequence. t (tree/scan (zipper t) (by-char-offset-exclusive 0)) 0 (chars-count t)))
+  (Text$Sequence. t))
 
 (defn offset->char-offset ^long [text ^long offset]
   (-> (zipper text)

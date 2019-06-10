@@ -1,6 +1,7 @@
 (ns andel.intervals-test
   (:require [clojure.test.check.generators :as g]
             [clojure.test.check.properties :as prop]
+            [clojure.test.check.rose-tree :as rose]
             [clojure.test.check :as tc]
             [clojure.test :refer :all])
   (:import [andel Intervals Intervals$Interval]))
@@ -34,7 +35,7 @@
   ([] (intervals-bulk-gen 1))
   ([next-id]
    (g/bind
-    (g/fmap (fn [size] (range next-id (+ next-id size))) g/nat)
+    (g/fmap (fn [size] (range next-id (+ next-id size))) g/s-pos-int)
     (fn [ids]
       (let [cnt (count ids)]
         (g/let [a (g/vector (g/large-integer* {:min 0 :max 10000}) cnt)
@@ -55,7 +56,7 @@
 (defn ->interval [{:keys [id from to data greedy-left? greedy-right?]}]
   (Intervals$Interval. id from to (boolean greedy-left?) (boolean greedy-right?) data))
 
-(def empty-tree (Intervals. 32))
+(def empty-tree (Intervals. 4))
 
 (defn naive-type-in [intervals [offset length]]
   (if (< 0 length)
@@ -182,9 +183,10 @@
  (def tree-actions-generator
     (let [op-gen (fn [state]
                    (g/frequency (concat [[1 (insert-step-gen state)]]
-                                      (when (seq (:ids state))
-                                        [[1 (delete-step-gen state)]
-                                         [1 (type-in-step-gen state)]]))))]
+                                        (when (seq (:ids state))
+
+                                          [[2 (delete-step-gen state)]
+                                           [4 (type-in-step-gen state)]]))))]
     (clojure.test.check.generators.Generator.
      (fn [rnd size]
        (loop [state {:ids #{} :next-id 0}
@@ -195,103 +197,6 @@
            (let [next-rose (g/call-gen (op-gen state) rnd size)
                  [state']  (rose/root next-rose)]
              (recur state' (conj r next-rose) (dec size)))))))))
-
-(comment
-
-
-
-  (def r (call-gen g 10))
-
-  (.-children r)
-
-  *e
-
-  (def r(call-gen (g/gen-bind g/boolean (fn [rose] (g/gen-pure rose))) 100))
-
-  (def r (call-gen g/boolean))
-
-  (defn huj [r c]
-    (let [op (str "huj " c)
-          c (inc c)
-          t (conj r op)]
-
-      (lazy-seq
-        (cons t (huj t c)))))
-
-  (take 20 (huj [] 1))
-
-
-
-  (map #(.-root %) (tree-seq #(seq (.-children %)) #(seq (.-children %)) r))
-
-  (defn my-gen [g]
-    (g/gen-bind g
-            (fn [s]
-              (g/sized
-                (fn [size]
-                  (if (= 0 size)
-                    (g/return s)
-                    (g/resize (dec size) (my-gen (g/return (conj s (rand-int 100)))))))))))
-
-  (defn call-gen[gen size]
-    (let [[created-seed rng] (make-rng 100)]
-      (g/call-gen gen rng size)))
-
-  (def r (call-gen (g/bind g/nat (fn [i] g/boolean))))
-
-  (map #(.-children %)
-   (.-children r))
-state
-
-  (def g (my-gen (g/return [])))
-
-  (g/sample g)
-
-  (import '[java.util Random])
-  (require '[clojure.test.check.random :as random])
-  (require ' [clojure.test.check.impl :refer [get-current-time-millis]])
-  (require '[clojure.test.check.rose-tree :as rose])
-
-  (defn- make-rng
-    [seed]
-    (if seed
-      [seed (random/make-random seed)]
-      (let [non-nil-seed (get-current-time-millis)]
-        [non-nil-seed (random/make-random non-nil-seed)])))
-
-  (def my-rose
-    )
-
-  (.-root my-rose)
-
-  (.-children my-rose)
-
-
-  (def his-rose
-    (let [[created-seed rng] (make-rng 100)
-          size 10]
-      (g/call-gen (g/vector g/int) rng size)))
-
-
-  (.-root his-rose)
-  (.-root (first (.-children (.-root (nth (.-children his-rose) 4)))))
-
-  (rose/root rose)
-
-
-
-
-
-  )
-
-#_(def tree-actions-generator
-  (g/fmap
-   (fn [{:keys [ids generated]}] generated)
-   (g/sized
-    (fn [size]
-      (recursive-intervals
-        (g/return {:ids #{}
-                   :generated []}))))))
 
 (defn naive-play-op [intervals-vec [op arg]]
   (case op
@@ -319,9 +224,11 @@ state
                       (set (tree->intervals tree))))))
 
 (deftest intervals-test
-  (is (:result (tc/quick-check 1000 intervals-prop :max-size 100))))
+  (is (:result (tc/quick-check 5000 intervals-prop :max-size 100))))
 
 (comment
+
+  (g/sample tree-actions-generator 100)
 
   (defn np [node]
     (if (instance? andel.Intervals$Node node)
