@@ -225,60 +225,35 @@
       [:delete
        "Tg5S1Fmicmwws7FEZVCViIXxllZK7X3664OL4MqtsqSRCr474UsHgCXelOYS5AUeE4fK0lBo4H"]
       [:delete "hip8xqI3KQvw7FG63kGW06Ub5sm2nq166Cb"]
-      [:retain 1163]]
-     [[:insert "uwh06J045FdD2XnDy5x"] [:retain 1304]]
-     [[:delete "uwh06J045FdD2XnDy5xggc8Jx8D86x7hf4os91T"]
-      [:insert
-       "5td21ESTeNNcEKQ7g9GKD7R4L4e4NS8T6jle3NliP9xFnm73v7HS4EWDk8RdD3si2w6fUmaaiMW9cZv97vtM9O3Xfo8TQNt72cEAVmCt6801R82C058wZ6R0iRu3M8nE5avfWt26s"]
-      [:insert
-       "T5002l6xcMb7p7HebqX852R4o5l375r2i9hWEAU4i5o68pUUt26iqCx7yWiLD5EXC39v77Ycwwg696T6bIz71mn1H6BL5D4ZQUO85KXhTYr2NkmKUAI7kYET6sr28DAvwp8gzhcNX9E9R84u72NoG6Kv91A4hGVS07Nb24kp5Ff1u"]
-      [:insert
-       "djNE18Z5vRCd8du3Yf582Ic7Kv22c3PGV8sTbLlJwYAaRn2476Z9tshpVrDZNWa93U3JsqW4f0Ety6O2q8ohYLcDy25PDY6Y2Hkzd4rtn124Xl9P9Jjn0DBwRk7sJ0vJQ"]
-      [:retain 8]
-      [:insert
-       "GpP9Pudh3o1esZq140J0Jtb038gcBxl905vVPl1Ll1FDcC8q441pv5u6777fCt125EVk813P6b3h2k0u6Zwwazcc1831i4EV7OnF05Zxb5r3mRoN"]
-      [:insert "ysczIb0f6Xn0jh"]
-      [:retain 1276]]
-     [[:insert "RfPejp1p9VV24d5065TjMNLTJLD6gskQTa5"]
-      [:retain 151]
-      [:delete
-       "HebqX852R4o5l375r2i9hWEAU4i5o68pUUt26iqCx7yWiLD5EXC39v77Ycwwg696T6bIz71mn1H6BL5D4ZQUO85KXhTYr2NkmKUAI7kYET6sr28DAvwp8gzhcNX9E9R84u72NoG6Kv91A4hGVS07Nb24kp5Ff1udjNE18Z5vRCd8"]
-      [:delete
-       "du3Yf582Ic7Kv22c3PGV8sTbLlJwYAaRn2476Z9tshpVrDZNWa93U3JsqW4f"]
-      [:insert
-       "WR425pm0OoyGBwIKi8NFhCG8u9J92bp1IC5VziQzfl1J0Dx9upmuW0cVBACt3MSW0QwuIJDr0gEG9n0O5x0y4N1I2BXJQgi1p0UVhJ8yp0F53A443W5HPBgQRq5QBjzcT3jPkrFYfDxt2n8Br"]
-      [:retain 11]
-      [:delete
-       "YLcDy25PDY6Y2Hkzd4rtn124Xl9P9Jjn0DBwRk7sJ0vJQ74Fk6UA3GpP9Pudh3o1esZq140J0Jtb038gcBxl905vVPl1Ll1FDcC8q441pv5u6777fCt125EVk813P6b3h2k0u6Zwwazcc1831i4EV7OnF05Zxb5r3mRoNysczIb"]
-      [:delete "0f6Xn0jhCd1ZDENuZ6W61mz06Feuj4487r0ka4vz8i"]
-      [:retain 1242]]
-     [[:insert
-       "554olXv87VgYH6AC2m6xlF2gi8d2H0U60zSb5fUEh5v88flWyeX3sMy91W0k5TfASrAOp3A5Etb127ZPp5Yzj6q0QgN113IV6pT5E9369jb3DM0c72rJPmF3Q03yO0O3kZFkDn9FZHnK86Lzv68Q3y24p9V2D9PkfSHk03t"]
-      [:delete
-       "RfPejp1p9VV24d5065TjMNLTJLD6gskQTa55td21ESTeNNcEKQ7g9GKD7R4L4e4NS8T6jle3NliP9xFnm73v7HS4EWDk8RdD3si2w6fUmaaiMW9cZv97vtM9O3Xfo8TQN"]
-      [:retain 96]
-      [:insert
-       "wq3b6600JE5iCO0ugp1b08Hx83ZzY3B3BF1d7P9cu73Qsauj2y6fc0L8HYV3LC7U770U8z4SCeP2e39B5sVxrT1Q38TRI2m43mDLwt6Tn2c"]
-      [:delete
-       "zfl1J0Dx9upmuW0cVBACt3MSW0QwuIJDr0gEG9n0O5x0y4N1I2BXJQgi1p0UVhJ8yp0F53A443W5HPBgQRq"]
-      [:delete "5QB"]
-      [:retain 1273]]]]])
+      [:retain 1163]]]]])
+
+  (let [[[text operations]] foo]
+    (loop [text text
+           [op & rest :as operations] (take 1 operations)]
+      (when (seq rest)
+        (let [text' (play-naive text op)
+              naive-final (reduce play-naive text' rest)
+              t (reduce play (Text/makeText text') rest)
+              final (Text/text (Text/zipper t) (Text/length t))]
+          (if (= naive-final final)
+            [[text operations]]
+            (recur text' rest))))))
 
   (let [[[text operations]] foo
         t                  (make-text text)
         t'                 (reduce play t operations)
+        should-be (reduce play-naive text operations)
         text' (Text/text (Text/zipper t') (Text/length t'))]
-    {:success? (= text text')
+    {:success? (= should-be text')
      :before text
      :operations operations
      :after text'
-     :should-be (reduce play-naive text operations)})
+     :should-be should-be})
 
   (zp
    (-> (make-text "0000000000")
        (Text/zipper)
        (Text/retain 10)))
-
   )
 
 (comment
