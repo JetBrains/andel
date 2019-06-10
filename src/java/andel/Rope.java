@@ -768,24 +768,4 @@ public class Rope {
       }
     }
   }
-
-  public static <Metrics, Data> Zipper<Metrics, Data> insertLeft(Zipper<Metrics, Data> zipper, Object newNode, Metrics nodeMetrics) {
-    assert !isRoot(zipper);
-    Zipper<Metrics, Data> result = zipper.isTransient ? zipper : zipper.copy();
-    ArrayList<Object> siblings = isChildrenMutable(zipper)
-                                 ? zipper.siblings
-                                 : (ArrayList<Object>)zipper.siblings.clone();
-    ArrayList<Metrics> metrics = isChildrenMutable(zipper)
-                                 ? zipper.metrics
-                                 : (ArrayList<Metrics>)zipper.metrics.clone();
-    siblings.add(zipper.idx, newNode);
-    metrics.add(zipper.idx, nodeMetrics);
-
-    result.siblings = siblings;
-    result.idx = zipper.idx + 1;
-    result.isChanged = true;
-    result.acc = zipper.ops.rf(zipper.acc, nodeMetrics);
-    result.oacc = null;
-    return result;
-  }
 }
