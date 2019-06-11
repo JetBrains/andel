@@ -49,19 +49,22 @@
 (defn scan-to-line-start [zipper ^long n]
   (Text/scanToLineStart zipper n))
 
-(defn distance-to-EOL ^long [loc]
-  (let [next-loc (scan-to-line-start loc (inc (line loc)))
-        len (- (offset next-loc)
-               (offset loc))]
-    (if (not (Rope/hasNext next-loc))
-      len
-      (dec len))))
+(defn text-length ^long [t]
+  (Text/length t))
 
 (defn lines-count [t]
   (Text/linesCount t))
 
-(defn text-length ^long [t]
-  (Text/length t))
+(defn distance-to-EOL ^long [loc]
+  (let [t (root loc)]
+    (if (< (line loc) (dec (lines-count t)))
+      (let [next-loc (scan-to-line-start loc (inc (line loc)))]
+        (dec (- (offset next-loc)
+                (offset loc))))
+      (- (text-length t) (offset loc)))))
+
+(defn text-geom-length ^long [t]
+  (.-geometricLength (.-metrics t)))
 
 (defn chars-count [t]
   (Text/charsCount t))
@@ -90,7 +93,6 @@
   (Text/maxLineLength text))
 
 (defn skip-to-line-end [loc]
-  (def loc loc)
   (let [offset (offset loc)
         delta (distance-to-EOL loc)]
     (scan-to-offset loc (+ offset delta))))
@@ -98,7 +100,7 @@
 (defn skip-columns [loc ^long cols]
   (let [geom (geom-offset loc)
         cur-line (line loc)
-        loc' (scan-to-geom-offset loc (+ geom cols))]
+        loc' (scan-to-geom-offset loc (min (+ geom cols) (text-geom-length (root loc))))]
     (if (= cur-line (line loc'))
       loc'
       (skip-to-line-end loc))))
