@@ -153,16 +153,16 @@
 
 (defn home [state selection?]
   (let [text (-> state :document :text)
-        caret-offset (max 0 (dec (core/caret-offset state)))
-        cursor (cursor/cursor text caret-offset)
-        line-start-cursor (move-cursor-to-line-start cursor)
+        caret-offset (core/caret-offset state)
+        caret-line (utils/offset->line caret-offset text)
+        line-start-offset (utils/line->offset caret-line text)
+        line-start-cursor (cursor/cursor text line-start-offset)
         text-start-cursor (first (cursor/forward-while line-start-cursor
                                                        #(or (= % (int \space))
                                                          (= % (int \tab)))))
-        line-start-offset (cursor/offset line-start-cursor)
         text-start-offset (cursor/offset text-start-cursor)]
     (if (and (< line-start-offset caret-offset)
-             (< caret-offset text-start-offset))
+             (<= caret-offset text-start-offset))
       (set-caret-at-offset state line-start-offset selection?)
       (set-caret-at-offset state text-start-offset selection?))))
 

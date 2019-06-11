@@ -67,7 +67,11 @@ public class Cursor {
       }
       Rope.Zipper<Text.TextMetrics, String> leaf = Rope.scan(Text.zipper(text), Text.byOffsetExclusive(offset));
       assert leaf != null && Rope.isLeaf(leaf);
-      return create(leaf);
+
+      long leafCharOffset = Text.nodeCharOffset(leaf);
+      String s = Rope.data(leaf);
+      int innerOffset = (int)(offset - Text.nodeOffset(leaf));
+      return new ImmutableCursor(leaf, leafCharOffset, s.offsetByCodePoints(0, innerOffset), offset, s.length());
     }
   }
 

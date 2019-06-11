@@ -146,14 +146,14 @@ public class Text {
 
   public static class TextOps implements ZipperOps<TextMetrics, String> {
 
-    final int splitThresh;
-    final int leafSplitThresh;
+    public final int splitThresh;
+    public final int leafSplitThresh;
     final int leafMergeThresh;
 
     public TextOps(int branching, int leafWidth) {
-      splitThresh = branching;
-      leafMergeThresh = leafWidth / 2;
-      leafSplitThresh = leafWidth;
+      this.splitThresh = branching;
+      this.leafMergeThresh = leafWidth / 2;
+      this.leafSplitThresh = leafWidth;
     }
 
     @Override
