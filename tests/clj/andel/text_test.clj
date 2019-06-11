@@ -141,6 +141,7 @@
 
 (deftest generative
   (is (:result (tc/quick-check 3000 (play-test play))))
+
   (is (:result (tc/quick-check 3000 (play-test play-transient))))
 
   (is (:result (tc/quick-check 1000 (play-many-test play))))
@@ -172,68 +173,18 @@
      :acc      (some-> (.-acc zipper) (mp))
      :oacc     (some-> (.-oacc zipper) (mp))})
 
-  ;; seed 1560198725280
   (def foo
-    [["bOK0IDX7G0U4P42ycwhxXCM7Hk9nYntacgw63IOo5hqmXGUeC4fb132okmzdBvvs1QI5p414hx3BX5273321Clhk2Lakm2b5HLyrIXN5AR72liAm3Afz0Q5o9S86E2tkE5n8Vh8aasfL8KZ94g0TmgCsZxLCHp5XF3j36Ncn1dAA"
-    [[[:insert
-       "2fuFKYd7rR3jQ50tEJPWkvnbf40Gdx7ufDTN6c306s8oaG94GriHi7yzCGt83AskoT9B5xLTBUc63fu753105ZjYaWZGkr9696nu43io8E2k26ZV30a40g7dCX8F4Es568C09dmY"]
-      [:insert
-       "5IIxF82hPByqPrOA94f5hWwvCiAgeKXuiqMop06kK85YeTmmj3lMTABYUH306TLzvoEg"]
-      [:insert
-       "YIDV2GqzZDy9et57P53OjF0Lit2PDDNd5l260ZRWOi5VCLiX4Rj3w58quuXVQs2uOB6fkOyAx45XYpEKPbVi76hQ7xEV98kk98Q96183B40M3bzLHEj9w7zZE8cj3Rf1rJynt0xTyv0y"]
-      [:retain 36]
-      [:delete
-       "3IOo5hqmXGUeC4fb132okmzdBvvs1QI5p414hx3BX5273321Clhk2Lakm2b5HLyrIXN"]
-      [:retain 28]
-      [:insert
-       "xI4PD455QJ9nl691Iu4q13oLDjF3n65Os83woQyvYPzV622z46A4adQk0XLzFb71ZscS3G1ctrRi94xsJ9xx"]
-      [:insert "1ray10W1FFZ4lD17V05QvC9xL8Iey97E93nlESmvbz6Cv"]
-      [:insert "5gO6OaV39nWlb4hBt"]
-      [:retain 41]]
-     [[:retain 108] [:delete "26ZV30a40"] [:retain 478]]
-     [[:insert
-       "23i2cbi95x384N8L1d6nd6AYelU1mnicy4OYGkyWuQR9E2P5Dpho9b4s782gOwRw4bn5YH8g3D31hqRkc6Sy7YF6eyH2aAsnReIT4uEmK0KQNeG5RW17fasvO8ror3D05GLJRJgJm5Q2hY9eVtD2R42y2O13NK4U3xM2q18B5jNUd0"]
-      [:delete "2fuFKYd7rR"]
-      [:delete
-       "3jQ50tEJPWkvnbf40Gdx7ufDTN6c306s8oaG94GriHi7yzCGt83AskoT9B5"]
-      [:insert
-       "m1rL4rmTXIt98A20GE7D6o5Nb93768177ex5U56BXUfHaE4uH6V5dXA6R8u4R0s11J9l1CZS5j1w"]
-      [:retain 517]]
-     [[:retain 91]
-      [:insert
-       "Mc7088EfV8asjuvQ9OXwdS0B94G58bDt8gwihiRsRI9cjOO9ru5yw54344Y7y2gIc42Unp9DEwg3KIbc25xuw4nzJy44Vj60HbUkr9IE2Vf08yK5UG09IzXR44pHtNsU3LGq0wdL3jneE4m4pV4uQu"]
-      [:delete
-       "2aAsnReIT4uEmK0KQNeG5RW17fasvO8ror3D05GLJRJgJm5Q2hY9eVtD2R42y2O13NK4U3xM2q18B5jNUd0m1rL4rmTXIt98A20GE7D6o5Nb93768177ex5U56BXUfHaE4uH6V5dXA6R8u4R0s11J9l1CZS5j1"]
-      [:retain 76]
-      [:insert
-       "QE83D4PIHup8Eu1zIwp883PEU788wlVX3i4ri3S4Av29w5STY0Wo58q00i9H0H0tXx1x5FzF360CufOXn6lS60i4cyrbkPeOgjJwRDz8Dc"]
-      [:retain 54]
-      [:insert
-       "WziqIirQj557JoqNH7rcd99N2UnVur8638Sp91T3IMl08HfKORFO0E0oF85pE3WCZ0q9IT047Ygl9Ld1FFbtJl5gsPBHPne93599vEhs4Mn33QD3qAm7LPLX01KUw7BG96ytEoaH7guO5M34HrbQ5WQMpM0q8c1v94seAfVmE483buk9c"]
-      [:insert
-       "6sPys8i0K8cxGn2nkXldolDsC1oWcHuid25938Y8d0lRKF2Ja6dTR5YlAHQYRlsPF1x0E83ogM4t0e1mb"]
-      [:retain 388]]
-     [[:insert
-       "ggc8Jx8D86x7hf4os91T74Fk6UA3Cd1ZDENuZ6W61mz06Feuj4487r0ka4vz8iUoIzPP339Wbm2i2LIXL40"]
-      [:insert
-       "gHn717VkOW7EJqVUQZpBskid32C8kJdWG5h2Y76pR964Ymqc47tJ58xxRsTg5S1Fmicmwws7FEZVCViIXxllZK7X3664OL4MqtsqSRCr474"]
-      [:insert
-       "UsHgCXelOYS5AUeE4fK0lBo4Hhip8xqI3KQvw7FG63kGW06Ub5sm2nq166Cb2Q3waxIjgh1Ql6Nh7bzF44mNahd495C1AIBTnF9tBzE4n7PmV34AuJX5ZW"]
-      [:delete "23i2cbi95x384N8L1d"]
-      [:retain 1105]]
-     [[:retain 141]
-      [:delete
-       "Tg5S1Fmicmwws7FEZVCViIXxllZK7X3664OL4MqtsqSRCr474UsHgCXelOYS5AUeE4fK0lBo4H"]
-      [:delete "hip8xqI3KQvw7FG63kGW06Ub5sm2nq166Cb"]
-      [:retain 1163]]]]])
+    [["diO874d2ojcHX733ue6MzQRaTWXvU88MPs"
+      [[[:delete "diO874d2ojcHX73"] [:insert ""] [:retain 19]]]]])
+
 
   (let [[[text operations]] foo]
     (loop [text text
-           [op & rest :as operations] (take 1 operations)]
+           [op & rest :as operations] operations]
       (when (seq rest)
         (let [text' (play-naive text op)
               naive-final (reduce play-naive text' rest)
-              t (reduce play (Text/makeText text') rest)
+              t (reduce play (make-text text') rest)
               final (Text/text (Text/zipper t) (Text/length t))]
           (if (= naive-final final)
             [[text operations]]
@@ -246,6 +197,7 @@
         text' (Text/text (Text/zipper t') (Text/length t'))]
     {:success? (= should-be text')
      :before text
+     :should-be-vs-after [(count should-be) (count text')]
      :operations operations
      :after text'
      :should-be should-be})
@@ -443,23 +395,3 @@
 
   )
 
-
-(comment
-
-
-  (def editor-impl
-    (slurp (clojure.java.io/file "../../community//platform/platform-impl/src/com/intellij/openapi/editor/impl/EditorImpl.java")))
-
-  (def t
-    (Text/makeText editor-impl))
-
-  (Text/length t)
-
-  (-> (Text/zipper t)
-      (Text/scanToOffset 6084)
-      (Text/delete 80)
-      (Text/root)
-      (Text/length))
-
-
-  )

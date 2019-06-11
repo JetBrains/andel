@@ -61,7 +61,7 @@ public class Cursor {
                                  Rope.data(zipper).length());
     }
 
-    public static ImmutableCursor create(Rope.Tree<Text.TextMetrics> text, long offset){
+    public static ImmutableCursor create(Rope.Tree<Text.TextMetrics, String> text, long offset){
       if (offset < 0 && offset >= Text.length(text)) {
         throw new IllegalArgumentException("offset: " + offset + ", text length: " + Text.length(text));
       }
@@ -156,7 +156,7 @@ public class Cursor {
                                  Rope.data(zipper).length());
     }
 
-    public static TransientCursor create(Rope.Tree<Text.TextMetrics> text, long offset) {
+    public static TransientCursor create(Rope.Tree<Text.TextMetrics, String> text, long offset) {
       return create(Text.scanToOffset(Text.zipper(text), offset));
     }
 

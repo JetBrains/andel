@@ -292,23 +292,23 @@ public class Text {
   }
 
   @SuppressWarnings("unused")
-  public static Rope.Tree<TextMetrics> makeText(String s, Rope.ZipperOps<TextMetrics, String> ops) {
+  public static Rope.Tree<TextMetrics, String> makeText(String s, Rope.ZipperOps<TextMetrics, String> ops) {
     // TODO Optimize: instead of growing tree from the root, make bunch of leaves and build the tree bottom up
     Rope.Node<TextMetrics> root = Rope.growTree(new Rope.Node<>(Rope.singletonList(s), Rope.singletonList(ops.calculateMetrics(s))), ops);
-    return new Rope.Tree<>(root, ops.rf(root.metrics));
+    return new Rope.Tree<>(root, ops.rf(root.metrics), ops);
   }
 
   @SuppressWarnings("unused")
-  public static Rope.Tree<TextMetrics> makeText(String s){
+  public static Rope.Tree<TextMetrics, String> makeText(String s){
     return makeText(s, TEXT_OPS);
   }
 
-  public static Rope.Zipper<TextMetrics, String> zipper(Rope.Tree<TextMetrics> tree) {
-    return Rope.Zipper.zipper(tree, TEXT_OPS);
+  public static Rope.Zipper<TextMetrics, String> zipper(Rope.Tree<TextMetrics, String> tree) {
+    return Rope.Zipper.zipper(tree, tree.ops);
   }
 
   @SuppressWarnings("unused")
-  public static Rope.Tree<TextMetrics> root(Rope.Zipper<TextMetrics, ?> loc) {
+  public static Rope.Tree<TextMetrics, String> root(Rope.Zipper<TextMetrics, String> loc) {
     return Rope.root(loc);
   }
 
@@ -503,11 +503,11 @@ public class Text {
 
   public static class Sequence implements CharSequence {
 
-    Rope.Tree<TextMetrics> root;
+    Rope.Tree<TextMetrics, String> root;
     Rope.Zipper<TextMetrics, String> zipper;
     final int from, to; // in chars
 
-    Sequence(Rope.Tree<TextMetrics> root, int from, int to) {
+    Sequence(Rope.Tree<TextMetrics, String> root, int from, int to) {
       if (from < 0 || to > root.metrics.charsCount)
         throw new IllegalArgumentException("from " + from + ", to " + to + ", total " + root.metrics.charsCount);
 
@@ -519,7 +519,7 @@ public class Text {
     }
 
     @SuppressWarnings("unused")
-    public Sequence(Rope.Tree<TextMetrics> root) {
+    public Sequence(Rope.Tree<TextMetrics, String> root) {
       this(root, 0, (int)(root.metrics).charsCount);
     }
 
@@ -576,19 +576,19 @@ public class Text {
     }
   }
 
-  public static long length(Rope.Tree<TextMetrics> text) {
+  public static long length(Rope.Tree<TextMetrics, String> text) {
     return text.metrics.length;
   }
 
-  public static long linesCount(Rope.Tree<TextMetrics> text) {
+  public static long linesCount(Rope.Tree<TextMetrics, String> text) {
     return text.metrics.newlinesCounts + 1;
   }
 
-  public static long charsCount(Rope.Tree<TextMetrics> text) {
+  public static long charsCount(Rope.Tree<TextMetrics, String> text) {
     return text.metrics.charsCount;
   }
 
-  public static long maxLineLength(Rope.Tree<TextMetrics> text) {
+  public static long maxLineLength(Rope.Tree<TextMetrics, String> text) {
     return text.metrics.maxLineLength;
   }
 

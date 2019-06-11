@@ -7,12 +7,14 @@ import java.util.function.BiFunction;
 
 public class Rope {
 
-  public static class Tree<Metrics> {
-    public Tree(Node<Metrics> root, Metrics metrics){
+  public static class Tree<Metrics, Data> {
+    public Tree(Node<Metrics> root, Metrics metrics, ZipperOps<Metrics, Data> ops){
       this.root = root;
       this.metrics = metrics;
+      this.ops = ops;
     }
 
+    public final ZipperOps<Metrics, Data> ops;
     public final Node<Metrics> root;
     public final Metrics metrics;
   }
@@ -98,7 +100,7 @@ public class Rope {
       return zipper;
     }
 
-    public static <Metrics, Data> Zipper<Metrics, Data> zipper(Tree<Metrics> tree, ZipperOps<Metrics, Data> ops) {
+    public static <Metrics, Data> Zipper<Metrics, Data> zipper(Tree<Metrics, Data> tree, ZipperOps<Metrics, Data> ops) {
       Zipper<Metrics, Data> z = new Zipper<>();
       z.parent = null;
       z.ops = ops;
@@ -302,8 +304,8 @@ public class Rope {
               newChildren.add(mergedLeft);
               newMetrics.add(ops.rf(mergedLeft.metrics));
 
-              left = right;
-              leftMetrics = ops.rf(right.metrics);
+              left = right2;
+              leftMetrics = ops.rf(right2.metrics);
             }
             else {
               left = mergeChildren(new Node<>(join(left.children, right.children), join(left.metrics, right.metrics)), ops);
@@ -524,9 +526,9 @@ public class Rope {
     return null;
   }
 
-  public static <Metrics, Data> Tree<Metrics> root(Zipper<Metrics, Data> loc) {
+  public static <Metrics, Data> Tree<Metrics, Data> root(Zipper<Metrics, Data> loc) {
     Zipper<Metrics, Data> parent = up(loc);
-    return parent == null ? new Tree<>(node(loc), metrics(loc)) : root(parent);
+    return parent == null ? new Tree<>(node(loc), metrics(loc), loc.ops) : root(parent);
   }
 
 
