@@ -542,8 +542,8 @@ public class Intervals<T> {
       if (from < lastSeenFrom) {
         throw new IllegalArgumentException("batch is not sorted");
       }
-      if (from == to && !closedLeft && !closedRight) {
-        throw new IllegalArgumentException();
+      if (from == to && !(closedLeft && closedRight)) {
+        throw new IllegalArgumentException("Interval is empty");
       }
 
       lastSeenFrom = from;
