@@ -507,7 +507,7 @@ public class Text {
     Rope.Zipper<TextMetrics, String> zipper;
     final int from, to; // in chars
 
-    Sequence(Rope.Tree<TextMetrics, String> root, int from, int to) {
+    public Sequence(Rope.Tree<TextMetrics, String> root, int from, int to) {
       if (from < 0 || to > root.metrics.charsCount)
         throw new IllegalArgumentException("from " + from + ", to " + to + ", total " + root.metrics.charsCount);
 
@@ -574,6 +574,26 @@ public class Text {
       Rope.Zipper<TextMetrics, String> toLoc = scanToCharOffset(fromLoc, to);
       return text(fromLoc, (int)(offset(toLoc) - offset(fromLoc)));
     }
+
+    public static boolean contentEquals(Sequence one, CharSequence another) {
+      if (another instanceof Sequence){
+        Sequence s = (Sequence) another;
+        if (one.root == s.root && one.from == s.from && one.to == s.to){
+          return true;
+        }
+      }
+
+      int n = one.length();
+      if (n != another.length()) {
+        return false;
+      }
+      for (int i = 0; i < n; i++) {
+        if (one.charAt(i) != another.charAt(i)) {
+          return false;
+        }
+      }
+      return true;
+    }
   }
 
   public static long length(Rope.Tree<TextMetrics, String> text) {
@@ -591,5 +611,4 @@ public class Text {
   public static long maxLineLength(Rope.Tree<TextMetrics, String> text) {
     return text.metrics.maxLineLength;
   }
-
 }

@@ -24,6 +24,8 @@ public class Intervals<T> {
   public final IntMap<Long> parentsMap;
   private final long nextInnerId;
 
+  public static final long MAX_VALUE = Long.MAX_VALUE / 2 - 1;
+
   public Intervals(int maxChildren, Node openRoot, Node closedRoot, IntMap<Long> parentsMap, long nextId) {
     this.maxChildren = maxChildren;
     this.openRoot = openRoot;

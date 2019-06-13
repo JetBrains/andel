@@ -1,5 +1,5 @@
 (ns andel.cursor
-  (:refer-clojure :exclude [next transient persistent!])
+  (:refer-clojure :exclude [next transient persistent! char])
   (:require [andel.text :as text])
   (:import [andel Cursor Cursor$AbstractCursor Cursor$ImmutableCursor Cursor$TransientCursor]))
 

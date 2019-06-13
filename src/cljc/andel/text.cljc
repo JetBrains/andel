@@ -110,8 +110,11 @@
         start-loc (scan-to-line-start (zipper (root loc)) cur-line)]
     (- (geom-offset loc) (geom-offset start-loc))))
 
-(defn ^CharSequence text->char-seq [t]
-  (Text$Sequence. t))
+(defn ^CharSequence text->char-seq
+  ([t from to]
+   (Text$Sequence. t from to))
+  ([t]
+   (Text$Sequence. t)))
 
 (defn offset->char-offset ^long [text ^long offset]
   (-> (zipper text)

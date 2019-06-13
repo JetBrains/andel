@@ -2,6 +2,7 @@
   (:require [clojure.core.async :as a]
             [andel.utils :as utils]
             [andel.text :as text]
+            [andel.lexer :as lexer]
             [andel.intervals :as intervals]
             [clojure.spec.alpha :as s]
             [andel.tree :as tree])
@@ -45,10 +46,10 @@
 (defn caret->offset [{:keys [offset] :as caret}] offset)
 
 (defn insert-markers [state markers]
-  (update-in state [:editor :markup] intervals/add-markers markers))
+  (update-in state [:editor :markup] intervals/insert markers))
 
 (defn delete-markers [state marker-ids]
-  (update-in state [:editor :markup] intervals/gc marker-ids))
+  (update-in state [:editor :markup] intervals/remove marker-ids))
 
 (defn set-selection [state selection caret-offset]
   (-> state
@@ -62,9 +63,9 @@
         error-stripes (:error-stripes editor)
         line-markers (:line-markers editor)]
     (cond-> editor
-      (some? markup) (assoc :markup (intervals/type-in markup offset length))
-      (some? error-stripes) (assoc :error-stripes (intervals/type-in error-stripes offset length))
-      (some? line-markers) (assoc :line-markers (intervals/type-in line-markers offset length))
+      (some? markup) (assoc :markup (intervals/expand markup offset length))
+      (some? error-stripes) (assoc :error-stripes (intervals/expand error-stripes offset length))
+      (some? line-markers) (assoc :line-markers (intervals/expand line-markers offset length))
       (and (some? sel-from)     (<= offset sel-from)) (assoc-in [:selection 0] (+ sel-from length))
       (and (some? sel-to)       (<= offset sel-to)) (assoc-in [:selection 1] (+ sel-to length))
       (and (some? caret-offset) (<= offset caret-offset)) (assoc-in [:caret :offset] (+ caret-offset length)))))
@@ -76,9 +77,9 @@
         error-stripes (:error-stripes editor)
         line-markers (:line-markers editor)]
     (cond-> editor
-      (some? markup) (assoc :markup (intervals/delete-range markup offset length))
-      (some? error-stripes) (assoc :error-stripes (intervals/delete-range error-stripes offset length))
-      (some? line-markers) (assoc :line-markers (intervals/delete-range line-markers offset length))
+      (some? markup) (assoc :markup (intervals/collapse markup offset length))
+      (some? error-stripes) (assoc :error-stripes (intervals/collapse error-stripes offset length))
+      (some? line-markers) (assoc :line-markers (intervals/collapse line-markers offset length))
       (and (some? sel-from)     (<= offset sel-from)) (assoc-in [:selection 0] (max offset (- sel-from length)))
       (and (some? sel-to)       (<= offset sel-to)) (assoc-in [:selection 1] (max offset (- sel-to length)))
       (and (some? caret-offset) (<= offset caret-offset)) (assoc-in [:caret :offset] (max offset (- caret-offset length))))))
@@ -89,10 +90,10 @@
         (edit-at-offset offset #(text/insert % insertion))
         (update :document (fn [{:keys [text] :as document}]
                             (cond-> document (some? (:lexer document))
-                                    (update :lexer intervals/update-text text offset))))
-        (update-in [:document :markup] intervals/type-in offset length)
-        (update-in [:document :error-stripes] intervals/type-in offset length)
-        (update-in [:document :line-markers] intervals/type-in offset length)
+                                    (update :lexer lexer/update-text text offset))))
+        (update-in [:document :markup] intervals/expand offset length)
+        (update-in [:document :error-stripes] intervals/expand offset length)
+        (update-in [:document :line-markers] intervals/expand offset length)
         (cond->
           (some? (:editor state))
           (update :editor insert-at-editor {:offset offset :length length})
@@ -114,10 +115,10 @@
         (edit-at-offset offset #(text/delete % length))
         (update :document (fn [{:keys [text] :as document}]
                             (cond-> document (some? (:lexer document))
-                                    (update :lexer intervals/update-text text offset))))
-        (update-in [:document :markup] intervals/delete-range offset length)
-        (update-in [:document :error-stripes] intervals/delete-range offset length)
-        (update-in [:document :line-markers] intervals/delete-range offset length)
+                                    (update :lexer lexer/update-text text offset))))
+        (update-in [:document :markup] intervals/collapse offset length)
+        (update-in [:document :error-stripes] intervals/collapse offset length)
+        (update-in [:document :line-markers] intervals/collapse offset length)
         (cond->
           (some? (:editor state))
           (update :editor delete-at-editor {:offset offset :length length})
