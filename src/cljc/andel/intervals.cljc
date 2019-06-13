@@ -26,9 +26,9 @@
 (defn query
   (^Intervals$IntervalsIterator [itree]
    (query itree 0 Intervals/MAX_VALUE))
-  (^Intervals$IntervalsIterator [itree ^long from]
+  (^Intervals$IntervalsIterator [itree from]
    (query itree from Intervals/MAX_VALUE))
-  (^Intervals$IntervalsIterator [itree ^long from ^long to]
+  (^Intervals$IntervalsIterator [itree from to]
    (if itree
      (Intervals/query itree from to)
      empty-iterator)))
