@@ -542,7 +542,7 @@ public class Intervals<T> {
       if (from < lastSeenFrom) {
         throw new IllegalArgumentException("batch is not sorted");
       }
-      if (from == to && !(closedLeft && closedRight)) {
+      if (from == to && !((closedLeft && closedRight) || (!closedLeft && !closedRight))) {
         throw new IllegalArgumentException("Interval is empty");
       }
 
@@ -789,17 +789,6 @@ public class Intervals<T> {
       long start = node.starts.get(i);
       long end = node.ends.get(i);
       Object child = node.children.get(i);
-      //if (end - start == 1 && (end == offset || start == offset)) {
-      //  // special case to handle markers with zero length and (closedLeft or closedRight)
-      //  // examples:
-      //  // (1, 1] stored as (2, 3) and (offset*2)=2
-      //  // [1, 1) stored as (1, 2) and (offset*2)=2
-      //  Object c = child instanceof Node
-      //             ? expand((Node)child, offset - start, len)
-      //             : child;
-      //  result.add(id, start, end + len, c);
-      //}
-      //else
       if (start < offset && offset < end) {
         //....(interval)....
         //........o.........
@@ -850,19 +839,6 @@ public class Intervals<T> {
       long end = node.ends.get(i);
       Object child = node.children.get(i);
       long id = node.ids.get(i);
-      //if (end - start == 1 && (start + 1 == offset + len || end - 1 == offset)) {
-      //  // special case to distinguish markers of zero length closed on one side
-      //  // and save them from removing
-      //  // (1, 1] stored as (2, 3) delete (1, 2) which means (2, 4)
-      //  // [2, 2) stored as (3, 4) delete (1, 2) which means (2, 4)
-      //  // ==> will be removed without this case
-      //  if (offset < start){
-      //    result.add(id, start - len, end - len, child);
-      //  } else {
-      //    result.add(id, start, end, child);
-      //  }
-      //}
-      //else
       if (end <= offset) {
         // (interval)..............
         // .........[deletion]
@@ -937,24 +913,21 @@ public class Intervals<T> {
     Node copy = node.copy();
     for (Long vid : victims) {
       int vidx = copy.ids.indexOf(vid);
-      // victims list might contain duplicates
-      if (vidx >= 0) {
-        Object victim = copy.children.get(vidx);
-        if (victim instanceof Node) {
-          Node newNode = remove(ctx, ((Node)victim), vid, subtree);
-          long delta = normalize(newNode);
-          copy.children.set(vidx, newNode);
-          long start = copy.starts.get(vidx) + delta;
-          copy.starts.set(vidx, start);
-          copy.ends.set(vidx, max(newNode.ends) + start);
-        }
-        else {
-          copy.children.remove(vidx);
-          copy.starts.remove(vidx);
-          copy.ends.remove(vidx);
-          copy.ids.remove(vidx);
-          ctx.parentsMap = ctx.parentsMap.remove(vid);
-        }
+      Object victim = copy.children.get(vidx);
+      if (victim instanceof Node) {
+        Node newNode = remove(ctx, ((Node)victim), vid, subtree);
+        long delta = normalize(newNode);
+        copy.children.set(vidx, newNode);
+        long start = copy.starts.get(vidx) + delta;
+        copy.starts.set(vidx, start);
+        copy.ends.set(vidx, max(newNode.ends) + start);
+      }
+      else {
+        copy.children.remove(vidx);
+        copy.starts.remove(vidx);
+        copy.ends.remove(vidx);
+        copy.ids.remove(vidx);
+        ctx.parentsMap = ctx.parentsMap.remove(vid);
       }
     }
     return balanceChildren(ctx, copy);
