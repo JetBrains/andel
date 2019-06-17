@@ -1,7 +1,7 @@
 (ns andel.text
   (:refer-clojure :exclude [transient persistent!])
   (:import [andel Text Text$Sequence]
-           [andel Rope Rope$Zipper]
+           [andel Rope Rope$Zipper Rope$Tree]
            [java.lang CharSequence]))
 
 (defn codepoints-count ^long [^String s]
