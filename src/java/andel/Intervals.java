@@ -694,6 +694,7 @@ public class Intervals<T> {
       z = next == null ? null : findNextIntersection(next, queryFrom, queryTo);
       return z != null;
     }
+
   }
 
   static class BackwardIterator<T> extends AbstractIterator<T> {
@@ -897,7 +898,7 @@ public class Intervals<T> {
   public static final Comparator<IntervalsIterator> BACKWARD_COMPARATOR = FORWARD_COMPARATOR.reversed();
 
   public static <T> IntervalsIterator<T> query(Intervals<T> tree, long from, long to) {
-    return new MergingIterator<T>(
+    return new MergingIterator<>(
       new ForwardIterator<>(Zipper.create(tree.openRoot, null, true), from * 2 - 1, to * 2),
       new ForwardIterator<>(Zipper.create(tree.closedRoot, null, false), from * 2 - 1, to * 2),
       FORWARD_COMPARATOR);
@@ -905,7 +906,7 @@ public class Intervals<T> {
 
   public static <T> IntervalsIterator<T> queryReverse(Intervals<T> tree, long from, long to) {
     assert from < to;
-    return new MergingIterator<T>(
+    return new MergingIterator<>(
       new BackwardIterator<>(Zipper.create(tree.openRoot, null, true), from * 2 - 1, to * 2),
       new BackwardIterator<>(Zipper.create(tree.closedRoot, null, false), from * 2 - 1, to * 2),
       BACKWARD_COMPARATOR);
@@ -1159,7 +1160,7 @@ public class Intervals<T> {
             throw new NoSuchElementException("id:" + cid);
           }
 
-          HashSet<Long> sibs = subtree.getOrDefault(pid, new HashSet<Long>());
+          HashSet<Long> sibs = subtree.getOrDefault(pid, new HashSet<>());
           sibs.add(cid);
           subtree.put(pid, sibs);
 

@@ -97,4 +97,4 @@
                            :attrs new-data)]))))
 
 (defonce empty-tree
-  (Intervals. 32))
+  (Intervals/empty 32))

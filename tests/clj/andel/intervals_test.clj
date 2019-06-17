@@ -56,7 +56,7 @@
 (defn ->interval [{:keys [id from to data greedy-left? greedy-right?]}]
   (Intervals$Interval. id from to (boolean greedy-left?) (boolean greedy-right?) data))
 
-(def empty-tree (Intervals. 4))
+(def empty-tree (Intervals/empty 4))
 
 (defn naive-type-in [intervals [offset length]]
   (if (< 0 length)

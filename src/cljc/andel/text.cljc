@@ -52,7 +52,7 @@
 (defn text-length ^long [t]
   (Text/length t))
 
-(defn lines-count [t]
+(defn lines-count ^long [t]
   (Text/linesCount t))
 
 (defn distance-to-EOL ^long [loc]
@@ -63,7 +63,7 @@
                 (offset loc))))
       (- (text-length t) (offset loc)))))
 
-(defn text-geom-length ^long [t]
+(defn text-geom-length ^long [^Rope$Tree t]
   (.-geometricLength (.-metrics t)))
 
 (defn chars-count [t]
