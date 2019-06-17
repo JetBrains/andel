@@ -133,6 +133,7 @@ public class Rope {
     if (loc.oacc != null) {
       return loc.oacc;
     }
+    //todo assert acc is not null
     if (loc.acc != null) {
       return loc.acc;
     }
@@ -152,6 +153,7 @@ public class Rope {
   }
 
   public static ArrayList<Object> getChildren(Object node) {
+    //todo get rid of it
     return ((Node)node).children;
   }
 
@@ -170,7 +172,7 @@ public class Rope {
   static <Metrics, Data> boolean splitNeeded(ArrayList<Object> children, ZipperOps<Metrics, Data> ops) {
     if (children.get(0) instanceof Node) {
       for (Object child : children) {
-        if (getChildren(child).size() > ops.splitThreshold()) {
+        if (getChildren((Node)child).size() > ops.splitThreshold()) {
           return true;
         }
       }
@@ -445,7 +447,6 @@ public class Rope {
         return result;
       }
       else {
-        // TODO can reuse metrics if children are balanced
         Node<Metrics> balanced = balanceChildren(new Node<>(loc.siblings, loc.metrics), loc.ops);
         return replace(loc.parent, balanced, loc.ops.rf(balanced.metrics));
       }
@@ -552,22 +553,8 @@ public class Rope {
     assert hasNext(zipper);
     if (isBranch(zipper)) {
       return downLeft(zipper);
-    }
-
-    if (isRightmost(zipper)) {
-      throw new NoSuchElementException();
-    }
-
-    boolean isTransient = zipper.isTransient;
-    Zipper<Metrics, Data> p = toTransient(zipper);
-    while (true) {
-      Zipper<Metrics, Data> r = right(p);
-      if (r != null) {
-        return isTransient ? r : toPersistent(r);
-      }
-      else {
-        p = up(p);
-      }
+    } else {
+      return skip(zipper);
     }
   }
 

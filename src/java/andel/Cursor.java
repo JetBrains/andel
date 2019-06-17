@@ -153,14 +153,14 @@ public class Cursor {
 
       long leafCharOffset = Text.nodeCharOffset(zipper);
       long innerCharOffset = Text.charOffset(zipper) - leafCharOffset;
-      return new TransientCursor(zipper,
+      return new TransientCursor(Rope.toTransient(zipper),
                                  leafCharOffset,
                                  innerCharOffset,
                                  Text.offset(zipper),
                                  Rope.data(zipper).length());
     }
 
-    public static TransientCursor create(Rope.Tree<Text.TextMetrics, String> text, long offset) {
+    public static TransientCursor createAtOffset(Rope.Tree<Text.TextMetrics, String> text, long offset) {
       return create(Text.scanToOffset(Text.zipper(text), offset));
     }
 
@@ -219,7 +219,7 @@ public class Cursor {
 
   public static TransientCursor toTransient(ImmutableCursor cursor) {
     return new TransientCursor(
-      cursor.zipper,
+      Rope.toTransient(cursor.zipper),
       cursor.nodeCharOffset,
       cursor.innerCharOffset,
       cursor.offset,
@@ -229,7 +229,7 @@ public class Cursor {
 
   public static ImmutableCursor toPersistent(TransientCursor cursor) {
     return new ImmutableCursor(
-      cursor.zipper,
+      Rope.toPersistent(cursor.zipper),
       cursor.nodeCharOffset,
       cursor.innerCharOffset,
       cursor.offset,

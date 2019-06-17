@@ -42,7 +42,7 @@
 (defn merge-iterators
   (^Intervals$IntervalsIterator [it1 it2]
    (cond
-     (and (something? it1) (something? it2)) (Intervals$MergingIterator. it1 it2)
+     (and (something? it1) (something? it2)) (Intervals$MergingIterator. it1 it2 Intervals/FORWARD_COMPARATOR)
      (something? it1) it1
      (something? it2) it2
      :else nil))
@@ -52,46 +52,49 @@
 (defmacro >Interval [& {:keys [id from to greedy-left? greedy-right? attrs]}]
   `(andel.Intervals$Interval. ~id ~from ~to ~greedy-left? ~greedy-right? ~attrs))
 
-(defn- find-marker-loc [itree id]
-  #_(let [loc (tree/scan (zipper itree) (by-id id))]
-    (when-not (or (tree/end? loc)
-                  (tree/node? loc))
-      loc)))
-
 (defn find-marker-by-id [itree id]
-  #_(some-> (find-marker-loc itree id)
-          loc->Marker))
+  (Intervals/getById itree id))
+
+(defn- find-marker-linear [pred itree from-offset direction]
+  (let [it (case direction
+             :forward (query itree from-offset)
+             :backward (Intervals/queryReverse itree 0 from-offset))
+        ^clojure.lang.IFn$LLLOO pred (if (instance? clojure.lang.IFn$LLLOO pred)
+                                       pred
+                                       (fn [^long id ^long from ^long to data] (pred id from to data)))]
+    (loop []
+      (if (.next it)
+        (if (.invokePrim pred
+                         (.id it)
+                         (.from it)
+                         (.to it)
+                         (.data it))
+          (>Interval :id (.id it)
+                     :from (.from it)
+                     :to (.to it)
+                     :greedy-left? (.closedLeft it)
+                     :greedy-right? (.closedRight it)
+                     :attrs (.data it))
+          (recur))
+        nil))))
 
 (defn find-marker-linear-forward [pred itree from-offset]
-  #_(loop [loc (tree/scan (zipper itree)
-                        (by-offset from-offset))]
-    (when-not (tree/end? loc)
-      (assert (tree/leaf? (andel.tree/node loc)))
-      (let [marker (loc->Marker loc)]
-        (if (pred marker)
-          marker
-          (recur (tree/next-leaf loc)))))))
+  (find-marker-linear pred itree from-offset :forward))
 
 (defn find-marker-linear-backward [pred itree from-offset]
-  #_(loop [loc (tree/prev-leaf
-              (tree/scan (zipper itree)
-                         (by-offset from-offset)))]
-    (when-not (tree/end? loc)
-      (assert (tree/leaf? (andel.tree/node loc)))
-      (let [marker (loc->Marker loc)]
-        (if (pred marker)
-          ;; Because of prev-leaf acc might be broken which can cause
-          ;; wrong from-to values in marker returned by loc->Marker.
-          ;; Getting a proper marker required additional scan from root.
-          (find-marker-by-id itree (.-id marker))
-          (recur (tree/prev-leaf loc)))))))
+  (find-marker-linear pred itree from-offset :backward))
 
 (defn update-marker-attrs [itree id f]
-  #_(or (some-> itree
-              (find-marker-loc id)
-              (update-leaf #(update % :attrs f))
-              tree/root)
-      itree))
+  (let [interval (Intervals/getById itree id)
+        new-data (f (.-data interval))]
+    (-> itree
+        (remove #{id})
+        (insert [(>Interval :id id
+                           :from (.-from interval)
+                           :to (.-to interval)
+                           :greedy-left? (.-closedLeft interval)
+                           :greedy-right? (.-closedRight interval)
+                           :attrs new-data)]))))
 
 (defonce empty-tree
   (Intervals. 32))
