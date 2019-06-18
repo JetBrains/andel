@@ -6,10 +6,11 @@
   (+ height spacing))
 
 (defn pixels->line-col [[^double x ^double y] text metrics]
-  (let [line (int (Math/floor (/ y (line-height metrics))))
+  (let [line (max 0 (min (int (Math/floor (/ y (line-height metrics))))
+                         (dec (text/lines-count text))))
         line-zipper (-> (text/zipper text)
                         (text/scan-to-line-start line))
-        col-zipper (text/skip-columns line-zipper (int (Math/round (/ x (:width metrics)))))]
+        col-zipper (text/skip-columns line-zipper (int (max 0 (Math/round (/ x (:width metrics))))))]
     {:line line
      :col (- (text/offset col-zipper) (text/offset line-zipper))}))
 
@@ -43,40 +44,6 @@
   (let [from (line->offset line text)
         length (line-length line text)]
     [from (+ from length)]))
-
-(comment
-
-  (.length "
-aaaaaaaaaaaaaaaaaaaaaaaddddddddddfaaaaaaaa
-  ((((((((((((((((()))))))))))))))))")
-
-  (def selection (:onair.editor/selection (:onair.editor/editor (onair.db/entity db editor-view-id))))
-
-  (def original-tree (:onair.editor/text-tree (:onair.editor/document (:onair.editor/editor (onair.db/entity db editor-view-id)))))
-
-  (-> (text/zipper original-tree)
-      (text/scan-to-offset (first selection))
-      (text/delete 80)
-      (text/root))
-
-
-  (def offset offset)
-  (def text text)
-
-  (text/as-string text)
-  (text/text-length text)
-
-  (def db (onair.kernel/db (onair.application/local-kernel)))
-  (def editor-view-id (first (onair.tags/by-tag db :onair.editor/editor-view)))
-
-  (text/as-string )
-
-  (into {} (onair.db/entity db editor-view-id))
-
-
-  (text/scan-to-offset)
-
-  )
 
 (defn offset->line ^long [offset text]
   (-> (text/zipper text)
