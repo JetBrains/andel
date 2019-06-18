@@ -71,14 +71,16 @@
                            (restrict-to-text-length text))))
 
 (defn translate-caret-verticaly [{v-col :v-col :as caret} text delta-line]
-  (let [caret-offset (core/caret->offset caret)
-        {:keys [line col]} (utils/offset->line-col caret-offset text)
-        to-line (+ line delta-line)
-        line-len (utils/line-length to-line text)
-        new-v-col (if (some? v-col) (max v-col col) col)
-        new-col (min line-len new-v-col)]
-    {:offset (utils/line-col->offset {:line to-line :col new-col} text)
-     :v-col new-v-col}))
+  (let [{:keys [line col]} (utils/offset->line-col (core/caret->offset caret) text)
+        to-line (+ line delta-line)]
+    (if (and (<= 0 to-line )
+             (< to-line (text/lines-count text)))
+      (let [line-len (utils/line-length to-line text)
+            new-v-col (if (some? v-col) (max v-col col) col)
+            new-col (min line-len new-v-col)]
+        {:offset (utils/line-col->offset {:line to-line :col new-col} text)
+         :v-col new-v-col})
+      caret)))
 
 (def tab-or-space? #{(int \space) (int \tab)})
 (def whitespace? (into tab-or-space? #{(int \newline)}))
