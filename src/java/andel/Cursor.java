@@ -6,7 +6,7 @@ public class Cursor {
     return Rope.data(zipper);
   }
 
-  static abstract class AbstractCursor {
+  public static abstract class AbstractCursor {
     public Rope.Zipper<Text.TextMetrics, String> zipper;
     public long nodeCharOffset;
     public long innerCharOffset;
