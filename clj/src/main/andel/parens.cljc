@@ -1,6 +1,5 @@
 (ns andel.parens
-  (:require [clojure.data.int-map :as i]
-            [andel.text :as text]
+  (:require [andel.text :as text]
             [andel.core :as core]
             [andel.cursor :as cursor]
             [andel.intervals :as intervals]))

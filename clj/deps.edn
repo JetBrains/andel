@@ -1,0 +1,10 @@
+{:deps {com.jetbrains.andel/andel.core {:mvn/version "0.1-SNAPSHOT"}}
+ :aliases {:dev {:jvm-opts ["-Djdk.attach.allowAttachSelf"
+                            "-XX:+UnlockDiagnosticVMOptions"
+                            "-XX:+DebugNonSafepoints"
+                            "-XX:NativeMemoryTracking=summary"
+                            "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=1049"]
+                 :extra-paths ["src/test"]
+                 :extra-deps {com.clojure-goes-fast/clj-async-profiler {:mvn/version "0.3.1"}
+                              nrepl/nrepl {:mvn/version "0.5.3"}}}}
+ :paths ["src/main"]}
