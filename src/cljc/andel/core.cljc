@@ -4,8 +4,7 @@
             [andel.text :as text]
             [andel.lexer :as lexer]
             [andel.intervals :as intervals]
-            [clojure.spec.alpha :as s]
-            [andel.tree :as tree])
+            [clojure.spec.alpha :as s])
   (:import [andel Rope$Tree]))
 
 (s/def :andel/tree #(instance? Rope$Tree %))
