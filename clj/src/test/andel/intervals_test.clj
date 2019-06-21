@@ -237,6 +237,11 @@
               ;; when reconciling specific range you should start iteration from (Intervals$Zipper/nextIntersection)
               ;; if there is no intersection just insert all new intervals from the root
               ;; each time after calling next you should check if next marker is beyond given range => zipper is off limit
+
+
+              from 0
+              to Long/MAX_VALUE
+
               z (Intervals$Zipper/create (.-openRoot tree) editing-context true)
               has-next? (Intervals$Zipper/hasNext z)
               new-root (loop [z (if has-next? (Intervals$Zipper/next z) z)

@@ -7,7 +7,7 @@
 
 	<!-- parent pom -->
     <groupId>com.jetbrains.andel</groupId>
-    <artifactId>andel.parent</artifactId>
+    <artifactId>andel</artifactId>
     <packaging>pom</packaging>
     <version>1.0</version>
 
