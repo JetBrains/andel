@@ -36,6 +36,8 @@
    (def parse-res (.parse parser jsitter-text nil)))
 
   (def tree (.getTree parse-res))
+
+
   (def root (.zipper tree))
   (require 'clojure.pprint)
   (clojure.pprint/pprint (s-expr root))
@@ -130,9 +132,17 @@
                           (recur text-z syntax-z intervals-z'' (<= to-offset (Intervals$Zipper/from intervals-z''))))
                         (recur text-z syntax-z intervals-z' true))))))))
 
+
   (time
    (def intervals-tree (highlight-syntax (andel.Intervals/empty 32) tree text 0 (.getByteSize tree) (fn [^jsitter.api.Zipper z] (.getNodeType z)))))
 
+  (time
+   (def intervals-tree (andel.SyntaxHighlighting/highlightSyntax (andel.Intervals/empty 32)
+                                                                 tree
+                                                                 text
+                                                                 0 (.getByteSize tree)
+                                                                 (reify andel.SyntaxHighlighting$SyntaxHighlighter
+                                                                        (highlight [_ zip] (.getNodeType zip))))))
 
   (defn np [node]
     (if (instance? andel.Intervals$Node node)
@@ -186,19 +196,27 @@
   (def tree' (.getTree parse-res'))
 
 
-  (def intervals-tree' (highlight-syntax (-> intervals-tree
-                                             (Intervals/expand 23 3)
-                                             (Intervals/collapse 26 2)) tree' text' (.getFirst (first changed-ranges)) (.getSecond (first changed-ranges)) (fn [^jsitter.api.Zipper z] (.getNodeType z))))
 
-  (def fresh-intervals-tree' (highlight-syntax (andel.Intervals/empty 32) tree' text' 0 (.getByteSize tree') (fn [^jsitter.api.Zipper z] (.getNodeType z))))
+  (def intervals-tree' (andel.SyntaxHighlighting/highlightSyntax (-> intervals-tree
+                                             (Intervals/expand 23 3)
+                                             (Intervals/collapse 26 2))
+                                            tree'
+                                            text'
+                                           (.getFirst (first changed-ranges)) (.getSecond (first changed-ranges))
+                                           (reify andel.SyntaxHighlighting$SyntaxHighlighter
+                                                  (highlight [_ zip] (.getNodeType zip)))))
+
+  (time
+  (def fresh-intervals-tree' (highlight-syntax (andel.Intervals/empty 32) tree' text' 0 (.getByteSize tree') (fn [^jsitter.api.Zipper z] (.getNodeType z)))))
 
   (= (tp intervals-tree')
      (tp fresh-intervals-tree'))
 
   (clojure.pprint/pprint (s-expr (.zipper tree)))
   (clojure.pprint/pprint (s-expr (.zipper tree')))
-
+  (require 'clojure.pprint)
   (require 'clojure.data)
+  *e
   (clojure.pprint/pprint (tp intervals-tree'))
   (clojure.pprint/pprint (tp fresh-intervals-tree'))
   (clojure.pprint/pprint (tp intervals-tree))

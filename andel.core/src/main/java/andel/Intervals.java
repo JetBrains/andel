@@ -351,6 +351,10 @@ public class Intervals<T> {
       return i;
     }
 
+    public static <T> Zipper insert (Zipper z, long from, long to, boolean closedLeft, boolean closedRight, T data){
+      return insert(z, --z.editingContext.nextId, from, to, closedLeft, closedRight, data);
+    }
+
     public static <T> Zipper insert(Zipper z, long id, long from, long to, boolean closedLeft, boolean closedRight, T data) {
       from = from * 2 - (closedLeft ? 1 : 0);
       to = to * 2 + (closedRight ? 1 : 0);
