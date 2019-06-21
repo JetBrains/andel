@@ -466,14 +466,26 @@ public class Text {
   }
 
   public static String text(Rope.Zipper<TextMetrics, String> loc, int length) {
+    return reduceText(loc, length, new StringBuilder(), SB_REDUCER).toString();
+  }
+
+  public interface TextReducer<Acc> {
+    Acc rf(Acc acc, String leaf, int from, int to);
+  }
+
+  public static final TextReducer<StringBuilder> SB_REDUCER = (stringBuilder, leaf, from, to) -> {
+    stringBuilder.append(leaf, from, to);
+    return stringBuilder;
+  };
+
+  public static <Acc> Acc reduceText(Rope.Zipper<TextMetrics, String> loc, int length, Acc init, TextReducer<Acc> rf) {
     if (loc == null) {
       throw new IllegalArgumentException();
     }
     if (length == 0) {
-      return "";
+      return init;
     }
-
-    StringBuilder sb = new StringBuilder();
+    Acc acc = init;
     while (true) {
       assert loc != null;
       if (Rope.isBranch(loc)) {
@@ -487,15 +499,13 @@ public class Text {
         int end = (int)Math.min(Rope.metrics(loc).length, start + length);
         int charsStart = chunk.offsetByCodePoints(0, start);
         int charsEnd = chunk.offsetByCodePoints(0, end);
-
-        // TODO check if sb.append(string) is faster
-        sb.append(chunk, charsStart, charsEnd);
+        acc = rf.rf(acc, chunk, charsStart, charsEnd);
         length -= (end - start);
         if (length > 0) {
           loc = Rope.next(loc);
         }
         else {
-          return sb.toString();
+          return acc;
         }
       }
     }
@@ -581,6 +591,7 @@ public class Text {
         if (one.root == s.root && one.from == s.from && one.to == s.to){
           return true;
         }
+        //todo fastpath check if leafs are identical
       }
 
       int n = one.length();
