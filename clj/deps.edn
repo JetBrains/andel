@@ -1,4 +1,5 @@
-{:deps {com.jetbrains.andel/andel.core {:mvn/version "0.1-SNAPSHOT"}}
+{:deps {com.jetbrains.andel/andel.core {:mvn/version "0.1-SNAPSHOT"}
+        com.jetbrains.andel/andel.jsitter {:mvn/version "0.1-SNAPSHOT"}}
  :aliases {:dev {:jvm-opts ["-Djdk.attach.allowAttachSelf"
                             "-XX:+UnlockDiagnosticVMOptions"
                             "-XX:+DebugNonSafepoints"
