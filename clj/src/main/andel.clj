@@ -1,6 +1,5 @@
 (ns andel
-  (:require [andel.array-list]
-            [andel.controller]
+  (:require [andel.controller]
             [andel.core]
             [andel.cursor]
             [andel.intervals]

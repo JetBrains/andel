@@ -1,19 +1,18 @@
 (ns andel.cursor
   (:refer-clojure :exclude [next transient persistent! char])
-  (:require [andel.text :as text])
-  (:import [andel Cursor Cursor$AbstractCursor Cursor$ImmutableCursor Cursor$TransientCursor]))
+  (:import [andel Cursor Cursor$PersistentCursor Cursor$TransientCursor]))
 
 (defn char ^long [cursor]
-  (.getChar ^Cursor$AbstractCursor cursor))
+  (Cursor/codepoint cursor))
 
 (defn offset ^long [cursor]
-  (.getOffset ^Cursor$AbstractCursor cursor))
+  (Cursor/offset cursor))
 
 (defn char-offset ^long [cursor]
-  (.getCharOffset ^Cursor$AbstractCursor cursor))
+  (Cursor/charOffset cursor))
 
 (defn cursor [text-tree ^long offset]
-  (Cursor$ImmutableCursor/create text-tree offset))
+  (Cursor$PersistentCursor/createAtOffset text-tree offset))
 
 (defn next [cursor]
   (Cursor/next cursor))
@@ -62,6 +61,7 @@
   (Math/abs ^long (- (offset to) (offset from))))
 
 (defn count-matching ^long [cursor pred direction]
-  (distance cursor (first (case direction
+  (let [last-matching (first (case direction
                             :backward (backward-while cursor pred)
-                            :forward (forward-while cursor pred)))))
+                            :forward (forward-while cursor pred)))]
+    (distance cursor last-matching)))

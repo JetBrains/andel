@@ -88,21 +88,6 @@
 (defn find-opening-paren [text lexer-paren? offset]
   (find-unbalanced-paren text lexer-paren? offset closing? opening? #(cursor/prev! %)))
 
-(comment
-
-  (def cursor (cursor/cursor text offset))
-
-(def z (let [m (.getField (type cursor) "zipper")]
-  (.setAccessible m true)
-  (.get m cursor)))
-
-  (andel.Rope/hasNext z)
-
-  offset
-  (.-innerCharOffset cursor)
-
-  )
-
 (defn find-parens-pair [text lexer-paren? offset]
   (def text text)
   (def offset offset)
