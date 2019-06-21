@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiFunction;
 
-
+@SuppressWarnings({"WeakerAccess", "unused"})
 public class Text {
 
   public final static class TextMetrics {
@@ -198,27 +198,26 @@ public class Text {
       return leafData1.concat(leafData2);
     }
 
-    private static int splitString(String s, int charFrom, ArrayList<String> result, int from, int to, int thresh) {
+    private static int splitString(String s, int charFrom, ArrayList<String> result, int from, int to, int thresh, boolean fastPath) {
       int length = to - from;
       if (length <= thresh) {
-        int charTo = s.offsetByCodePoints(charFrom, length);
+        int charTo = fastPath ? to : s.offsetByCodePoints(charFrom, length);
         result.add(s.substring(charFrom, charTo));
         return charTo;
       }
       else {
         int halfLength = length / 2;
-        int halfCharOffset = splitString(s, charFrom, result, from, from + halfLength, thresh);
-        return splitString(s, halfCharOffset, result, from + halfLength, to, thresh);
+        int halfCharOffset = splitString(s, charFrom, result, from, from + halfLength, thresh, fastPath);
+        return splitString(s, halfCharOffset, result, from + halfLength, to, thresh, fastPath);
       }
     }
 
     @Override
     public List<String> splitLeaf(String leafData) {
       int codePointsLength = leafData.codePointCount(0, leafData.length());
-      // TODO fastpath if codepointsLength == string.length
       assert leafSplitThresh < codePointsLength;
       ArrayList<String> result = new ArrayList<>();
-      splitString(leafData, 0, result, 0, codePointsLength, leafSplitThresh);
+      splitString(leafData, 0, result, 0, codePointsLength, leafSplitThresh, codePointsLength == leafData.length());
       return result;
     }
 
@@ -291,14 +290,12 @@ public class Text {
     return Rope.currentAcc(zipper).newlinesCounts;
   }
 
-  @SuppressWarnings("unused")
   public static Rope.Tree<TextMetrics, String> makeText(String s, Rope.ZipperOps<TextMetrics, String> ops) {
     // TODO Optimize: instead of growing tree from the root, make bunch of leaves and build the tree bottom up
     Rope.Node<TextMetrics> root = Rope.growTree(new Rope.Node<>(Rope.singletonList(s), Rope.singletonList(ops.calculateMetrics(s))), ops);
     return new Rope.Tree<>(root, ops.rf(root.metrics), ops);
   }
 
-  @SuppressWarnings("unused")
   public static Rope.Tree<TextMetrics, String> makeText(String s){
     return makeText(s, TEXT_OPS);
   }
@@ -307,7 +304,6 @@ public class Text {
     return Rope.Zipper.zipper(tree, tree.ops);
   }
 
-  @SuppressWarnings("unused")
   public static Rope.Tree<TextMetrics, String> root(Rope.Zipper<TextMetrics, String> loc) {
     return Rope.root(loc);
   }
@@ -382,7 +378,6 @@ public class Text {
     return scanToOffset(loc, offset(loc) + l);
   }
 
-  @SuppressWarnings("unused")
   public static Rope.Zipper<TextMetrics, String> insert(Rope.Zipper<TextMetrics, String> loc, String s) {
     if (s.isEmpty()) {
       return loc;
@@ -423,7 +418,6 @@ public class Text {
     }
   }
 
-  @SuppressWarnings("unused")
   public static Rope.Zipper<TextMetrics, String> delete(Rope.Zipper<TextMetrics, String> loc, int l) {
 
     while (l > 0) {
@@ -505,15 +499,15 @@ public class Text {
 
     Rope.Tree<TextMetrics, String> root;
     Rope.Zipper<TextMetrics, String> zipper;
-    final int from, to; // in chars
+    final int fromChar, toChar; // in chars
 
     public Sequence(Rope.Tree<TextMetrics, String> root, int from, int to) {
       if (from < 0 || to > root.metrics.charsCount)
         throw new IllegalArgumentException("from " + from + ", to " + to + ", total " + root.metrics.charsCount);
 
       this.root = root;
-      this.from = from;
-      this.to = to;
+      this.fromChar = from;
+      this.toChar = to;
       Rope.Zipper<TextMetrics, String> z = Rope.toTransient(zipper(root));
       this.zipper = Rope.scan(z, byCharOffsetExclusive(from));
     }
@@ -525,15 +519,15 @@ public class Text {
 
     @Override
     public int length() {
-      return to - from;
+      return toChar - fromChar;
     }
 
     @Override
     public char charAt(int index) {
-      if (index > to - from || index < 0)
-        throw new IndexOutOfBoundsException("index:" + index + ", from:" + from + ", to:" + to);
+      if (index > toChar - fromChar || index < 0)
+        throw new IndexOutOfBoundsException("index:" + index + ", from:" + fromChar + ", to:" + toChar);
 
-      int absoluteCharOffset = from + index;
+      int absoluteCharOffset = fromChar + index;
       int nodeCharOffset = (int)nodeCharOffset(zipper);
       String currentChunk = Rope.data(zipper);
       
@@ -559,28 +553,30 @@ public class Text {
 
     @Override
     public CharSequence subSequence(int start, int end) {
-      int length = to - from;
+      int length = toChar - fromChar;
       if (start > length || end > length)
         throw new IndexOutOfBoundsException("start " + start + ", end " + end + ", length " + length);
       if (start > end)
         throw new IllegalArgumentException("start " + start + " > end " + end);
 
-      return new Sequence(root, from + start, from + end);
+      return new Sequence(root, fromChar + start, fromChar + end);
     }
 
     @Override
     public String toString() {
-      Rope.Zipper<TextMetrics, String> fromLoc = scanToCharOffset(zipper(root), from);
-      Rope.Zipper<TextMetrics, String> toLoc = scanToCharOffset(fromLoc, to);
+      Rope.Zipper<TextMetrics, String> fromLoc = scanToCharOffset(zipper(root), fromChar);
+      Rope.Zipper<TextMetrics, String> toLoc = scanToCharOffset(fromLoc, toChar);
       return text(fromLoc, (int)(offset(toLoc) - offset(fromLoc)));
     }
 
     public static boolean contentEquals(Sequence one, CharSequence another) {
       if (another instanceof Sequence){
         Sequence s = (Sequence) another;
-        if (one.root == s.root && one.from == s.from && one.to == s.to){
+        if (one.root == s.root && one.fromChar == s.fromChar && one.toChar == s.toChar){
           return true;
         }
+
+        // TODO fast path : check if leafs are identical
       }
 
       int n = one.length();

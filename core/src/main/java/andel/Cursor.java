@@ -1,21 +1,34 @@
 package andel;
-@SuppressWarnings("unused")
+
+/*
+ * Iterate through unicode code points in any direction
+ * `next` and `prev` will return null after reaching the end of a text tree
+ * */
+@SuppressWarnings({"WeakerAccess", "unused"})
 public class Cursor {
 
-  static String leafText(Rope.Zipper<Text.TextMetrics, String> zipper) {
-    return Rope.data(zipper);
+  public static int codepoint(AbstractCursor cursor) {
+    return Rope.data(cursor.zipper).codePointAt(cursor.innerCharOffset);
   }
 
-  public static abstract class AbstractCursor {
-    public Rope.Zipper<Text.TextMetrics, String> zipper;
-    public long nodeCharOffset;
-    public long innerCharOffset;
-    public long offset;
-    public long leafCharLength;
+  public static long offset(AbstractCursor cursor) {
+    return cursor.offset;
+  }
+
+  public static long charOffset(AbstractCursor cursor) {
+    return cursor.nodeCharOffset + cursor.innerCharOffset;
+  }
+
+  static abstract class AbstractCursor {
+    Rope.Zipper<Text.TextMetrics, String> zipper;
+    long nodeCharOffset;
+    int innerCharOffset;
+    long offset;
+    long leafCharLength;
 
     AbstractCursor(Rope.Zipper<Text.TextMetrics, String> zipper,
                    long nodeCharOffset,
-                   long innerCharOffset,
+                   int innerCharOffset,
                    long offset,
                    long leafCharLength) {
       this.zipper = zipper;
@@ -24,44 +37,33 @@ public class Cursor {
       this.offset = offset;
       this.leafCharLength = leafCharLength;
     }
-
-    public int getChar() {
-      return leafText(zipper).codePointAt((int)innerCharOffset);
-    }
-
-    public long getOffset() {
-      return offset;
-    }
-
-    public long getCharOffset() {
-      return nodeCharOffset + innerCharOffset;
-    }
   }
 
-  public static class ImmutableCursor extends AbstractCursor {
+  public static class PersistentCursor extends AbstractCursor {
 
-    ImmutableCursor(Rope.Zipper<Text.TextMetrics, String> zipper,
-                    long nodeCharOffset,
-                    long innerCharOffset,
-                    long offset,
-                    long leafCharLength) {
+    PersistentCursor(Rope.Zipper<Text.TextMetrics, String> zipper,
+                     long nodeCharOffset,
+                     int innerCharOffset,
+                     long offset,
+                     long leafCharLength) {
       super(zipper, nodeCharOffset, innerCharOffset, offset, leafCharLength);
     }
 
-    public static ImmutableCursor create(Rope.Zipper<Text.TextMetrics, String> zipper){
-      if (Rope.isBranch(zipper))
-        throw new IllegalArgumentException();
+    public static PersistentCursor create(Rope.Zipper<Text.TextMetrics, String> zipper) {
+      if (Rope.isBranch(zipper)) {
+        throw new IllegalArgumentException("Will accept only leaf zippers");
+      }
 
       long leafCharOffset = Text.nodeCharOffset(zipper);
       long innerCharOffset = Text.charOffset(zipper) - leafCharOffset;
-      return new ImmutableCursor(zipper,
-                                 leafCharOffset,
-                                 innerCharOffset,
-                                 Text.offset(zipper),
-                                 Rope.data(zipper).length());
+      return new PersistentCursor(zipper,
+                                  leafCharOffset,
+                                  (int)innerCharOffset,
+                                  Text.offset(zipper),
+                                  Rope.data(zipper).length());
     }
 
-    public static ImmutableCursor create(Rope.Tree<Text.TextMetrics, String> text, long offset){
+    public static PersistentCursor createAtOffset(Rope.Tree<Text.TextMetrics, String> text, long offset) {
       if (offset < 0 && offset >= Text.length(text)) {
         throw new IllegalArgumentException("offset: " + offset + ", text length: " + Text.length(text));
       }
@@ -71,59 +73,58 @@ public class Cursor {
       long leafCharOffset = Text.nodeCharOffset(leaf);
       String s = Rope.data(leaf);
       int innerOffset = (int)(offset - Text.nodeOffset(leaf));
-      return new ImmutableCursor(leaf, leafCharOffset, s.offsetByCodePoints(0, innerOffset), offset, s.length());
+      return new PersistentCursor(leaf, leafCharOffset, s.offsetByCodePoints(0, innerOffset), offset, s.length());
     }
   }
 
-  public static ImmutableCursor next(ImmutableCursor cursor) {
-    long nextInnerCharOffset = Character.isSupplementaryCodePoint(cursor.getChar())
+  public static PersistentCursor next(PersistentCursor cursor) {
+    long nextInnerCharOffset = Character.isSupplementaryCodePoint(codepoint(cursor))
                                ? cursor.innerCharOffset + 2
                                : cursor.innerCharOffset + 1;
 
     if (nextInnerCharOffset < cursor.leafCharLength) {
-      return new ImmutableCursor(cursor.zipper,
-                                 cursor.nodeCharOffset,
-                                 nextInnerCharOffset,
-                                 cursor.offset + 1,
-                                 cursor.leafCharLength);
+      return new PersistentCursor(cursor.zipper,
+                                  cursor.nodeCharOffset,
+                                  (int)nextInnerCharOffset,
+                                  cursor.offset + 1,
+                                  cursor.leafCharLength);
     }
 
     if (Rope.hasNext(cursor.zipper)) {
       Rope.Zipper<Text.TextMetrics, String> nextLeaf = Rope.nextLeaf(cursor.zipper);
-      return new ImmutableCursor(
+      return new PersistentCursor(
         nextLeaf,
         cursor.nodeCharOffset + cursor.leafCharLength,
         0,
         cursor.offset + 1,
-        leafText(nextLeaf).length()
+        Rope.data(nextLeaf).length()
       );
     }
 
     return null;
   }
 
-  public static ImmutableCursor prev(ImmutableCursor cursor) {
+  public static PersistentCursor prev(PersistentCursor cursor) {
     if (0 < cursor.innerCharOffset) {
-      long prevInnerCharOffset = Character.isHighSurrogate(leafText(cursor.zipper).charAt((int)(cursor.innerCharOffset - 1)))
+      long prevInnerCharOffset = Character.isHighSurrogate(Rope.data(cursor.zipper).charAt(cursor.innerCharOffset - 1))
                                  ? cursor.innerCharOffset - 2
                                  : cursor.innerCharOffset - 1;
-      return new ImmutableCursor(
-        cursor.zipper,
-        cursor.nodeCharOffset,
-        prevInnerCharOffset,
-        cursor.offset - 1,
-        cursor.leafCharLength
+      return new PersistentCursor(cursor.zipper,
+                                  cursor.nodeCharOffset,
+                                  (int)prevInnerCharOffset,
+                                  cursor.offset - 1,
+                                  cursor.leafCharLength
       );
     }
     else if (Rope.hasPrev(cursor.zipper)) {
       Rope.Zipper<Text.TextMetrics, String> prevLeaf = Rope.prevLeaf(cursor.zipper);
-      String prevLeafText = leafText(prevLeaf);
-      long prevLeafCharLength = prevLeafText.length();
-      long prevInnerCharOffset = Character.isHighSurrogate(prevLeafText.charAt((int)(prevLeafCharLength - 1)))
-                                 ? prevLeafCharLength - 2
-                                 : prevLeafCharLength - 1;
+      String prevLeafText = Rope.data(prevLeaf);
+      int prevLeafCharLength = prevLeafText.length();
+      int prevInnerCharOffset = Character.isHighSurrogate(prevLeafText.charAt(prevLeafCharLength - 1))
+                                ? prevLeafCharLength - 2
+                                : prevLeafCharLength - 1;
 
-      return new ImmutableCursor(
+      return new PersistentCursor(
         prevLeaf,
         cursor.nodeCharOffset - prevLeafCharLength,
         prevInnerCharOffset,
@@ -138,24 +139,24 @@ public class Cursor {
 
   public static class TransientCursor extends AbstractCursor {
 
-    public TransientCursor(Rope.Zipper<Text.TextMetrics, String> zipper,
-                           long nodeCharOffset,
-                           long innerCharOffset,
-                           long offset,
-                           long leafCharLength) {
+    TransientCursor(Rope.Zipper<Text.TextMetrics, String> zipper,
+                    long nodeCharOffset,
+                    int innerCharOffset,
+                    long offset,
+                    long leafCharLength) {
       super(zipper, nodeCharOffset, innerCharOffset, offset, leafCharLength);
     }
 
     public static TransientCursor create(Rope.Zipper<Text.TextMetrics, String> zipper) {
       if (Rope.isBranch(zipper)) {
-        throw new IllegalArgumentException();
+        throw new IllegalArgumentException("Will accept only leaf zippers");
       }
 
       long leafCharOffset = Text.nodeCharOffset(zipper);
       long innerCharOffset = Text.charOffset(zipper) - leafCharOffset;
       return new TransientCursor(Rope.toTransient(zipper),
                                  leafCharOffset,
-                                 innerCharOffset,
+                                 (int)innerCharOffset,
                                  Text.offset(zipper),
                                  Rope.data(zipper).length());
     }
@@ -165,9 +166,9 @@ public class Cursor {
     }
 
     public TransientCursor next() {
-      long nextInnerCharOffset = Character.isSupplementaryCodePoint(getChar())
-                                 ? innerCharOffset + 2
-                                 : innerCharOffset + 1;
+      int nextInnerCharOffset = Character.isSupplementaryCodePoint(codepoint(this))
+                                ? innerCharOffset + 2
+                                : innerCharOffset + 1;
       if (nextInnerCharOffset < leafCharLength) {
         this.offset += 1;
         this.innerCharOffset = nextInnerCharOffset;
@@ -180,7 +181,7 @@ public class Cursor {
         this.nodeCharOffset += leafCharLength;
         this.innerCharOffset = 0;
         this.offset += 1;
-        this.leafCharLength = leafText(nextLeaf).length();
+        this.leafCharLength = Rope.data(nextLeaf).length();
 
         return this;
       }
@@ -191,7 +192,7 @@ public class Cursor {
 
     public TransientCursor prev() {
       if (0 < innerCharOffset) {
-        innerCharOffset = Character.isHighSurrogate(leafText(zipper).charAt((int)(innerCharOffset - 1)))
+        innerCharOffset = Character.isHighSurrogate(Rope.data(zipper).charAt(innerCharOffset - 1))
                           ? innerCharOffset - 2
                           : innerCharOffset - 1;
         offset -= 1;
@@ -199,11 +200,11 @@ public class Cursor {
       }
       else if (Rope.hasPrev(zipper)) {
         Rope.Zipper<Text.TextMetrics, String> prevLeaf = Rope.prevLeaf(zipper);
-        String prevLeafText = leafText(prevLeaf);
-        long prevLeafCharLength = prevLeafText.length();
-        long prevInnerCharOffset = Character.isHighSurrogate(prevLeafText.charAt((int)(prevLeafCharLength - 1)))
-                                   ? prevLeafCharLength - 2
-                                   : prevLeafCharLength - 1;
+        String prevLeafText = Rope.data(prevLeaf);
+        int prevLeafCharLength = prevLeafText.length();
+        int prevInnerCharOffset = Character.isHighSurrogate(prevLeafText.charAt(prevLeafCharLength - 1))
+                                  ? prevLeafCharLength - 2
+                                  : prevLeafCharLength - 1;
         zipper = prevLeaf;
         nodeCharOffset -= prevLeafCharLength;
         innerCharOffset = prevInnerCharOffset;
@@ -217,23 +218,21 @@ public class Cursor {
     }
   }
 
-  public static TransientCursor toTransient(ImmutableCursor cursor) {
-    return new TransientCursor(
-      Rope.toTransient(cursor.zipper),
-      cursor.nodeCharOffset,
-      cursor.innerCharOffset,
-      cursor.offset,
-      cursor.leafCharLength
+  public static TransientCursor toTransient(PersistentCursor cursor) {
+    return new TransientCursor(Rope.toTransient(cursor.zipper),
+                               cursor.nodeCharOffset,
+                               cursor.innerCharOffset,
+                               cursor.offset,
+                               cursor.leafCharLength
     );
   }
 
-  public static ImmutableCursor toPersistent(TransientCursor cursor) {
-    return new ImmutableCursor(
-      Rope.toPersistent(cursor.zipper),
-      cursor.nodeCharOffset,
-      cursor.innerCharOffset,
-      cursor.offset,
-      cursor.leafCharLength
+  public static PersistentCursor toPersistent(TransientCursor cursor) {
+    return new PersistentCursor(Rope.toPersistent(cursor.zipper),
+                                cursor.nodeCharOffset,
+                                cursor.innerCharOffset,
+                                cursor.offset,
+                                cursor.leafCharLength
     );
   }
 }

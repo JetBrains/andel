@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.function.BiFunction;
 
+@SuppressWarnings("WeakerAccess")
 public class Rope {
 
   public static class Tree<Metrics, Data> {
@@ -152,11 +153,6 @@ public class Rope {
     return loc.parent == null;
   }
 
-  public static ArrayList<Object> getChildren(Object node) {
-    //todo get rid of it
-    return ((Node)node).children;
-  }
-
   public static <Metrics, Data> Metrics metrics(Zipper<Metrics, Data> zipper) {
     return zipper.metrics.get(zipper.idx);
   }
@@ -172,13 +168,14 @@ public class Rope {
   static <Metrics, Data> boolean splitNeeded(ArrayList<Object> children, ZipperOps<Metrics, Data> ops) {
     if (children.get(0) instanceof Node) {
       for (Object child : children) {
-        if (getChildren((Node)child).size() > ops.splitThreshold()) {
+        if (((Node)child).children.size() > ops.splitThreshold()) {
           return true;
         }
       }
     }
     else {
       for (Object child : children) {
+        //noinspection unchecked
         if (ops.isLeafOverflown((Data)child)) {
           return true;
         }
@@ -218,6 +215,7 @@ public class Rope {
       ArrayList<Metrics> newMetrics = new ArrayList<>(children.size());
       if (children.get(0) instanceof Node){
         for (int i = 0; i < children.size(); i++) {
+          //noinspection unchecked
           Node<Metrics> child = (Node<Metrics>)children.get(i);
           if (child.children.size() > ops.splitThreshold()) {
             ArrayList<Node<Metrics>> partition = splitNode(child, ops.splitThreshold());
@@ -233,6 +231,7 @@ public class Rope {
         }
       } else {
         for (int i = 0; i < children.size(); i++) {
+          //noinspection unchecked
           Data child = (Data)children.get(i);
           if (ops.isLeafOverflown(child)) {
             for (Data o : ops.splitLeaf(child)) {
@@ -255,13 +254,14 @@ public class Rope {
     int mergeThreshold = ops.splitThreshold() / 2;
     if (children.get(0) instanceof Node) {
       for (Object child : children) {
-        if (getChildren(child).size() < mergeThreshold) {
+        if (((Node)child).children.size() < mergeThreshold) {
           return true;
         }
       }
     }
     else {
       for (Object child : children) {
+        //noinspection unchecked
         if (ops.isLeafUnderflown((Data)child)) {
           return true;
         }
@@ -284,9 +284,11 @@ public class Rope {
       ArrayList<Object> newChildren = new ArrayList<>(mergeThreshold);
       ArrayList<Metrics> newMetrics = new ArrayList<>(mergeThreshold);
       if (node.children.get(0) instanceof Node) {
+        //noinspection unchecked
         Node<Metrics> left = (Node<Metrics>)node.children.get(0);
         Metrics leftMetrics = node.metrics.get(0);
         for (int i = 1; i < node.children.size(); i++) {
+          //noinspection unchecked
           Node<Metrics> right = (Node<Metrics>)node.children.get(i);
           Metrics rightMetrics = node.metrics.get(i);
           if (left.children.size() < mergeThreshold || right.children.size() < mergeThreshold) {
@@ -325,9 +327,11 @@ public class Rope {
         newMetrics.add(leftMetrics);
       }
       else {
+        //noinspection unchecked
         Data leftData = (Data)node.children.get(0);
         Metrics leftMetrics = node.metrics.get(0);
         for (int i = 1; i < node.children.size(); i++) {
+          //noinspection unchecked
           Data rightData = (Data)node.children.get(i);
           Metrics rightMetrics = node.metrics.get(i);
           if (ops.isLeafUnderflown(leftData) || ops.isLeafUnderflown(rightData)) {
@@ -389,6 +393,7 @@ public class Rope {
   static <Metrics> Node<Metrics> shrinkTree(Node<Metrics> node) {
     ArrayList<Object> children = node.children;
     if (children.size() == 1 && children.get(0) instanceof Node) {
+      //noinspection unchecked
       return shrinkTree((Node<Metrics>)children.get(0));
     }
     return node;
@@ -708,16 +713,8 @@ public class Rope {
       }
     }
 
-    ArrayList<Object> newSiblings;
-    ArrayList<Metrics> newMetrics;
-    if (isChildrenMutable(zipper)) {
-      newSiblings = zipper.siblings;
-      newMetrics = zipper.metrics;
-    }
-    else {
-      newSiblings = (ArrayList<Object>)zipper.siblings.clone();
-      newMetrics = (ArrayList<Metrics>)zipper.metrics.clone();
-    }
+    ArrayList<Object> newSiblings = isChildrenMutable(zipper) ? zipper.siblings : (ArrayList<Object>)zipper.siblings.clone();
+    ArrayList<Metrics> newMetrics = isChildrenMutable(zipper) ? zipper.metrics : (ArrayList<Metrics>)zipper.metrics.clone();
     newMetrics.remove(zipper.idx);
     newSiblings.remove(zipper.idx);
 
