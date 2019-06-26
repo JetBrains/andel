@@ -3,7 +3,7 @@
   (:import [andel Intervals Intervals$Interval Intervals$IntervalsIterator Intervals$MergingIterator]))
 
 (defn insert [itree markers]
-  (Intervals/insert itree markers))
+  (Intervals/insertAll itree markers))
 
 (defn remove [itree marker-ids]
   (Intervals/remove itree marker-ids))
@@ -42,7 +42,7 @@
 (defn merge-iterators
   (^Intervals$IntervalsIterator [it1 it2]
    (cond
-     (and (something? it1) (something? it2)) (Intervals$MergingIterator. it1 it2 Intervals/FORWARD_COMPARATOR)
+     (and (something? it1) (something? it2)) (Intervals$MergingIterator. it1 it2 Intervals$IntervalsIterator/FORWARD_COMPARATOR)
      (something? it1) it1
      (something? it2) it2
      :else nil))
