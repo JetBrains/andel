@@ -1,4 +1,4 @@
 target/
 .idea/**
 !.idea/codeStyleSettings.xml
-andel.core.iml
+
