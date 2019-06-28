@@ -10,26 +10,6 @@ public class SyntaxHighlighting {
         T highlight(jsitter.api.Zipper zipper);
     }
 
-    static jsitter.api.Zipper<?> nextToHighlight(jsitter.api.Zipper<?> zipper, int rangeStartByte, int rangeEndByte) {
-        jsitter.api.Zipper<?> syntaxZ = ApiKt.next(zipper);
-        while (syntaxZ != null) {
-            int fromByte = syntaxZ.getByteOffset();
-            int toByte = syntaxZ.getByteOffset() + syntaxZ.getByteSize();
-            if (toByte <= rangeStartByte) {
-                syntaxZ = ApiKt.skip(syntaxZ);
-            } else if (rangeStartByte <= fromByte && toByte <= rangeEndByte) {
-                return syntaxZ;
-            } else if (rangeEndByte <= fromByte){
-                return null;
-            } else if (syntaxZ.getNodeType() instanceof Terminal){
-                return syntaxZ;
-            } else {
-                syntaxZ = ApiKt.next(syntaxZ);
-            }
-        }
-        return null;
-    }
-
     public static <T> Intervals<T> highlightSyntax(Intervals<T> intervalsTree,
                                                    jsitter.api.Tree syntaxTree,
                                                    Rope.Tree<Text.TextMetrics, String> textTree,
@@ -118,5 +98,25 @@ public class SyntaxHighlighting {
                 return REMOVE;
             }
         }
+    }
+
+    private static jsitter.api.Zipper<?> nextToHighlight(Zipper<?> zipper, int rangeStartByte, int rangeEndByte) {
+        jsitter.api.Zipper<?> syntaxZ = ApiKt.next(zipper);
+        while (syntaxZ != null) {
+            int fromByte = syntaxZ.getByteOffset();
+            int toByte = syntaxZ.getByteOffset() + syntaxZ.getByteSize();
+            if (toByte <= rangeStartByte) {
+                syntaxZ = ApiKt.skip(syntaxZ);
+            } else if (rangeStartByte <= fromByte && toByte <= rangeEndByte) {
+                return syntaxZ;
+            } else if (rangeEndByte <= fromByte){
+                return null;
+            } else if (syntaxZ.getNodeType() instanceof Terminal){
+                return syntaxZ;
+            } else {
+                syntaxZ = ApiKt.next(syntaxZ);
+            }
+        }
+        return null;
     }
 }
