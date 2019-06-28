@@ -7,5 +7,4 @@
             [andel.parens]
             [andel.search]
             [andel.text]
-            [andel.tree]
             [andel.utils]))

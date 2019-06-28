@@ -19,7 +19,7 @@ public class Cursor {
     return cursor.nodeCharOffset + cursor.innerCharOffset;
   }
 
-  static abstract class AbstractCursor {
+  public static abstract class AbstractCursor {
     Rope.Zipper<Text.TextMetrics, String> zipper;
     long nodeCharOffset;
     int innerCharOffset;
