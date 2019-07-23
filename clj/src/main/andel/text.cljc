@@ -64,7 +64,7 @@
       (- (text-length t) (offset loc)))))
 
 (defn text-geom-length ^long [^Rope$Tree t]
-  (.-geometricLength (.-metrics t)))
+  (.-geometricLength ^andel.Text$TextMetrics (.-metrics t)))
 
 (defn chars-count [t]
   (Text/charsCount t))
