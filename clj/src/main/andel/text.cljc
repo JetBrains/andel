@@ -125,3 +125,11 @@
   (-> (zipper text)
       (scan-to-char-offset char-offset)
       (offset)))
+
+(defn line->offset ^long [line text]
+  (offset (scan-to-line-start (zipper text) line)))
+
+(defn offset->line ^long [offset text]
+  (-> (zipper text)
+      (scan-to-offset offset)
+      (line)))
