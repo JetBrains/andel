@@ -492,7 +492,7 @@ public class Text {
         int start = (int)(i - chunkOffset);
         int end = (int)Math.min(Rope.metrics(loc).length, start + length);
         int charsStart = chunk.offsetByCodePoints(0, start);
-        int charsEnd = charsStart + chunk.offsetByCodePoints(start, end);
+        int charsEnd = chunk.offsetByCodePoints(0, end);
         sb.append(chunk, charsStart, charsEnd);
         length -= (end - start);
         if (length > 0) {
