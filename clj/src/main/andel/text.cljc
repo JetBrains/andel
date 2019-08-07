@@ -72,6 +72,9 @@
 (defn text ^String [zipper ^long l]
   (Text/text zipper l))
 
+(defn consume-text [zipper ^long l sb]
+  (Text/consumeText zipper l sb))
+
 (defn as-string [text-tree]
   (Text/text (Text/zipper text-tree) (Text/length text-tree)))
 
@@ -92,7 +95,7 @@
 (defn max-line-length ^long [text]
   (Text/maxLineLength text))
 
-(defn skip-to-line-end [loc]
+(defn scan-to-line-end [loc]
   (let [offset (offset loc)
         delta (distance-to-EOL loc)]
     (scan-to-offset loc (+ offset delta))))
@@ -103,7 +106,7 @@
         loc' (scan-to-geom-offset loc (min (+ geom cols) (text-geom-length (root loc))))]
     (if (= cur-line (line loc'))
       loc'
-      (skip-to-line-end loc))))
+      (scan-to-line-end loc))))
 
 (defn column ^long [loc]
   (let [cur-line (line loc)

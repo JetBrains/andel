@@ -472,6 +472,39 @@ public class Text {
     return stringBuilder;
   };
 
+
+  public static Rope.Zipper<TextMetrics, String> consumeText(Rope.Zipper<TextMetrics, String> loc, int length, StringBuilder sb) {
+    if (loc == null) {
+      throw new IllegalArgumentException();
+    }
+    if (length == 0) {
+      return loc;
+    }
+    while (true) {
+      assert loc != null;
+      if (Rope.isBranch(loc)) {
+        loc = Rope.downLeft(loc);
+      }
+      else {
+        long i = offset(loc);
+        String chunk = Rope.data(loc);
+        long chunkOffset = nodeOffset(loc);
+        int start = (int)(i - chunkOffset);
+        int end = (int)Math.min(Rope.metrics(loc).length, start + length);
+        int charsStart = chunk.offsetByCodePoints(0, start);
+        int charsEnd = charsStart + chunk.offsetByCodePoints(start, end);
+        sb.append(chunk, charsStart, charsEnd);
+        length -= (end - start);
+        if (length > 0) {
+          loc = Rope.next(loc);
+        }
+        else {
+          return loc;
+        }
+      }
+    }
+  }
+
   public static <Acc> Acc reduceText(Rope.Zipper<TextMetrics, String> loc, int length, Acc init, TextReducer<Acc> rf) {
     if (loc == null) {
       throw new IllegalArgumentException();
@@ -579,10 +612,11 @@ public class Text {
       return text(fromLoc, (int)(offset(toLoc) - offset(fromLoc)));
     }
 
-    public static boolean contentEquals(Sequence one, CharSequence another) {
-      if (another instanceof Sequence){
-        Sequence s = (Sequence) another;
-        if (one.root == s.root && one.fromChar == s.fromChar && one.toChar == s.toChar){
+    public static boolean contentEquals(CharSequence one, CharSequence another) {
+      if (one instanceof Sequence && another instanceof Sequence){
+        Sequence o = (Sequence) one;
+        Sequence a = (Sequence) another;
+        if (o.root == a.root && o.fromChar == a.fromChar && o.toChar == a.toChar){
           return true;
         }
         // TODO fast path : check if leafs are identical

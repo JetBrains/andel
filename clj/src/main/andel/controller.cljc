@@ -3,7 +3,6 @@
             [andel.text :as text]
             [andel.cursor :as cursor]
             [andel.intervals :as intervals]
-            [andel.parens :as parens]
             [andel.core :as core]))
 
 (defn selection-length [[left right :as selection]]
