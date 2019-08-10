@@ -25,6 +25,9 @@ public class JSitterText implements jsitter.api.Text {
     @Override
     public void read(int startByte, @NotNull ByteBuffer byteBuffer) {
         int startChar = startByte / 2;
+        if (Text.charsCount(text) == startChar) {
+            return;
+        }
         Rope.Zipper loc = Text.scanToCharOffset(Text.zipper(text), startChar);
         long textCharsCount = Text.charsCount(text);
         Text.reduceText(loc, (int) Math.min(CHUNK_BYTES_SUZE / 2, textCharsCount - startChar),
