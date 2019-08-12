@@ -116,8 +116,10 @@ public class Text {
       int codepoint = str.codePointAt(charsCount);
 
       if (codepoint == '\n') {
-        maxLineLength = Math.max(Math.max(maxLineLength, newlinePrefixGeomLength), codePointsCount - prevLineGeomOffset);
-        newlinePrefixGeomLength = linesCount == 0 ? geometricLength : newlinePrefixGeomLength;
+        maxLineLength = Math.max(Math.max(maxLineLength, newlinePrefixGeomLength), geometricLength - prevLineGeomOffset);
+        if (linesCount == 0){
+            newlinePrefixGeomLength = geometricLength;
+        }
         prevLineGeomOffset = geometricLength;
         linesCount += 1;
       }
@@ -128,9 +130,9 @@ public class Text {
       charsCount += Character.charCount(codepoint);
     }
 
-    long newlineSuffixGeomLength = geometricLength - prevLineGeomOffset - (linesCount == 0 ? 1 : 0);
+    long newlineSuffixGeomLength = geometricLength - prevLineGeomOffset;
 
-    newlinePrefixGeomLength = linesCount == 0 ? codePointsCount : newlinePrefixGeomLength;
+    newlinePrefixGeomLength = linesCount == 0 ? geometricLength : newlinePrefixGeomLength;
     maxLineLength = Math.max(maxLineLength, newlineSuffixGeomLength);
 
     return new TextMetrics(codePointsCount,
