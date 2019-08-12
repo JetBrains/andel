@@ -130,15 +130,6 @@
                   (= (map (fn [tree] (Text/text (Text/zipper tree) (Text/length tree))) ts)
                      naive-texts))))
 
-(comment
-
-  (tc/quick-check 10000 (tree-is-persistent-prop play-transient))
-
-
-  (g/sample (operations-seq-gen 10))
-
-  )
-
 (deftest generative
   (is (:result (tc/quick-check 3000 (play-test play))))
 
@@ -209,119 +200,126 @@
   )
 
 (comment
+
   (do
+    (require '[criterium.core :as crit])
+    (require '[clj-async-profiler.core :as prof])
+    (require '[clojure.test.check.random :as random])
+    (require '[clojure.test.check.rose-tree :as rose])
+    (require '[clojure.test.check.random :as random])
 
-  (require '[onair.dev])
-  (require '[andel.text])
-  (require '[clojure.test.check.rose-tree :as rose])
-  (require '[clojure.test.check.random :as random])
+    (let [base "/Users/shparun/sources/ultimate/out/classes/production"
+          modules (.list (clojure.java.io/file base))
+          cl (.getClassLoader (.getClass (fn [])))]
+      (doseq [m modules]
+        (.addURL cl (.toURL (.getCanonicalFile (clojure.java.io/file base m)))))
+      (with-bindings {Compiler/LOADER cl}
+        (eval
+        '(do
+          (defmacro benchmark [& expressions]
+            `(crit/with-progress-reporting
+              (crit/quick-bench
+               (do
+                 ~@expressions
+                 nil))))
 
-  (defn generate [generator size seed]
-    (let [rng (random/make-random seed)]
-      (rose/root (g/call-gen generator rng size))))
+          (defn generate [generator size seed]
+            (let [rng (random/make-random seed)]
+              (rose/root (g/call-gen generator rng size))))
 
-  (def seed 1558543749024)
+          (def seed 1558543749024)
 
-  (defn make-operation [text]
-    (generate
-     (g/fmap
-      (fn [frames] (random-ops text frames))
-      (op-frames-gen 10000))
-     100
-     seed))
+          (defn make-operation [text]
+            (generate
+             (g/fmap
+              (fn [frames] (random-ops text frames))
+              (op-frames-gen 10000))
+             100
+             seed))
 
-  (def editor-impl
-    (slurp (clojure.java.io/file "../../community//platform/platform-impl/src/com/intellij/openapi/editor/impl/EditorImpl.java")))
+          (def editor-impl
+            (slurp (clojure.java.io/file "/Users/shparun/sources/ultimate/community/platform/platform-impl/src/com/intellij/openapi/editor/impl/EditorImpl.java")))
 
-  (def operation (make-operation editor-impl))
+          (def operation (make-operation editor-impl))
 
-  (def clj-tree (andel.text/make-text editor-impl))
-  (def java-tree (Text/makeText editor-impl))
+          (def java-tree (Text/makeText editor-impl))
 
-  (defn make-random-accesses [text c]
-    (let [length (.length ^String text)
-          g (g/vector
-             (g/fmap (fn [[a b]] [(min length a) (min (- length a) b)])
-                     (g/tuple (g/resize length g/pos-int) (g/resize 1024 g/pos-int))))]
-      (generate g c seed)))
+          (defn make-random-accesses [text c]
+            (let [length (.length ^String text)
+                  g (g/vector
+                     (g/fmap (fn [[a b]] [(min length a) (min (- length a) b)])
+                             (g/tuple (g/resize length g/pos-int) (g/resize 1024 g/pos-int))))]
+              (generate g c seed)))
 
-  (def random-accesses
-    (make-random-accesses editor-impl 10000))
+          (def random-accesses
+            (make-random-accesses editor-impl 10000))
 
-  (def immaculate-text (com.intellij.util.text.CharArrayUtil/createImmutableCharSequence editor-impl))
+          (defn make-immutable-text [text]
+            (ensure-chunked (com.intellij.util.text.CharArrayUtil/createImmutableCharSequence text)))
 
-  (defn play-intellij [text operation]
-    (loop [^com.intellij.util.text.ImmutableText it text
-           [[code arg :as op] & rest] operation
-           offset 0]
-      (if (nil? op)
-        it
-        (case code
-          :retain (recur it rest (+ offset (long arg)))
-          :insert (recur (.insert it offset ^CharSequence arg) rest (+ offset (.length ^String arg)))
-          :delete (recur (.delete it offset (+ offset (.length ^String arg))) rest offset)))))
+          (def immaculate-text (com.intellij.util.text.CharArrayUtil/createImmutableCharSequence editor-impl))
 
-  (def ensure-chunked
-    (let [^java.lang.reflect.Method m (doto (.getDeclaredMethod (type immaculate-text) "ensureChunked" (into-array java.lang.Class []))
-                                    (.setAccessible true))]
-      (fn [t] (.invoke m t (object-array [])))))
+          (defn play-intellij [text operation]
+            (loop [^com.intellij.util.text.ImmutableText it text
+                   [[code arg :as op] & rest] operation
+                   offset 0]
+              (if (nil? op)
+                it
+                (case code
+                  :retain (recur it rest (+ offset (long arg)))
+                  :insert (recur (.insert it offset ^CharSequence arg) rest (+ offset (.length ^String arg)))
+                  :delete (recur (.delete it offset (+ offset (.length ^String arg))) rest offset)))))
 
-  (def not-so-immaculate-text (ensure-chunked immaculate-text))
+          (def ensure-chunked
+            (let [^java.lang.reflect.Method m (doto (.getDeclaredMethod (type immaculate-text) "ensureChunked" (into-array java.lang.Class []))
+                                                    (.setAccessible true))]
+              (fn [t] (.invoke m t (object-array [])))))
 
-  (def my-node
-    (let [^java.lang.reflect.Field f (doto (.getDeclaredField (type immaculate-text) "myNode")
-                                           (.setAccessible true))]
-      (fn [t] (.get f t))))
+          (def not-so-immaculate-text (ensure-chunked immaculate-text))
 
-  (def head
-    (let [^java.lang.reflect.Field f (doto (.getDeclaredField com.intellij.util.text.ImmutableText$CompositeNode "head")
-                                           (.setAccessible true))]
-      (fn [n] (.get f n))))
+          (def my-node
+            (let [^java.lang.reflect.Field f (doto (.getDeclaredField (type immaculate-text) "myNode")
+                                                   (.setAccessible true))]
+              (fn [t] (.get f t))))
 
-  (def tail
-    (let [^java.lang.reflect.Field f (doto (.getDeclaredField com.intellij.util.text.ImmutableText$CompositeNode "tail")
-                                           (.setAccessible true))]
-      (fn [n] (.get f n))))
+          (def head
+            (let [^java.lang.reflect.Field f (doto (.getDeclaredField com.intellij.util.text.ImmutableText$CompositeNode "head")
+                                                   (.setAccessible true))]
+              (fn [n] (.get f n))))
 
-  (defn text-clj [t [from len]]
-    (-> (andel.text/zipper t)
-        (andel.text/scan-to-offset from)
-        (andel.text/text len)))
+          (def tail
+            (let [^java.lang.reflect.Field f (doto (.getDeclaredField com.intellij.util.text.ImmutableText$CompositeNode "tail")
+                                                   (.setAccessible true))]
+              (fn [n] (.get f n))))
 
-  (defn text-java [t [from len]]
-    (-> (Text/zipper t)
-        (Text/scanToOffset from)
-        (Text/text len)))
+          (defn text-java [t [from len]]
+            (-> (Text/zipper t)
+                (Text/scanToOffset from)
+                (Text/text len)))
 
-  (defn text-intellij [t [from len]]
-    (.subSequence ^com.intellij.util.text.ImmutableText t from (+ from len)))
+          (defn text-intellij [t [from len]]
+            (.subSequence ^com.intellij.util.text.ImmutableText t from (+ from len)))
 
-  (defn random-access [t impl a]
-    (into [] (map (fn [a] (str (impl t a)))) a))
+          (defn random-access [t impl a]
+            (into [] (map (fn [a] (str (impl t a)))) a))
 
-    (defn iterate-char-seq [^CharSequence char-seq]
-      (let [length (.length char-seq)]
-        (loop [i 0]
-          (when (< i length)
-            (.charAt char-seq i)
-            (recur (inc i))))))
-    ;; eval here
-    )
+          (defn iterate-char-seq [^CharSequence char-seq]
+            (let [length (.length char-seq)]
+              (loop [i 0]
+                (when (< i length)
+                  (.charAt char-seq i)
+                  (recur (inc i))))))
+          ;; eval here
+          )))))
 
   (= (play-naive editor-impl operation)
-     (andel.text/as-string (andel.text/play (andel.text/make-text editor-impl) operation))
      (let [t (play (Text/makeText editor-impl) operation)]
        (Text/text (Text/zipper t) (text-length t)))
      (let [t (play-transient (Text/makeText editor-impl) operation)]
        (Text/text (Text/zipper t) (text-length t))))
 
-  (->> (iterate head (my-node not-so-immaculate-text))
-       (take-while (fn [n] (= com.intellij.util.text.ImmutableText$CompositeNode (type n))))
-       (count))
-
   (let [as (make-random-accesses editor-impl 10)]
-    (= (random-access clj-tree text-clj as)
-       (random-access java-tree text-java as)
+    (= (random-access java-tree text-java as)
        (random-access immaculate-text text-intellij as)))
 
   (let [ts (Text$Sequence. java-tree)
@@ -337,61 +335,46 @@
   (do
     (do
       (prn "MAKE TREE")
-      (prn "CLJ VERSION")
-      (onair.dev/benchmark
-       (andel.text/make-text editor-impl))
-
-      (prn "JAVA VERSION")
-      (onair.dev/benchmark
+      (prn "ANDEL")
+      (benchmark
        (Text/makeText editor-impl))
       (prn "IMMUTABLE TEXT")
-      (onair.dev/benchmark
-        (ensure-chunked (com.intellij.util.text.CharArrayUtil/createImmutableCharSequence editor-impl))))
+      (benchmark
+        (make-immutable-text editor-impl)))
 
     (do
       (prn "PLAY OPERATION")
-      (prn "CLJ VERSION")
-      (onair.dev/benchmark
-       (andel.text/play clj-tree operation))
-
-      (prn "JAVA VERSION")
-      (onair.dev/benchmark
+      (prn "ANDEL")
+      (benchmark
        (play java-tree operation))
 
-      (prn "JAVA VERSION TRANSIENT")
-      (onair.dev/benchmark
+      (prn "ANDEL TRANSIENT")
+      (benchmark
        (play-transient java-tree operation))
 
       (prn "IMMUTABLE TEXT")
-      (onair.dev/benchmark
+      (benchmark
        (play-intellij not-so-immaculate-text operation)))
 
     (do
       (prn "RANDOM ACCESS")
-      (prn "CLJ VERSION")
-      (onair.dev/benchmark
-        (random-access clj-tree text-clj random-accesses))
 
-      (prn "JAVA VERSION")
-      (onair.dev/benchmark
+      (prn "ANDEL")
+      (benchmark
         (random-access java-tree text-java random-accesses))
 
       (prn "IMMUTABLE TEXT")
-      (onair.dev/benchmark
+      (benchmark
         (random-access not-so-immaculate-text text-intellij random-accesses)))
     (do
       (prn "CHAR SEQUENCE")
-      (prn "CLJ VERSION")
-      (onair.dev/benchmark
-        (iterate-char-seq (andel.text/text->char-seq clj-tree)))
-
-      (prn "JAVA VERSION")
-      (onair.dev/benchmark
+      (prn "ANDEL")
+      (benchmark
         (iterate-char-seq (Text$Sequence. java-tree)))
 
       (prn "IMMUTABLE TEXT")
-      (onair.dev/benchmark
+      (benchmark
        (iterate-char-seq not-so-immaculate-text))))
 
-  )
 
+  )
