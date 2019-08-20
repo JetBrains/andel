@@ -101,9 +101,9 @@ public class Text {
   }
 
   public static TextMetrics metricsTo(String str, OffsetKind kind, long offset) {
-    long prevLineGeomOffset = 0;
     long maxLineLength = 0;
     long newlinePrefixGeomLength = 0;
+    long newlineSuffixGeomLength = 0;
     long codePointsCount = 0;
     int charsCount = 0;
     long geometricLength = 0;
@@ -114,26 +114,23 @@ public class Text {
            kind == OffsetKind.Geom && geometricLength < offset ||
            kind == OffsetKind.Lines && linesCount < offset) {
       int codepoint = str.codePointAt(charsCount);
-
       if (codepoint == '\n') {
-        maxLineLength = Math.max(Math.max(maxLineLength, newlinePrefixGeomLength), geometricLength - prevLineGeomOffset);
-        if (linesCount == 0){
-            newlinePrefixGeomLength = geometricLength;
-        }
-        prevLineGeomOffset = geometricLength;
+        maxLineLength = Math.max(Math.max(maxLineLength, newlinePrefixGeomLength), newlineSuffixGeomLength);
+        newlineSuffixGeomLength = 0;
         linesCount += 1;
+      } else {
+        int gl = codepoint == '\t' ? 4 : 1;
+        if (linesCount == 0){
+          newlinePrefixGeomLength += gl;
+        }
+        newlineSuffixGeomLength += gl;
+        geometricLength += gl;
       }
-
       codePointsCount += 1;
-      geometricLength += codepoint == '\t' ? 4 : 1;
-
       charsCount += Character.charCount(codepoint);
     }
 
-    long newlineSuffixGeomLength = geometricLength - prevLineGeomOffset;
-
-    newlinePrefixGeomLength = linesCount == 0 ? geometricLength : newlinePrefixGeomLength;
-    maxLineLength = Math.max(maxLineLength, newlineSuffixGeomLength);
+    maxLineLength = Math.max(Math.max(maxLineLength, newlineSuffixGeomLength), newlinePrefixGeomLength);
 
     return new TextMetrics(codePointsCount,
                            geometricLength,
@@ -343,6 +340,13 @@ public class Text {
     long currentOffset = getOffset(Rope.currentAcc(zipper), kind);
     if (offset < currentOffset)
       throw new IllegalArgumentException("Backwards scan: current is " + currentOffset + ", scanning to " + offset);
+
+    /* leaf chunk may contain intervals where specific metric is not incremented
+     * if we start chunk reduction from the beginning we may end up at the start of this interval
+     * resulting in a position which is to the left from original
+     */
+    if (offset == currentOffset)
+      return zipper;
 
     boolean isTransient = zipper.isTransient;
     zipper = Rope.toTransient(zipper);
