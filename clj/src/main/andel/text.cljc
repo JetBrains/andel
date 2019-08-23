@@ -136,3 +136,16 @@
   (-> (zipper text)
       (scan-to-offset offset)
       (line)))
+
+
+(defn play-operation [text-tree operation]
+  (root
+   (reduce (fn [z [op arg]]
+             (case op
+               :insert (insert z arg)
+               :delete (delete z (count arg))
+               :retain (let [co (char-offset z)]
+                         (if (= (+ co arg) (text-length text-tree))
+                           z
+                           (scan-to-char-offset z (+ co arg))))))
+           (zipper text-tree) operation)))
