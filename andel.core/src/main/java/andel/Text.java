@@ -548,7 +548,7 @@ public class Text {
 
     Rope.Tree<TextMetrics, String> root;
     Rope.Zipper<TextMetrics, String> zipper;
-    final int fromChar, toChar; // in chars
+    final int fromChar, toChar;
 
     public Sequence(Rope.Tree<TextMetrics, String> root, int from, int to) {
       if (from < 0 || to > root.metrics.charsCount)

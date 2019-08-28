@@ -254,10 +254,16 @@
           (def random-accesses
             (make-random-accesses editor-impl 10000))
 
+          (def immaculate-text (com.intellij.util.text.CharArrayUtil/createImmutableCharSequence editor-impl))
+
+          (def ensure-chunked
+            (let [^java.lang.reflect.Method m (doto (.getDeclaredMethod (type immaculate-text) "ensureChunked" (into-array java.lang.Class []))
+                                                (.setAccessible true))]
+              (fn [t] (.invoke m t (object-array [])))))
+
           (defn make-immutable-text [text]
             (ensure-chunked (com.intellij.util.text.CharArrayUtil/createImmutableCharSequence text)))
 
-          (def immaculate-text (com.intellij.util.text.CharArrayUtil/createImmutableCharSequence editor-impl))
 
           (defn play-intellij [text operation]
             (loop [^com.intellij.util.text.ImmutableText it text
@@ -270,10 +276,7 @@
                   :insert (recur (.insert it offset ^CharSequence arg) rest (+ offset (.length ^String arg)))
                   :delete (recur (.delete it offset (+ offset (.length ^String arg))) rest offset)))))
 
-          (def ensure-chunked
-            (let [^java.lang.reflect.Method m (doto (.getDeclaredMethod (type immaculate-text) "ensureChunked" (into-array java.lang.Class []))
-                                                    (.setAccessible true))]
-              (fn [t] (.invoke m t (object-array [])))))
+
 
           (def not-so-immaculate-text (ensure-chunked immaculate-text))
 
@@ -361,7 +364,7 @@
 
       (prn "ANDEL")
       (benchmark
-        (random-access java-tree text-java random-accesses))
+       (random-access java-tree text-java random-accesses))
 
       (prn "IMMUTABLE TEXT")
       (benchmark
