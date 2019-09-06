@@ -12,7 +12,8 @@ pom.xml.asc
 *.log
 /.env
 /.sass-cache
-/.idea
+.idea/**
+!.idea/codeStyleSettings.xml
 .projectile
 /.DS_Store
 andel.iml
