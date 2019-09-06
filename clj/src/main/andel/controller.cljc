@@ -25,7 +25,7 @@
           (< 0 sel-length) (core/delete-at-offset state sel-from sel-length)
           (= 0 caret-offset) state
           :else (core/delete-at-offset state (dec caret-offset) 1))
-        drop-virtual-position)))
+        (drop-virtual-position))))
 
 (defn delete [state]
   (let [selection (core/selection state)
@@ -37,7 +37,8 @@
           (< 0 sel-len) (core/delete-at-offset state sel-from sel-len)
           (<= text-len caret-offset) state
           :else (core/delete-at-offset state caret-offset 1))
-        drop-virtual-position)))
+        (drop-virtual-position)
+        (update :plan conj [:delete-forward 1]))))
 
 (defn type-in [{:keys [editor] :as state} insertion]
   (let [selection (core/selection state)
@@ -46,7 +47,8 @@
         (cond-> (< 0 selection-len)
                 (core/delete-at-offset (first selection) selection-len))
         (as-> state (core/insert-at-offset state (core/caret-offset state) insertion))
-        drop-virtual-position)))
+        (drop-virtual-position)
+        (update :plan conj [:type-in insertion]))))
 
 (defn update-selection [[from to :as selection] old-caret new-caret]
   (let [caret-offset  (core/caret->offset old-caret)

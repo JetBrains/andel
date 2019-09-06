@@ -2,7 +2,6 @@
   (:require [clojure.core.async :as a]
             [andel.utils :as utils]
             [andel.text :as text]
-            [andel.lexer :as lexer]
             [andel.intervals :as intervals]
             [clojure.spec.alpha :as s])
   (:import [andel Rope$Tree]))
@@ -87,9 +86,6 @@
   (let [length      (text/codepoints-count insertion)]
     (-> state
         (edit-at-offset offset #(text/insert % insertion))
-        (update :document (fn [{:keys [text] :as document}]
-                            (cond-> document (some? (:lexer document))
-                                    (update :lexer lexer/update-text text offset))))
         (update-in [:document :markup] intervals/expand offset length)
         (update-in [:document :error-stripes] intervals/expand offset length)
         (update-in [:document :line-markers] intervals/expand offset length)
@@ -112,9 +108,6 @@
   (let [text (-> state :document :text)]
     (-> state
         (edit-at-offset offset #(text/delete % length))
-        (update :document (fn [{:keys [text] :as document}]
-                            (cond-> document (some? (:lexer document))
-                                    (update :lexer lexer/update-text text offset))))
         (update-in [:document :markup] intervals/collapse offset length)
         (update-in [:document :error-stripes] intervals/collapse offset length)
         (update-in [:document :line-markers] intervals/collapse offset length)

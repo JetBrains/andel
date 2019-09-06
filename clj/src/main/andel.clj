@@ -3,8 +3,5 @@
             [andel.core]
             [andel.cursor]
             [andel.intervals]
-            [andel.paredit]
-            [andel.parens]
-            [andel.search]
             [andel.text]
             [andel.utils]))
