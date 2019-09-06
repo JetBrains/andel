@@ -21,36 +21,36 @@ public class LongArrayList {
   }
 
   public int size() {
-    return size;
+    return this.size;
   }
 
   public long get(int idx) {
-    return buffer[idx];
+    return this.buffer[idx];
   }
 
   public void set(int idx, long v) {
-    assert idx < size;
-    buffer[idx] = v;
+    assert idx < this.size;
+    this.buffer[idx] = v;
   }
 
   public void add(long v) {
-    if (buffer.length == size) {
-      this.buffer = Arrays.copyOf(buffer, buffer.length * 2);
+    if (this.buffer.length == this.size) {
+      this.buffer = Arrays.copyOf(this.buffer, this.buffer.length * 2);
     }
     this.buffer[this.size] = v;
     this.size += 1;
   }
 
   public void add(int idx, long v) {
-    assert idx <= size;
-    if (buffer.length == size) {
-      long[] newBuffer = new long[size * 2];
-      System.arraycopy(buffer, 0, newBuffer, 0, idx);
-      System.arraycopy(buffer, idx, newBuffer, idx + 1, size - idx);
+    assert idx <= this.size;
+    if (this.buffer.length == this.size) {
+      long[] newBuffer = new long[this.size * 2];
+      System.arraycopy(this.buffer, 0, newBuffer, 0, idx);
+      System.arraycopy(this.buffer, idx, newBuffer, idx + 1, this.size - idx);
       buffer = newBuffer;
     }
     else {
-      System.arraycopy(buffer, idx, buffer, idx + 1, size - idx);
+      System.arraycopy(this.buffer, idx, this.buffer, idx + 1, this.size - idx);
     }
     this.buffer[idx] = v;
     this.size += 1;
@@ -61,7 +61,7 @@ public class LongArrayList {
       throw new IndexOutOfBoundsException();
     }
     if (to < this.size) {
-      System.arraycopy(buffer, to, buffer, from, size - to);
+      System.arraycopy(this.buffer, to, this.buffer, from, this.size - to);
     }
     size -= to - from;
   }
@@ -72,7 +72,7 @@ public class LongArrayList {
 
   @Override
   public String toString() {
-    return Arrays.toString(Arrays.copyOfRange(buffer, 0, size));
+    return Arrays.toString(Arrays.copyOfRange(this.buffer, 0, size));
   }
 
   public LongArrayList copy(int capacity) {
@@ -87,11 +87,11 @@ public class LongArrayList {
   }
 
   public int binarySearch(long key) {
-    return Arrays.binarySearch(buffer, 0, size, key);
+    return Arrays.binarySearch(this.buffer, 0, this.size, key);
   }
 
   public int binarySearch(int idx, long key) {
-    return Arrays.binarySearch(buffer, idx, size, key);
+    return Arrays.binarySearch(this.buffer, idx, this.size, key);
   }
 
   public LongArrayList subList(int from, int to) {
