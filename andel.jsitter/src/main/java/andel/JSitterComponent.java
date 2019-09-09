@@ -1,5 +1,6 @@
 package andel;
 
+import andel.text.TextRope;
 import jsitter.api.Tree;
 
 public class JSitterComponent implements Component {
@@ -11,11 +12,11 @@ public class JSitterComponent implements Component {
     }
 
     @Override
-    public Component edit(Text before, Text after, Edit edit) {
+    public Component edit(TextRope before, TextRope after, Edit edit) {
         return JSitterComponent(ast.adjust(asJSitterEdits(edit)))
     }
 
-    public static List<jsitter.api.Edit> asJSitterEdits(Text before, Edit edit) {
+    public static List<jsitter.api.Edit> asJSitterEdits(TextRope before, Edit edit) {
 
     }
 }

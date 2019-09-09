@@ -1,11 +1,13 @@
 package andel;
 
+import andel.text.TextRope;
+
 import java.util.Map;
 
 public interface Composite {
     Composite edit(Edit edit);
 
-    Text getText();
+    TextRope getText();
 
     Map<Object, Component> components();
 

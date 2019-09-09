@@ -1,4 +1,4 @@
-package andel;
+package andel.util;
 
 import java.util.Arrays;
 

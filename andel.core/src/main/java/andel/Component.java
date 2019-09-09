@@ -1,5 +1,7 @@
 package andel;
 
+import andel.text.TextRope;
+
 public interface Component {
-    Component edit(Text before, Text after, Edit edit);
+    Component edit(TextRope before, TextRope after, Edit edit);
 }
