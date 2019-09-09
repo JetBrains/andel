@@ -1,4 +1,6 @@
-package andel;
+package andel.impl.text;
+
+import andel.text.TextZipper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -65,7 +67,7 @@ public class Rope {
     }
   }
 
-  public static class Zipper<Metrics, Data> {
+  public static class Zipper<Metrics, Data> implements TextZipper {
     public ZipperOps<Metrics, Data> ops;
 
     public Zipper<Metrics, Data> parent;

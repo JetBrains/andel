@@ -1,4 +1,4 @@
-(ns andel.intervals-test
+(ns andel.impl.intervals-test
   (:require [clojure.test.check.generators :as g]
             [clojure.test.check.properties :as prop]
             [clojure.test.check.rose-tree :as rose]
@@ -231,7 +231,7 @@
       (prop/for-all [[initial updated] setup]
         (let [naive updated
               tree (Intervals/insertAll empty-tree (into [] (map ->interval) initial))
-              editing-context (andel.Intervals$EditingContext. (.-nextInnerId tree)
+              editing-context (andel.intervals.Intervals$EditingContext. (.-nextInnerId tree)
                                                                (.-maxChildren tree)
                                                                (.linear (.-parentsMap tree)))
               ;; when reconciling specific range you should start iteration from (Intervals$Zipper/nextIntersection)
@@ -268,7 +268,7 @@
                              :remove (let [z' (Intervals$Zipper/remove z)
                                            has-next? (Intervals$Zipper/hasNext z')]
                                        (recur (if has-next? (Intervals$Zipper/next z') z') ints (not has-next?))))))
-              tree' (andel.Intervals. (.-maxChildren tree)
+              tree' (andel.intervals.Intervals. (.-maxChildren tree)
                                       new-root
                                       (.-closedRoot tree)
                                       (.forked (.-parentsMap editing-context))
@@ -279,7 +279,7 @@
 
   (let [initial []
         tree (Intervals/insertAll empty-tree (into [] (map ->interval) initial))
-        editing-context (andel.Intervals$EditingContext. (.-nextInnerId tree)
+        editing-context (andel.intervals.Intervals$EditingContext. (.-nextInnerId tree)
                                                          (.-maxChildren tree)
                                                          (.linear (.-parentsMap tree)))
         z (Intervals$Zipper/create (.-openRoot tree) editing-context true)
@@ -295,8 +295,8 @@
   (g/sample tree-actions-generator 100)
 
   (defn np [node]
-    (if (instance? andel.Intervals$Node node)
-      (let [^andel.Intervals$Node node node]
+    (if (instance? andel.intervals.Intervals$Node node)
+      (let [^andel.intervals.Intervals$Node node node]
         {:starts (.-starts node)
          :ends (.-ends node)
          :ids (.-ids node)

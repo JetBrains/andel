@@ -1,4 +1,4 @@
-(ns andel.text-test
+(ns andel.impl.text-test
   (:require [clojure.spec.alpha :as s]
             [clojure.test.check.generators :as g]
             [clojure.test.check.properties :as prop]
@@ -143,15 +143,15 @@
 
 (comment
 
-  (defn mp [^andel.Text$TextMetrics metrics]
+  (defn mp [^andel.impl.text.Text$TextMetrics metrics]
     {:length           (.-length metrics)
      :geometric-length (.-geometricLength metrics)
      :lines-count      (.-linesCount metrics)
      :chars-count      (.-charsCount metrics)})
 
   (defn np [node]
-    (if (instance? andel.Rope$Node node)
-      (let [^andel.Rope$Node node node]
+    (if (instance? andel.impl.text.Rope$Node node)
+      (let [^andel.impl.text.Rope$Node node node]
         {:metrics  (map mp (.-metrics node))
          :children (mapv np (.-children node))})
       (str node)))

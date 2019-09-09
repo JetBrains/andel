@@ -1,97 +1,14 @@
-package andel;
+package andel.impl.text;
 
-import andel.Rope.ZipperOps;
+import andel.impl.text.Rope.ZipperOps;
+import andel.text.TextConsumer;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiFunction;
 
 @SuppressWarnings({"WeakerAccess", "unused"})
-public class Text {
-
-  public final static class TextMetrics {
-
-    public long length;
-    public long geometricLength;
-    public long newlinesCounts;
-    public long charsCount;
-    public long newlinePrefixGeomLength;
-    public long newlineSuffixGeomLength;
-    public long maxLineLength;
-
-    public TextMetrics(long length,
-                       long geometricLength,
-                       long linesCount,
-                       long charsCount,
-                       long newlinePrefixGeomLength,
-                       long newlineSuffixGeomLength,
-                       long maxLineLength) {
-      this.length = length;
-      this.geometricLength = geometricLength;
-      this.newlinesCounts = linesCount;
-      this.charsCount = charsCount;
-      this.newlinePrefixGeomLength = newlinePrefixGeomLength;
-      this.newlineSuffixGeomLength = newlineSuffixGeomLength;
-      this.maxLineLength = maxLineLength;
-    }
-
-    public TextMetrics() {
-      this.length = 0;
-      this.geometricLength = 0;
-      this.newlinesCounts = 0;
-      this.charsCount = 0;
-      this.newlinePrefixGeomLength = 0;
-      this.newlineSuffixGeomLength = 0;
-      this.maxLineLength = 0;
-    }
-
-    public void merge(TextMetrics other){
-      long length = this.length + other.length;
-      long geomLength = this.geometricLength + other.geometricLength;
-      long linesCount = this.newlinesCounts + other.newlinesCounts;
-      long charsCount = this.charsCount + other.charsCount;
-      long newlinePrefixGeomLength = this.newlinesCounts == 0
-                                     ? this.newlinePrefixGeomLength + other.newlinePrefixGeomLength
-                                     : this.newlinePrefixGeomLength;
-      long maxLineLength = Math.max(Math.max(this.maxLineLength, other.maxLineLength),
-                                    this.newlineSuffixGeomLength + other.newlinePrefixGeomLength);
-      long newlineSuffixGeomLength = other.newlinesCounts == 0
-                                     ? this.newlineSuffixGeomLength + other.newlineSuffixGeomLength
-                                     : other.newlineSuffixGeomLength;
-      this.length = length;
-      this.geometricLength = geomLength;
-      this.newlinesCounts = linesCount;
-      this.charsCount = charsCount;
-      this.newlinePrefixGeomLength = newlinePrefixGeomLength;
-      this.newlineSuffixGeomLength = newlineSuffixGeomLength;
-      this.maxLineLength = maxLineLength;
-    }
-
-    public TextMetrics add(TextMetrics other) {
-      TextMetrics metrics = new TextMetrics(this.length,
-                                            this.geometricLength,
-                                            this.newlinesCounts,
-                                            this.charsCount,
-                                            this.newlinePrefixGeomLength,
-                                            this.newlineSuffixGeomLength,
-                                            maxLineLength);
-      metrics.merge(other);
-      return metrics;
-    }
-
-    @Override
-    public String toString() {
-      return "TextMetrics{" +
-             "length=" + length +
-             ", geometricLength=" + geometricLength +
-             ", newlinesCounts=" + newlinesCounts +
-             ", charsCount=" + charsCount +
-             ", newlinePrefixGeomLength=" + newlinePrefixGeomLength +
-             ", newlineSuffixGeomLength=" + newlineSuffixGeomLength +
-             ", maxLineLength=" + maxLineLength +
-             '}';
-    }
-  }
+public class TextImpl {
 
   public enum OffsetKind {
     CodePoints,
@@ -465,21 +382,7 @@ public class Text {
     return loc;
   }
 
-  public static String text(Rope.Zipper<TextMetrics, String> loc, int length) {
-    return reduceText(loc, length, new StringBuilder(), SB_REDUCER).toString();
-  }
-
-  public interface TextReducer<Acc> {
-    Acc rf(Acc acc, String leaf, int from, int to);
-  }
-
-  public static final TextReducer<StringBuilder> SB_REDUCER = (stringBuilder, leaf, from, to) -> {
-    stringBuilder.append(leaf, from, to);
-    return stringBuilder;
-  };
-
-
-  public static Rope.Zipper<TextMetrics, String> consumeText(Rope.Zipper<TextMetrics, String> loc, int length, StringBuilder sb) {
+  public static Rope.Zipper<TextMetrics, String> consumeText(Rope.Zipper<TextMetrics, String> loc, int length, TextConsumer consumer) {
     if (loc == null) {
       throw new IllegalArgumentException();
     }
@@ -499,7 +402,7 @@ public class Text {
         int end = (int)Math.min(Rope.metrics(loc).length, start + length);
         int charsStart = chunk.offsetByCodePoints(0, start);
         int charsEnd = chunk.offsetByCodePoints(0, end);
-        sb.append(chunk, charsStart, charsEnd);
+        consumer.consume(chunk, charsStart, charsEnd);
         length -= (end - start);
         if (length > 0) {
           loc = Rope.next(loc);
@@ -508,136 +411,6 @@ public class Text {
           return loc;
         }
       }
-    }
-  }
-
-  public static <Acc> Acc reduceText(Rope.Zipper<TextMetrics, String> loc, int length, Acc init, TextReducer<Acc> rf) {
-    if (loc == null) {
-      throw new IllegalArgumentException();
-    }
-    if (length == 0) {
-      return init;
-    }
-    Acc acc = init;
-    while (true) {
-      assert loc != null;
-      if (Rope.isBranch(loc)) {
-        loc = Rope.downLeft(loc);
-      }
-      else {
-        long i = offset(loc);
-        String chunk = Rope.data(loc);
-        long chunkOffset = nodeOffset(loc);
-        int start = (int)(i - chunkOffset);
-        int end = (int)Math.min(Rope.metrics(loc).length, start + length);
-        int charsStart = chunk.offsetByCodePoints(0, start);
-        int charsEnd = chunk.offsetByCodePoints(0, end);
-        acc = rf.rf(acc, chunk, charsStart, charsEnd);
-        length -= (end - start);
-        if (length > 0) {
-          loc = Rope.next(loc);
-        }
-        else {
-          return acc;
-        }
-      }
-    }
-  }
-
-  public static class Sequence implements CharSequence {
-
-    Rope.Tree<TextMetrics, String> root;
-    Rope.Zipper<TextMetrics, String> zipper;
-    final int fromChar, toChar;
-
-    public Sequence(Rope.Tree<TextMetrics, String> root, int from, int to) {
-      if (from < 0 || to > root.metrics.charsCount)
-        throw new IllegalArgumentException("from " + from + ", to " + to + ", total " + root.metrics.charsCount);
-
-      this.root = root;
-      this.fromChar = from;
-      this.toChar = to;
-      Rope.Zipper<TextMetrics, String> z = Rope.toTransient(zipper(root));
-      this.zipper = Rope.scan(z, byCharOffsetExclusive(from));
-    }
-
-    @SuppressWarnings("unused")
-    public Sequence(Rope.Tree<TextMetrics, String> root) {
-      this(root, 0, (int)(root.metrics).charsCount);
-    }
-
-    @Override
-    public int length() {
-      return toChar - fromChar;
-    }
-
-    @Override
-    public char charAt(int index) {
-      if (index > toChar - fromChar || index < 0)
-        throw new IndexOutOfBoundsException("index:" + index + ", from:" + fromChar + ", to:" + toChar);
-
-      int absoluteCharOffset = fromChar + index;
-      int nodeCharOffset = (int)nodeCharOffset(zipper);
-      String currentChunk = Rope.data(zipper);
-      
-      if (absoluteCharOffset < nodeCharOffset) {
-        Rope.Zipper<TextMetrics, String> rootLoc = Rope.toTransient(zipper(root));
-        Rope.Zipper<TextMetrics, String> offsetZipper = Rope.scan(rootLoc, byCharOffsetExclusive(absoluteCharOffset));
-        assert offsetZipper != null;
-        this.zipper = offsetZipper;
-        String newChunk = Rope.data(offsetZipper);
-        return newChunk.charAt(absoluteCharOffset - (int) nodeCharOffset(offsetZipper));
-      }
-      else if (absoluteCharOffset < nodeCharOffset + currentChunk.length()) {
-        return currentChunk.charAt(absoluteCharOffset - nodeCharOffset);
-      }
-      else {
-        Rope.Zipper<TextMetrics, String> offsetLoc = Rope.scan(zipper, byCharOffsetExclusive(absoluteCharOffset));
-        assert offsetLoc != null;
-        this.zipper = offsetLoc;
-        String newChunk = Rope.data(offsetLoc);
-        return newChunk.charAt(absoluteCharOffset - (int)nodeCharOffset(offsetLoc));
-      }
-    }
-
-    @Override
-    public CharSequence subSequence(int start, int end) {
-      int length = toChar - fromChar;
-      if (start > length || end > length)
-        throw new IndexOutOfBoundsException("start " + start + ", end " + end + ", length " + length);
-      if (start > end)
-        throw new IllegalArgumentException("start " + start + " > end " + end);
-
-      return new Sequence(root, fromChar + start, fromChar + end);
-    }
-
-    @Override
-    public String toString() {
-      Rope.Zipper<TextMetrics, String> fromLoc = scanToCharOffset(zipper(root), fromChar);
-      Rope.Zipper<TextMetrics, String> toLoc = scanToCharOffset(fromLoc, toChar);
-      return text(fromLoc, (int)(offset(toLoc) - offset(fromLoc)));
-    }
-
-    public static boolean contentEquals(CharSequence one, CharSequence another) {
-      if (one instanceof Sequence && another instanceof Sequence){
-        Sequence o = (Sequence) one;
-        Sequence a = (Sequence) another;
-        if (o.root == a.root && o.fromChar == a.fromChar && o.toChar == a.toChar){
-          return true;
-        }
-        // TODO fast path : check if leafs are identical
-      }
-
-      int n = one.length();
-      if (n != another.length()) {
-        return false;
-      }
-      for (int i = 0; i < n; i++) {
-        if (one.charAt(i) != another.charAt(i)) {
-          return false;
-        }
-      }
-      return true;
     }
   }
 

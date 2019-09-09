@@ -38,7 +38,7 @@ public class Edit {
   }
 
   public static class Retain {
-    final long count;
+    public final long count;
 
     public Retain(long count) {
       this.count = count;
@@ -67,7 +67,7 @@ public class Edit {
 
     public static final Delete NOOP = new Delete("");
 
-    final String text;
+    public final String text;
 
     public Delete(String text) {
       this.text = text;
@@ -96,7 +96,7 @@ public class Edit {
 
     public static final Insert NOOP = new Insert("");
 
-    final String text;
+    public final String text;
 
     public Insert(String text) {
       this.text = text;

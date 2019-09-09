@@ -1,11 +1,11 @@
-package andel.intervals;
+package andel.impl.intervals;
 
 import java.util.*;
 
-import andel.Interval;
-import andel.Intervals;
-import andel.IntervalsIterator;
-import andel.util.LongArrayList;
+import andel.intervals.Interval;
+import andel.intervals.Intervals;
+import andel.intervals.IntervalsIterator;
+import andel.impl.util.LongArrayList;
 import io.lacuna.bifurcan.IntMap;
 
 
@@ -15,6 +15,7 @@ public class Impl {
   private final static long OPEN_ROOT_ID = -1;
   private final static long CLOSED_ROOT_ID = -2;
   private final static long FIRST_ID = -3;
+  public static final long MAX_VALUE = Long.MAX_VALUE / 2 - 1;
 
   /*
    * we employ two separate trees to store markers with greedy and not greedy start
@@ -30,8 +31,6 @@ public class Impl {
     public final IntMap<Long> parentsMap;
     public final long nextInnerId;
 
-    public static final long MAX_VALUE = Long.MAX_VALUE / 2 - 1;
-
     public IntervalsImpl(int maxChildren, Node openRoot, Node closedRoot, IntMap<Long> parentsMap, long nextId) {
       this.maxChildren = maxChildren;
       this.openRoot = openRoot;
@@ -46,34 +45,34 @@ public class Impl {
     }
 
     @Override
-      public Interval<T> findById(long id) {
-          return Impl.getById(this, id);
-      }
+    public Interval<T> findById(long id) {
+      return Impl.getById(this, id);
+    }
 
-      @Override
-      public Intervals<T> removeByIds(Iterable<Long> ids) {
-          return Impl.remove(this, ids);
-      }
+    @Override
+    public Intervals<T> removeByIds(Iterable<Long> ids) {
+      return Impl.remove(this, ids);
+    }
 
-      @Override
-      public IntervalsIterator<T> query(long start, long end) {
-          return Impl.query(this, start, end);
-      }
+    @Override
+    public IntervalsIterator<T> query(long start, long end) {
+      return Impl.query(this, start, end);
+    }
 
-      @Override
-      public IntervalsIterator<T> queryReverse(long start, long end) {
-          return Impl.queryReverse(this, start, end);
-      }
+    @Override
+    public IntervalsIterator<T> queryReverse(long start, long end) {
+      return Impl.queryReverse(this, start, end);
+    }
 
-      @Override
-      public Intervals<T> expand(long offset, long length) {
-          return Impl.expand(this, offset, length);
-      }
+    @Override
+    public Intervals<T> expand(long offset, long length) {
+      return Impl.expand(this, offset, length);
+    }
 
-      @Override
-      public Intervals<T> collapse(long offset, long length) {
-          return Impl.collapse(this, offset, length);
-      }
+    @Override
+    public Intervals<T> collapse(long offset, long length) {
+      return Impl.collapse(this, offset, length);
+    }
   }
 
   public static <T> IntervalsImpl<T> empty(int maxChildren) {
@@ -351,7 +350,7 @@ public class Impl {
       return i;
     }
 
-    public static <T> Zipper insert (Zipper z, long from, long to, boolean closedLeft, boolean closedRight, T data){
+    public static <T> Zipper insert(Zipper z, long from, long to, boolean closedLeft, boolean closedRight, T data) {
       return insert(z, --z.editingContext.nextId, from, to, closedLeft, closedRight, data);
     }
 
@@ -688,10 +687,10 @@ public class Impl {
     @Override
     public IntervalsImpl<T> commit() {
       return new IntervalsImpl<>(this.editingContext.maxChildren,
-                             Zipper.root(this.openZipper),
-                             Zipper.root(this.closedZipper),
-                             editingContext.parentsMap.forked(),
-                             editingContext.nextId);
+                                 Zipper.root(this.openZipper),
+                                 Zipper.root(this.closedZipper),
+                                 editingContext.parentsMap.forked(),
+                                 editingContext.nextId);
     }
   }
 
@@ -776,26 +775,29 @@ public class Impl {
     }
   }
 
-  public static Zipper skipToOffset(Zipper z, long offset){
-    for (int i = z.idx; i < z.starts.size(); ++i){
-      if (z.starts.get(i) + z.delta >= offset){
-        if (Zipper.isBranch(z)){
+  public static Zipper skipToOffset(Zipper z, long offset) {
+    for (int i = z.idx; i < z.starts.size(); ++i) {
+      if (z.starts.get(i) + z.delta >= offset) {
+        if (Zipper.isBranch(z)) {
           Zipper down = Zipper.downLeft(z);
           return down == null ? z : skipToOffset(down, offset);
-        } else {
+        }
+        else {
           z.idx = i - 1;
           return z;
         }
       }
     }
-    if (z.hasRightCousin){
+    if (z.hasRightCousin) {
       return skipToOffset(Zipper.up(z), offset);
-    } else {
+    }
+    else {
       z.idx = z.starts.size() - 1;
-      if (Zipper.isBranch(z)){
+      if (Zipper.isBranch(z)) {
         Zipper down = Zipper.downLeft(z);
         return down == null ? z : skipToOffset(down, offset);
-      } else {
+      }
+      else {
         return z;
       }
     }
@@ -846,6 +848,8 @@ public class Impl {
   }
 
   public static <T> IntervalsIterator<T> query(IntervalsImpl<T> tree, long from, long to) {
+    from = Math.min(MAX_VALUE, from);
+    to = Math.min(MAX_VALUE, to);
     return new MergingIterator<>(
       new ForwardIterator<>(Zipper.create(tree.openRoot, null, true), from * 2 - 1, to * 2),
       new ForwardIterator<>(Zipper.create(tree.closedRoot, null, false), from * 2 - 1, to * 2),
@@ -854,6 +858,8 @@ public class Impl {
 
   public static <T> IntervalsIterator<T> queryReverse(IntervalsImpl<T> tree, long from, long to) {
     assert from < to;
+    from = Math.min(MAX_VALUE, from);
+    to = Math.min(MAX_VALUE, to);
     return new MergingIterator<>(
       new BackwardIterator<>(Zipper.create(tree.openRoot, null, true), from * 2 - 1, to * 2),
       new BackwardIterator<>(Zipper.create(tree.closedRoot, null, false), from * 2 - 1, to * 2),
@@ -894,10 +900,10 @@ public class Impl {
       return tree;
     }
     return new IntervalsImpl<>(tree.maxChildren,
-                           expand(tree.openRoot, start * 2, len * 2),
-                           expand(tree.closedRoot, start * 2, len * 2),
-                           tree.parentsMap,
-                           tree.nextInnerId);
+                               expand(tree.openRoot, start * 2, len * 2),
+                               expand(tree.closedRoot, start * 2, len * 2),
+                               tree.parentsMap,
+                               tree.nextInnerId);
   }
 
   private static IntMap<Long> extinct(IntMap<Long> parentsMap, long id, Object child) {
@@ -1021,10 +1027,10 @@ public class Impl {
     Node closedRoot = shrinkTree(ctx, CLOSED_ROOT_ID, remove(ctx, tree.closedRoot, CLOSED_ROOT_ID, deletionSubtree));
 
     return new IntervalsImpl<>(tree.maxChildren,
-                           openRoot,
-                           closedRoot,
-                           ctx.parentsMap.forked(),
-                           ctx.nextId);
+                               openRoot,
+                               closedRoot,
+                               ctx.parentsMap.forked(),
+                               ctx.nextId);
   }
 
   static LongArrayList resolvePath(IntMap<Long> parents, long id) {
@@ -1122,5 +1128,4 @@ public class Impl {
     }
     return m;
   }
-
 }

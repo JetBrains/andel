@@ -1,59 +1,58 @@
 (ns andel.text
   (:refer-clojure :exclude [transient persistent!])
-  (:import [andel Text Text$Sequence]
-           [andel Rope Rope$Zipper Rope$Tree]
+  (:import [andel.text Text TextZipper]
            [java.lang CharSequence]))
 
 (defn codepoints-count ^long [^String s]
   (.codePointCount s 0 (.length s)))
 
-(defn transient [zipper]
-  (Rope/toTransient zipper))
+(defn transient ^TextZipper [^TextZipper zipper]
+  (.asTransient zipper))
 
-(defn persistent! [zipper]
-  (Rope/toPersistent zipper))
+(defn persistent! ^TextZipper [^TextZipper zipper]
+  (.asPersistent zipper))
 
-(defn make-text [s]
+(defn make-text ^Text [^String s]
   (Text/makeText s))
 
-(defn zipper [tree]
-  (Text/zipper tree))
+(defn zipper ^TextZipper [^Text tree]
+  (.zipper tree))
 
-(defn root [zipper]
-  (Text/root zipper))
+(defn root ^Text [^TextZipper zipper]
+  (.makeText zipper))
 
-(defn offset ^long [zipper]
-  (Text/offset zipper))
+(defn offset ^long [^TextZipper zipper]
+  (.codePointsOffset zipper))
 
-(defn geom-offset ^long [zipper]
-  (Text/geomOffset zipper))
+(defn geom-offset ^long [^TextZipper zipper]
+  (.geomOffset zipper))
 
-(defn line ^long [zipper]
-  (Text/line zipper))
+(defn line ^long [^TextZipper zipper]
+  (.lineNumber zipper))
 
-(defn char-offset ^long [zipper]
-  (Text/charOffset zipper))
+(defn char-offset ^long [^TextZipper zipper]
+  (.charOffset zipper))
 
-(defn scan-to-offset [zipper ^long i]
-  (Text/scanToOffset zipper i))
+(defn scan-to-offset [^TextZipper zipper ^long i]
+  (.scanToCodepoint zipper i))
 
-(defn scan-to-geom-offset [zipper ^long i]
-  (Text/scanToGeomOffset zipper i))
+(defn scan-to-geom-offset [^TextZipper zipper ^long i]
+  (.scanToGeomOffset zipper i))
 
-(defn scan-to-char-offset [zipper ^long i]
-  (Text/scanToCharOffset zipper i))
+(defn scan-to-char-offset [^TextZipper zipper ^long i]
+  (.scanToCharOffset zipper i))
 
-(defn retain [zipper ^long l]
-  (Text/retain zipper l))
+(defn retain [^TextZipper zipper ^long l]
+  (.retain zipper l))
 
-(defn scan-to-line-start [zipper ^long n]
-  (Text/scanToLineStart zipper n))
+(defn scan-to-line-start [^TextZipper zipper ^long n]
+  (.scanToLineStart zipper n))
 
-(defn text-length ^long [t]
-  (Text/length t))
+(defn text-length ^long [^Text t]
+  (.codePointsCount t))
 
-(defn lines-count ^long [t]
-  (Text/linesCount t))
+(defn lines-count ^long [^Text t]
+  (.linesCount t))
 
 (defn distance-to-EOL ^long [loc]
   (let [t (root loc)]
@@ -63,37 +62,38 @@
                 (offset loc))))
       (- (text-length t) (offset loc)))))
 
-(defn text-geom-length ^long [^Rope$Tree t]
-  (.-geometricLength ^andel.Text$TextMetrics (.-metrics t)))
+(defn chars-count ^long [^Text t]
+  (.charsCount t))
 
-(defn chars-count [t]
-  (Text/charsCount t))
+(defn text ^String [^TextZipper zipper ^long l]
+  (.text zipper l))
 
-(defn text ^String [zipper ^long l]
-  (Text/text zipper l))
-
-(defn consume-text [zipper ^long l sb]
-  (Text/consumeText zipper l sb))
+(defn consume-text [^TextZipper zipper ^long l consumer]
+  (if (instance? StringBuilder consumer)
+    (.consume zipper l (reify andel.text.TextConsumer
+                              (consume [_ str from to]
+                                       (.append ^StringBuilder consumer str from to))))
+    (.consume zipper l consumer)))
 
 (defn as-string [text-tree]
-  (Text/text (Text/zipper text-tree) (Text/length text-tree)))
+  (text (zipper text-tree) (text-length text-tree)))
 
-(defn insert [zipper ^String s]
-  (Text/insert zipper s))
+(defn insert [^TextZipper zipper ^String s]
+  (.insert zipper s))
 
-(defn delete [zipper ^long l]
-  (Text/delete zipper l))
+(defn delete [^TextZipper zipper ^long l]
+  (.delete zipper l))
 
-(defn text-range [tree ^long from ^long to]
+(defn text-range [^Text tree ^long from ^long to]
   (assert (<= from to) {:from from :to to})
   (if (= from to)
     ""
-    (-> (Text/zipper tree)
-        (Text/scanToOffset from)
-        (Text/text (- to from)))))
+    (-> (zipper tree)
+        (scan-to-offset from)
+        (text (- to from)))))
 
-(defn max-line-length ^long [text]
-  (Text/maxLineLength text))
+(defn max-line-length ^long [^Text text]
+  (.maxLineLength text))
 
 (defn scan-to-line-end [loc]
   (let [offset (offset loc)
@@ -103,7 +103,8 @@
 (defn skip-columns [loc ^long cols]
   (let [geom (geom-offset loc)
         cur-line (line loc)
-        loc' (scan-to-geom-offset loc (min (+ geom cols) (text-geom-length (root loc))))]
+        text-geom-len (.-geometricLength ^andel.impl.text.TextMetrics (.-metrics (.-rope (root loc))))
+        loc' (scan-to-geom-offset loc (min (+ geom cols) text-geom-len))]
     (if (= cur-line (line loc'))
       loc'
       (scan-to-line-end loc))))
@@ -114,10 +115,10 @@
     (- (geom-offset loc) (geom-offset start-loc))))
 
 (defn ^CharSequence text->char-seq
-  ([t from to]
-   (Text$Sequence. t from to))
-  ([t]
-   (Text$Sequence. t)))
+  ([^Text t from to]
+   (.charSequence t from to))
+  ([^Text t]
+   (.charSequence t)))
 
 (defn offset->char-offset ^long [text ^long offset]
   (-> (zipper text)
@@ -136,7 +137,6 @@
   (-> (zipper text)
       (scan-to-offset offset)
       (line)))
-
 
 (defn play-operation [text-tree operation]
   (root

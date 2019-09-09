@@ -3,28 +3,7 @@
             [andel.utils :as utils]
             [andel.text :as text]
             [andel.intervals :as intervals]
-            [clojure.spec.alpha :as s])
-  (:import [andel Rope$Tree]))
-
-(s/def :andel/tree #(instance? Rope$Tree %))
-(s/def :andel/text :andel/tree)
-(s/def :andel/markup any?)
-(s/def :andel/lexer any?)
-(s/def :andel/document (s/keys :req [:andel/text
-                                     :andel/markup
-                                     :andel/lexer]))
-(s/def :andel/widgets (s/map-of nat-int? map?))
-
-(defn make-editor-state []
-  {:document {:text (text/make-text "")
-              :markup intervals/empty-tree
-              :error-stripes intervals/empty-tree
-              :line-markers intervals/empty-tree}
-   :editor {:caret {:offset 0 :v-col 0}
-            :selection [0 0]
-            :widgets {}
-            :clipboard {:content nil :timestamp 0}}
-   :sibling-editors {}})
+            [clojure.spec.alpha :as s]))
 
 (defn- edit-at-offset
   [{:keys [document] :as state} offset f]

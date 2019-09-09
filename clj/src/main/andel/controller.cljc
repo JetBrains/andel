@@ -123,7 +123,7 @@
               :caret caret'
               :selection [caret-offset' caret-offset'])
       (let [cursor (cursor/cursor text caret-offset')
-            selection' (if (whitespace? (cursor/char cursor))
+            selection' (if (whitespace? (cursor/codepoint cursor))
                          selection
                          (let [[c-start _] (cursor/backward-while cursor #(not (stop-symbol? %)))
                                [c-end _] (cursor/forward-while cursor #(not (stop-symbol? %)))]
@@ -181,20 +181,24 @@
         caret-offset (core/caret-offset state)]
     (if (not= caret-offset text-len)
       (let [cursor (cursor/cursor text caret-offset)
-            char (cursor/char cursor)]
+            char (cursor/codepoint cursor)]
         (cond
           (whitespace? char)
           (let [[word-begin-cursor end-of-text?] (cursor/forward-while cursor whitespace?)
-                delta (cursor/distance cursor word-begin-cursor)]
-            (cond-> delta end-of-text? inc))
+                delta (- (cursor/offset word-begin-cursor) (cursor/offset cursor))]
+            (if end-of-text?
+              (inc delta)
+              delta))
           (stop-symbol? char)
           1
           :else
           (let [[word-begin-cursor end1?] (cursor/forward-while cursor whitespace?)
                 [word-end-cursor end2?] (cursor/forward-while word-begin-cursor (complement stop-symbol?))
                 [next-word-start-cursor end3?] (cursor/forward-while word-end-cursor whitespace?)
-                delta (cursor/distance cursor next-word-start-cursor)]
-            (cond-> delta (or end1? end2? end3?) inc))))
+                delta (- (cursor/offset next-word-start-cursor) (cursor/offset cursor))]
+            (if (or end1? end2? end3?)
+              (inc delta)
+              delta))))
       0)))
 
 (defn prev-word-delta [state]
@@ -202,17 +206,19 @@
         caret-offset (core/caret-offset state)]
     (if (< 0 caret-offset)
       (let [cursor (cursor/cursor text (dec caret-offset))
-            char (cursor/char cursor)]
+            char (cursor/codepoint cursor)]
         (cond
           (and (stop-symbol? char)
                (not (whitespace? char)))
           -1
           :else
           (let [[word-end-cursor end1?] (cursor/backward-while cursor tab-or-space?)
-                found-newline? (= \newline (cursor/char word-end-cursor))
+                found-newline? (= \newline (cursor/codepoint word-end-cursor))
                 [word-begin-cursor end2?] (cursor/backward-while word-end-cursor (complement stop-symbol?))
-                delta (- (cursor/distance cursor word-begin-cursor))]
-            (cond-> delta (or end1? end2? found-newline?) dec))))
+                delta (- (cursor/offset word-end-cursor) (cursor/offset cursor))]
+            (if (or end1? end2? found-newline?)
+              (dec delta)
+              delta))))
       0)))
 
 (defn delete-word-forward [state]

@@ -3,7 +3,7 @@
             [clojure.test.check.properties :as prop]
             [clojure.test.check :as tc]
             [clojure.test :refer :all]
-            [andel.text :as text]
+            [andel.impl.text :as text]
             [andel.cursor :as cursor])
   (:import [andel Cursor$ImmutableCursor Cursor$TransientCursor Cursor Text]))
 

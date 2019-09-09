@@ -1,7 +1,7 @@
 (ns andel.andel-test
   (:require [clojure.test :refer :all]
             [andel.core :as core]
-            [andel.text :as text]
+            [andel.impl.text :as text]
             [andel.controller :refer :all]))
 
 (defn- chars->codepoints ^long [^String s ^long chars-offset]

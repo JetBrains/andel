@@ -1,7 +1,7 @@
-package andel.intervals;
+package andel.impl.intervals;
 
-import andel.Interval;
-import andel.IntervalsIterator;
+import andel.intervals.Interval;
+import andel.intervals.IntervalsIterator;
 
 import java.util.List;
 

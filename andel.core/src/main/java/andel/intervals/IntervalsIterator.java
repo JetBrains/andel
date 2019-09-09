@@ -1,8 +1,9 @@
-package andel;
+package andel.intervals;
 
-import andel.intervals.ListIterator;
-import andel.intervals.MergingIterator;
+import andel.impl.intervals.ListIterator;
+import andel.impl.intervals.MergingIterator;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
@@ -27,6 +28,14 @@ public interface IntervalsIterator<T> {
 
   static <T> IntervalsIterator<T> fromList(List<Interval<T>> list) {
     return new ListIterator<>(list);
+  }
+
+  default List<Interval<T>> toList(){
+    ArrayList<Interval<T>> list = new ArrayList<>();
+    while (this.next()){
+      list.add(this.interval());
+    }
+    return list;
   }
 
   static <T> IntervalsIterator<T> merge(IntervalsIterator<T> it1, IntervalsIterator<T> it2, Comparator<IntervalsIterator> comparator) {

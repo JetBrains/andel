@@ -1,4 +1,4 @@
-package andel;
+package andel.intervals;
 
 import java.util.Objects;
 

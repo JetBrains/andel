@@ -1,7 +1,9 @@
-package andel;
+package andel.intervals;
 
-import andel.intervals.Impl;
-import andel.text.TextRope;
+import andel.Component;
+import andel.Edit;
+import andel.text.Text;
+import andel.impl.intervals.Impl;
 
 public interface Intervals<T> extends Component {
 
@@ -29,7 +31,7 @@ public interface Intervals<T> extends Component {
   Intervals<T> collapse(long offset, long length);
 
   @Override
-  default Component edit(TextRope before, TextRope after, Edit edit) {
+  default Component edit(Text before, Text after, Edit edit) {
     long offset = 0;
     Intervals<T> res = this;
     for (Object op : edit.ops) {

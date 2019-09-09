@@ -1,6 +1,6 @@
-package andel.intervals;
+package andel.impl.intervals;
 
-import andel.IntervalsIterator;
+import andel.intervals.IntervalsIterator;
 
 import java.util.Comparator;
 
