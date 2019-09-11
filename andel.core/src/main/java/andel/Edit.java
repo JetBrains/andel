@@ -1,13 +1,59 @@
 package andel;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 
 public class Edit {
-  public final Object[] ops;
 
-  public Edit(Object[] ops) {
+  public static Edit insert(long offset, String text) {
+    return new Edit(new Object[]{new Edit.Retain(offset), new Edit.Insert(text)}, true);
+  }
+
+  public static Edit delete(long offset, String text) {
+    return new Edit(new Object[]{new Edit.Retain(offset), new Edit.Delete(text)}, true);
+  }
+
+  public static Edit fromList(List<Object> ops, boolean shiftExact)  {
+    return new Edit(ops.toArray(), shiftExact);
+  }
+
+  public static long shiftOffset(long offset, Edit edit, boolean shiftExact) {
+    long x = 0;
+    for (Object op : edit.ops) {
+      if (x < offset || (x == offset && shiftExact)) {
+        if (op instanceof Edit.Retain) {
+          x += ((Edit.Retain)op).count;
+        }
+        else if (op instanceof Edit.Delete) {
+          String text = ((Edit.Delete)op).text;
+          int delta = text.codePointCount(0, text.length());
+          x -= delta;
+          offset -= delta;
+        }
+        else if (op instanceof Edit.Insert) {
+          String text = ((Edit.Insert)op).text;
+          int delta = text.codePointCount(0, text.length());
+          x += delta;
+          offset += delta;
+        }
+        else {
+          throw new AssertionError();
+        }
+      }
+      else {
+        return offset;
+      }
+    }
+    return offset;
+  }
+
+  public final Object[] ops;
+  public final boolean shiftExactCarets;
+
+  public Edit(Object[] ops, boolean shiftExactCarets) {
     this.ops = ops;
+    this.shiftExactCarets = shiftExactCarets;
   }
 
   public static boolean isIdentity(Edit edit) {
@@ -121,7 +167,3 @@ public class Edit {
     }
   }
 }
-
-
-
-

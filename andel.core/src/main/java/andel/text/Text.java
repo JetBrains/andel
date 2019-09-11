@@ -1,5 +1,6 @@
 package andel.text;
 
+import andel.Edit;
 import andel.impl.text.TextImpl;
 import andel.impl.text.Rope;
 import andel.impl.text.RopeCharSequence;
@@ -57,5 +58,20 @@ public class Text {
   @Override
   public int hashCode() {
     return Objects.hash(rope);
+  }
+
+  public Text edit(Edit edit) {
+    TextZipper zipper = this.zipper().asTransient();
+    for (Object op : edit.ops) {
+      if (op instanceof Edit.Retain) {
+        zipper = zipper.retain(((Edit.Retain)op).count);
+      } else if (op instanceof Edit.Insert) {
+        zipper = zipper.insert(((Edit.Insert)op).text);
+      } else if (op instanceof Edit.Delete) {
+        String d = ((Edit.Delete)op).text;
+        zipper = zipper.delete(d.codePointCount(0, d.length()));
+      }
+    }
+    return zipper.makeText();
   }
 }
