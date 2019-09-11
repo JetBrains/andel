@@ -1,6 +1,6 @@
 package andel;
 
-enum Op {
+public enum Op {
   EDIT,
   INSERT_BEFORE_CARETS,
   INSERT_AFTER_CARETS,

@@ -19,22 +19,21 @@ public class Edit {
   }
 
   public static long shiftOffset(long offset, Edit edit, boolean shiftExact) {
-    long x = 0;
+    long editingOffset = 0;
     for (Object op : edit.ops) {
-      if (x < offset || (x == offset && shiftExact)) {
+      if (editingOffset < offset || (editingOffset == offset && shiftExact)) {
         if (op instanceof Edit.Retain) {
-          x += ((Edit.Retain)op).count;
+          editingOffset += ((Edit.Retain)op).count;
         }
         else if (op instanceof Edit.Delete) {
           String text = ((Edit.Delete)op).text;
           int delta = text.codePointCount(0, text.length());
-          x -= delta;
-          offset -= delta;
+          offset = Math.max(offset - delta, editingOffset);
         }
         else if (op instanceof Edit.Insert) {
           String text = ((Edit.Insert)op).text;
           int delta = text.codePointCount(0, text.length());
-          x += delta;
+          editingOffset += delta;
           offset += delta;
         }
         else {
