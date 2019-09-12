@@ -110,10 +110,10 @@ public class Controller {
     for (Caret caret : editor.getCarets(composite).getCarets()) {
       Long count = caretIds.get(caret.id);
       if (count != null && count != 0) {
-        long from = caret.offset - count;
+        long from = Math.max(caret.offset - count, 0);
         long to = caret.offset;
         StringBuilder sb = new StringBuilder();
-        zipper = zipper.scanToCodepoint(from).consume(count, sb::append);
+        zipper = zipper.scanToCodepoint(from).consume(to - from, sb::append);
         ops.add(new Edit.Retain(from - lastOffset));
         ops.add(new Edit.Delete(sb.toString()));
         lastOffset = to;
@@ -128,13 +128,14 @@ public class Controller {
     List<Object> ops = new ArrayList<>();
     long lastOffset = 0;
     TextZipper zipper = composite.text.zipper().asTransient();
+    long codePointsCount = composite.text.codePointsCount();
     for (Caret caret : editor.getCarets(composite).getCarets()) {
       Long count = caretIds.get(caret.id);
       if (count != null && count != 0) {
         long from = caret.offset;
-        long to = caret.offset + count;
+        long to = Math.min(caret.offset + count, codePointsCount);
         StringBuilder sb = new StringBuilder();
-        zipper = zipper.scanToCodepoint(from).consume(count, sb::append);
+        zipper = zipper.scanToCodepoint(from).consume(to - from, sb::append);
         ops.add(new Edit.Retain(from - lastOffset));
         ops.add(new Edit.Delete(sb.toString()));
         lastOffset = to;
