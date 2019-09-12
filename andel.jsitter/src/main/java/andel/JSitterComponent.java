@@ -41,6 +41,7 @@ public class JSitterComponent implements Component {
         String s = ((Edit.Insert)op).text;
         int newBytesOffset = bytesOffset + (s.length() * 2);
         res.add(new jsitter.api.Edit(bytesOffset, bytesOffset, newBytesOffset));
+        bytesOffset = newBytesOffset;
       }
     }
     return res;
