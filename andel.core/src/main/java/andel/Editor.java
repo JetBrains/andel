@@ -3,31 +3,61 @@ package andel;
 import andel.carets.Carets;
 import io.lacuna.bifurcan.Map;
 
+import java.util.Objects;
+
 public class Editor {
 
   public static final Attr<Carets> CARETS = new Attr<>("CARETS");
 
   public final Map identities;
+  public final Composite composite;
 
-  public Editor(Map identities) {
+  public Editor(Map identities, Composite composite) {
     this.identities = identities;
+    this.composite = composite;
+  }
+
+  public Editor withComposite(Composite composite) {
+    return new Editor(this.identities, composite);
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    Editor editor = (Editor)o;
+    return Objects.equals(identities, editor.identities) &&
+           Objects.equals(composite, editor.composite);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(identities, composite);
   }
 
   @SuppressWarnings({"unchecked", "OptionalGetWithoutIsPresent"})
-  public <T extends Component> T get(Composite composite, Attr<T> attr) {
-    return (T)composite.components.get(identities.get(attr).get(), null);
+  public <T extends Component> T get(Attr<T> attr) {
+    return (T)this.composite.components.get(identities.get(attr).get(), null);
   }
 
   @SuppressWarnings({"unchecked", "OptionalGetWithoutIsPresent"})
-  public <T extends Component> Composite assoc(Composite composite, Attr<T> attr, T val) {
-    return composite.assoc(this.identities.get(attr).get(), val);
+  public <T extends Component> Editor assoc(Attr<T> attr, T val) {
+    return this.withComposite(this.composite.assoc(this.identities.get(attr).get(), val));
   }
 
-  public Carets getCarets(Composite composite) {
-    return this.get(composite, CARETS);
+  public Carets getCarets() {
+    return this.get(CARETS);
   }
 
-  public Composite putCarets(Composite composite, Carets carets) {
-    return this.assoc(composite, CARETS, carets);
+  public Editor putCarets(Carets carets) {
+    return this.assoc(CARETS, carets);
+  }
+
+  public Editor log(LogEntry entry) {
+    return this.withComposite(this.composite.log(entry));
+  }
+
+  public Editor edit(Edit edit) {
+    return this.withComposite(this.composite.edit(edit));
   }
 }

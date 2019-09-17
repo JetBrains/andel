@@ -9,8 +9,8 @@ import java.util.*;
 
 public class Controller {
 
-  private static ArrayList<Object> createCaretsInsertionOperation(Composite composite, Editor editor, Map<Object, String> insertions) {
-    Carets carets = editor.getCarets(composite);
+  private static ArrayList<Object> createCaretsInsertionOperation(Editor editor, Map<Object, String> insertions) {
+    Carets carets = editor.getCarets();
     long prevCaretOffset = 0;
     ArrayList<Object> ops = new ArrayList<>();
     for (Caret caret : carets.getCarets()) {
@@ -28,22 +28,26 @@ public class Controller {
     return composite.edit(edit).log(new LogEntry(Op.EDIT, edit));
   }
 
-  public static Composite insertBeforeCarets(Composite composite, Editor editor, Map<Object, String> insertions) {
-    ArrayList<Object> ops = createCaretsInsertionOperation(composite, editor, insertions);
-    return composite
-      .edit(new Edit(ops.toArray(), true))
-      .log(new LogEntry(Op.INSERT_BEFORE_CARETS, insertions));
+  public static Editor edit(Editor editor, Edit edit) {
+    return editor.withComposite(editor.composite.edit(edit).log(new LogEntry(Op.EDIT, edit)));
   }
 
-  public static Composite insertAfterCarets(Composite composite, Editor editor, Map<Object, String> insertions) {
-    ArrayList<Object> ops = createCaretsInsertionOperation(composite, editor, insertions);
-    return composite
-      .edit(new Edit(ops.toArray(), false))
-      .log(new LogEntry(Op.INSERT_AFTER_CARETS, insertions));
+  public static Editor insertBeforeCarets(Editor editor, Map<Object, String> insertions) {
+    ArrayList<Object> ops = createCaretsInsertionOperation(editor, insertions);
+    return editor.withComposite(editor.composite
+                                  .edit(new Edit(ops.toArray(), true))
+                                  .log(new LogEntry(Op.INSERT_BEFORE_CARETS, insertions)));
   }
 
-  public static Composite moveCarets(Composite composite, Editor editor, Map<Object, CaretMovement> movements) {
-    Carets carets = editor.getCarets(composite);
+  public static Editor insertAfterCarets(Editor editor, Map<Object, String> insertions) {
+    ArrayList<Object> ops = createCaretsInsertionOperation(editor, insertions);
+    return editor.withComposite(editor.composite
+                                  .edit(new Edit(ops.toArray(), false))
+                                  .log(new LogEntry(Op.INSERT_AFTER_CARETS, insertions)));
+  }
+
+  public static Editor moveCarets(Editor editor, Map<Object, CaretMovement> movements) {
+    Carets carets = editor.getCarets();
     List<Caret> caretsUpdate = new ArrayList<>();
     for (Map.Entry<Object, CaretMovement> entry : movements.entrySet()) {
       Caret caret = carets.getCaret(entry.getKey());
@@ -56,12 +60,12 @@ public class Controller {
     }
     caretsUpdate.sort(Carets.COMPARE_BY_OFFSET);
     return editor
-      .putCarets(composite, carets.merge(caretsUpdate))
+      .putCarets(carets.merge(caretsUpdate))
       .log(new LogEntry(Op.MOVE_CARETS, movements));
   }
 
-  public static Composite dropSelections(Composite composite, Editor editor, Iterable<Object> caretIds) {
-    Carets carets = editor.getCarets(composite);
+  public static Editor dropSelections(Editor editor, Iterable<Object> caretIds) {
+    Carets carets = editor.getCarets();
     List<Caret> caretsUpdate = new ArrayList<>();
     for (Object caretId : caretIds) {
       Caret caret = carets.getCaret(caretId);
@@ -73,22 +77,22 @@ public class Controller {
     }
     caretsUpdate.sort(Carets.COMPARE_BY_OFFSET);
     return editor
-      .putCarets(composite, carets.merge(caretsUpdate))
+      .putCarets(carets.merge(caretsUpdate))
       .log(new LogEntry(Op.DROP_SELECTIONS, caretIds));
   }
 
-  public static Composite addCaret(Composite composite, Editor editor, Caret caret) {
-    Carets carets = editor.getCarets(composite);
+  public static Editor addCaret(Editor editor, Caret caret) {
+    Carets carets = editor.getCarets();
     return editor
-      .putCarets(composite, carets.merge(Collections.singletonList(caret)))
+      .putCarets(carets.merge(Collections.singletonList(caret)))
       .log(new LogEntry(Op.ADD_CARET, caret));
   }
 
-  public static Composite deleteSelections(Composite composite, Editor editor, Set<Object> caretIds) {
-    Carets carets = editor.getCarets(composite);
+  public static Editor deleteSelections(Editor editor, Set<Object> caretIds) {
+    Carets carets = editor.getCarets();
     long prevCaretSelectionEnd = 0;
     List<Object> ops = new ArrayList<>();
-    TextZipper zipper = composite.text.zipper().asTransient();
+    TextZipper zipper = editor.composite.text.zipper().asTransient();
     for (Caret caret : carets.getCarets()) {
       if (caretIds.contains(caret.id) && caret.selectionStart != caret.selectionEnd) {
         ops.add(new Edit.Retain(caret.selectionStart - prevCaretSelectionEnd));
@@ -98,16 +102,16 @@ public class Controller {
         prevCaretSelectionEnd = caret.selectionEnd;
       }
     }
-    return composite
+    return editor
       .edit(new Edit(ops.toArray(), false))
       .log(new LogEntry(Op.DELETE_SELECTIONS, caretIds));
   }
 
-  public static Composite deleteBeforeCarets(Composite composite, Editor editor, Map<Object, Long> caretIds) {
+  public static Editor deleteBeforeCarets(Editor editor, Map<Object, Long> caretIds) {
     List<Object> ops = new ArrayList<>();
     long lastOffset = 0;
-    TextZipper zipper = composite.text.zipper().asTransient();
-    for (Caret caret : editor.getCarets(composite).getCarets()) {
+    TextZipper zipper = editor.composite.text.zipper().asTransient();
+    for (Caret caret : editor.getCarets().getCarets()) {
       Long count = caretIds.get(caret.id);
       if (count != null && count != 0) {
         long from = Math.max(caret.offset - count, 0);
@@ -119,17 +123,17 @@ public class Controller {
         lastOffset = to;
       }
     }
-    return composite
+    return editor
       .edit(new Edit(ops.toArray(), false))
       .log(new LogEntry(Op.DELETE_BEFORE_CARETS, caretIds));
   }
 
-  public static Composite deleteAfterCarets(Composite composite, Editor editor, Map<Object, Long> caretIds) {
+  public static Editor deleteAfterCarets(Editor editor, Map<Object, Long> caretIds) {
     List<Object> ops = new ArrayList<>();
     long lastOffset = 0;
-    TextZipper zipper = composite.text.zipper().asTransient();
-    long codePointsCount = composite.text.codePointsCount();
-    for (Caret caret : editor.getCarets(composite).getCarets()) {
+    TextZipper zipper = editor.composite.text.zipper().asTransient();
+    long codePointsCount = editor.composite.text.codePointsCount();
+    for (Caret caret : editor.getCarets().getCarets()) {
       Long count = caretIds.get(caret.id);
       if (count != null && count != 0) {
         long from = caret.offset;
@@ -141,7 +145,7 @@ public class Controller {
         lastOffset = to;
       }
     }
-    return composite
+    return editor
       .edit(new Edit(ops.toArray(), false))
       .log(new LogEntry(Op.DELETE_AFTER_CARETS, caretIds));
   }
