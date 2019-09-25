@@ -46,16 +46,21 @@ public class Controller {
                                   .log(new LogEntry(Op.INSERT_AFTER_CARETS, insertions)));
   }
 
+  private static long restrictToLength(long offset, long length) {
+    return Math.min(Math.max(0, offset), length);
+  }
+
   public static Editor moveCarets(Editor editor, Map<Object, CaretMovement> movements) {
     Carets carets = editor.getCarets();
     List<Caret> caretsUpdate = new ArrayList<>();
+    long codePointsCount = editor.composite.text.codePointsCount();
     for (Map.Entry<Object, CaretMovement> entry : movements.entrySet()) {
       Caret caret = carets.getCaret(entry.getKey());
       CaretMovement mv = entry.getValue();
       caretsUpdate.add(new Caret(caret.id,
-                                 caret.offset + mv.offsetDelta,
-                                 caret.selectionStart + mv.selectionStartDelta,
-                                 caret.selectionEnd + mv.selectionEndDelta,
+                                 restrictToLength(caret.offset + mv.offsetDelta, codePointsCount),
+                                 restrictToLength(caret.selectionStart + mv.selectionStartDelta, codePointsCount),
+                                 restrictToLength(caret.selectionEnd + mv.selectionEndDelta, codePointsCount),
                                  -1));
     }
     caretsUpdate.sort(Carets.COMPARE_BY_OFFSET);
