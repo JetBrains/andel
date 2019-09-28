@@ -1,4 +1,4 @@
-(ns andel.intervals
+(ns ^:lean-ns andel.intervals
   (:refer-clojure :exclude [remove])
   (:import [andel.intervals Intervals Interval IntervalsIterator]))
 

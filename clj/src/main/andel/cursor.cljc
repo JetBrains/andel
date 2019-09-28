@@ -1,4 +1,4 @@
-(ns andel.cursor
+(ns ^:lean-ns andel.cursor
   (:refer-clojure :exclude [next transient persistent!])
   (:import [andel.text Text Cursor]))
 

@@ -1,4 +1,4 @@
-(ns andel.text
+(ns ^:lean-ns andel.text
   (:refer-clojure :exclude [transient persistent!])
   (:import [andel.text Text TextZipper]
            [java.lang CharSequence]))

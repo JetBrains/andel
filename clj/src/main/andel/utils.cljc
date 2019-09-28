@@ -1,4 +1,4 @@
-(ns andel.utils
+(ns ^:lean-ns andel.utils
   (:require [andel.text :as text]
             [clojure.spec.alpha :as s]))
 

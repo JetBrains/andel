@@ -1,4 +1,4 @@
-(ns andel.core
+(ns ^:lean-ns andel.core
   (:require [clojure.core.async :as a]
             [andel.utils :as utils]
             [andel.text :as text]

@@ -1,4 +1,4 @@
-(ns andel.controller
+(ns ^:lean-ns andel.controller
   (:require [andel.utils :as utils]
             [andel.text :as text]
             [andel.cursor :as cursor]
