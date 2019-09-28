@@ -1,9 +1,7 @@
 (ns ^:lean-ns andel.core
-  (:require [clojure.core.async :as a]
-            [andel.utils :as utils]
+  (:require [andel.utils :as utils]
             [andel.text :as text]
-            [andel.intervals :as intervals]
-            [clojure.spec.alpha :as s]))
+            [andel.intervals :as intervals]))
 
 (defn- edit-at-offset
   [{:keys [document] :as state} offset f]
