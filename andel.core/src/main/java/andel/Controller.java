@@ -93,7 +93,7 @@ public class Controller {
       .log(new LogEntry(Op.ADD_CARET, caret));
   }
 
-  public static Editor deleteSelections(Editor editor, Set<Object> caretIds) {
+  public static Editor deleteSelectedText(Editor editor, Set<Object> caretIds) {
     Carets carets = editor.getCarets();
     long prevCaretSelectionEnd = 0;
     List<Object> ops = new ArrayList<>();
