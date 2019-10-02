@@ -25,7 +25,7 @@ public class SingleCaret implements Carets {
 
   @Override
   public Caret getCaret(Object id) {
-    if (id == this.caret.id) {
+    if (id.equals(this.caret.id)) {
       return this.caret;
     }
     else {
@@ -45,7 +45,7 @@ public class SingleCaret implements Carets {
         throw new AssertionError();
       }
       else {
-        if (c.id == this.caret.id) {
+        if (c.id.equals(this.caret.id)) {
           return new SingleCaret(c);
         }
         else {
