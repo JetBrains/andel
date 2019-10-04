@@ -7,7 +7,6 @@ import io.lacuna.bifurcan.Map;
 import java.util.Objects;
 import java.util.function.Function;
 
-
 public class Composite {
   public static final Attr<List<LogEntry>> LOG = new Attr<>("LOG");
 

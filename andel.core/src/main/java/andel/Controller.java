@@ -29,7 +29,9 @@ public class Controller {
   }
 
   public static Editor edit(Editor editor, Edit edit) {
-    return editor.withComposite(editor.composite.edit(edit).log(new LogEntry(Op.EDIT, edit)));
+    return editor.withComposite(editor.composite
+                                .edit(edit)
+                                .log(new LogEntry(Op.EDIT, edit)));
   }
 
   public static Editor insertBeforeCarets(Editor editor, Map<Object, String> insertions) {
