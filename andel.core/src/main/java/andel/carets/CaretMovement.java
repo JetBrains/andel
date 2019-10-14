@@ -21,6 +21,12 @@ public class CaretMovement {
         }
     }
 
+    public static CaretMovement expandSelection(Caret caret, long start, long end) {
+        return new CaretMovement(0,
+                                 start - caret.selectionStart,
+                                 end - caret.selectionEnd);
+    }
+
   public CaretMovement(long offsetDelta, long selectionStartDelta, long selectionEndDelta) {
     this.offsetDelta = offsetDelta;
     this.selectionStartDelta = selectionStartDelta;

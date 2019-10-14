@@ -37,7 +37,7 @@ public class SingleCaret implements Carets {
   public Carets merge(Iterable<Caret> carets) {
     Iterator<Caret> iterator = carets.iterator();
     if (!iterator.hasNext()) {
-      throw new AssertionError();
+      return this;
     }
     else {
       Caret c = iterator.next();
