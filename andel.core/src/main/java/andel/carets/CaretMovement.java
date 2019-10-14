@@ -7,6 +7,20 @@ public class CaretMovement {
   public final long selectionStartDelta;
   public final long selectionEndDelta;
 
+    public static CaretMovement move(Caret caret, long targetOffset, boolean extendSelection) {
+        if (extendSelection) {
+            return new CaretMovement(targetOffset - caret.offset,
+                                     targetOffset < caret.selectionStart ? targetOffset - caret.selectionStart : 0,
+                                     targetOffset > caret.selectionEnd ? targetOffset - caret.selectionEnd : 0);
+        } else {
+            assert caret.offset == caret.selectionStart &&
+                caret.offset == caret.selectionEnd;
+            return new CaretMovement(targetOffset - caret.offset,
+                                     targetOffset - caret.selectionStart,
+                                     targetOffset - caret.selectionEnd);
+        }
+    }
+
   public CaretMovement(long offsetDelta, long selectionStartDelta, long selectionEndDelta) {
     this.offsetDelta = offsetDelta;
     this.selectionStartDelta = selectionStartDelta;
