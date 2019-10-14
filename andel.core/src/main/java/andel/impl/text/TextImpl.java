@@ -389,6 +389,7 @@ public class TextImpl {
     if (length == 0) {
       return loc;
     }
+
     while (true) {
       assert loc != null;
       if (Rope.isBranch(loc)) {
@@ -408,6 +409,8 @@ public class TextImpl {
           loc = Rope.next(loc);
         }
         else {
+          loc = loc.copy();
+          loc.oacc = loc.acc.add(metricsTo(chunk, OffsetKind.Characters, charsEnd));
           return loc;
         }
       }
