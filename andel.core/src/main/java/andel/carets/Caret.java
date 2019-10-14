@@ -17,6 +17,10 @@ public class Caret {
     this.vCol = vCol;
   }
 
+    public boolean hasSelection() {
+        return this.selectionStart != this.selectionEnd;
+    }
+
   @Override
   public String toString() {
     return "Caret{" +
