@@ -35,6 +35,7 @@
   (and (some? it) (not (identical? it empty-iterator))))
 
 (defn merge-iterators
+  (^IntervalsIterator [it] it)
   (^IntervalsIterator [it1 it2]
    (cond
      (and (something? it1) (something? it2)) (IntervalsIterator/merge it1 it2 IntervalsIterator/FORWARD_COMPARATOR)
