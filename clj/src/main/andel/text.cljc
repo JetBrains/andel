@@ -15,6 +15,8 @@
 (defn make-text ^Text [^String s]
   (Text/makeText s))
 
+(def empty-text (Text/makeText ""))
+
 (defn zipper ^TextZipper [^Text tree]
   (.zipper tree))
 
