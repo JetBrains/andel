@@ -28,8 +28,22 @@
      (.query itree from to)
      empty-iterator)))
 
+(defn query-reverse
+  (^IntervalsIterator [itree]
+   (query-reverse itree 0 Long/MAX_VALUE))
+  (^IntervalsIterator [itree ^long from]
+   (query-reverse itree from Long/MAX_VALUE))
+  (^IntervalsIterator [^Intervals itree ^long from ^long to]
+   (if itree
+     (.queryReverse itree from to)
+     empty-iterator)))
+
 (defn query-all [^Intervals itree ^long from ^long to]
   (.toList (query itree from to)))
+
+(defn ii-first [^IntervalsIterator ii]
+  (when (.next ii)
+    ii))
 
 (defn- something? [it]
   (and (some? it) (not (identical? it empty-iterator))))

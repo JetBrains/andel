@@ -848,6 +848,7 @@ public class Impl {
   }
 
   public static <T> IntervalsIterator<T> query(IntervalsImpl<T> tree, long from, long to) {
+    assert from <= to;
     from = Math.min(MAX_VALUE, from);
     to = Math.min(MAX_VALUE, to);
     return new MergingIterator<>(
@@ -857,7 +858,7 @@ public class Impl {
   }
 
   public static <T> IntervalsIterator<T> queryReverse(IntervalsImpl<T> tree, long from, long to) {
-    assert from < to;
+    assert from <= to;
     from = Math.min(MAX_VALUE, from);
     to = Math.min(MAX_VALUE, to);
     return new MergingIterator<>(
