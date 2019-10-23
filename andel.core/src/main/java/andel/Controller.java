@@ -111,12 +111,12 @@ public class Controller {
     List<Object> ops = new ArrayList<>();
     TextZipper zipper = editor.composite.text.zipper().asTransient();
     for (Caret caret : carets.getCarets()) {
-      if (caretIds.contains(caret.id) && caret.selectionStart != caret.selectionEnd) {
-        ops.add(new Edit.Retain(caret.selectionStart - prevCaretSelectionEnd));
+      if (caretIds.contains(caret.id) && caret.hasSelection()) {
+        ops.add(new Edit.Retain(caret.selectionMin() - prevCaretSelectionEnd));
         StringBuilder sb = new StringBuilder();
-        zipper = zipper.scanToCodepoint(caret.selectionStart).consume(caret.selectionEnd - caret.selectionStart, sb::append);
+        zipper = zipper.scanToCodepoint(caret.selectionMin()).consume(caret.selectionMax() - caret.selectionMin(), sb::append);
         ops.add(new Edit.Delete(sb.toString()));
-        prevCaretSelectionEnd = caret.selectionEnd;
+        prevCaretSelectionEnd = caret.selectionMax();
       }
     }
     return editor

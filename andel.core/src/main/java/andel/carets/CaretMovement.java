@@ -11,11 +11,10 @@ public class CaretMovement {
   public static CaretMovement move(Caret caret, long targetOffset, boolean extendSelection, boolean keepVCol) {
     if (extendSelection) {
       return new CaretMovement(targetOffset - caret.offset,
-                               targetOffset < caret.selectionStart ? targetOffset - caret.selectionStart : 0,
-                               targetOffset > caret.selectionEnd ? targetOffset - caret.selectionEnd : 0,
+                               targetOffset - caret.selectionStart,
+                               0,
                                keepVCol);
-    }
-    else {
+    } else {
       assert caret.offset == caret.selectionStart &&
              caret.offset == caret.selectionEnd;
       return new CaretMovement(targetOffset - caret.offset,

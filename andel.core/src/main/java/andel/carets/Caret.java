@@ -48,4 +48,12 @@ public class Caret {
   public int hashCode() {
     return Objects.hash(id, offset, selectionStart, selectionEnd, vCol);
   }
+  
+  public long selectionMin() {
+    return Math.min(selectionStart, selectionEnd);
+  }
+  
+  public long selectionMax() {
+    return Math.max(selectionStart, selectionEnd);
+  }
 }
