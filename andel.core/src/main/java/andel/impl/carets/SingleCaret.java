@@ -1,6 +1,7 @@
 package andel.impl.carets;
 
 import andel.Component;
+import andel.Controller;
 import andel.Edit;
 import andel.carets.Caret;
 import andel.carets.Carets;
@@ -69,13 +70,12 @@ public class SingleCaret implements Carets {
   public Component edit(Text before, Text after, Edit edit) {
     if (this.caret.selectionStart == this.caret.selectionEnd) {
       long offsetPrime = Edit.shiftOffset(this.caret.offset, edit, true);
-      return new SingleCaret(new Caret(this.caret.id, offsetPrime, offsetPrime, offsetPrime, -1));
-    }
-    else {
+      return new SingleCaret(new Caret(this.caret.id, offsetPrime, offsetPrime, offsetPrime, after.offsetToGeomCol(offsetPrime)));
+    } else {
       long offsetPrime = Edit.shiftOffset(this.caret.offset, edit, this.caret.offset != this.caret.selectionEnd);
       long selectionStartPrime = Edit.shiftOffset(this.caret.selectionStart, edit, true);
       long selectionEndPrime = Edit.shiftOffset(this.caret.selectionEnd, edit, false);
-      return new SingleCaret(new Caret(this.caret.id, offsetPrime, selectionStartPrime, selectionEndPrime, -1));
+      return new SingleCaret(new Caret(this.caret.id, offsetPrime, selectionStartPrime, selectionEndPrime, after.offsetToGeomCol(offsetPrime)));
     }
   }
 

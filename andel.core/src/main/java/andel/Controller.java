@@ -53,13 +53,6 @@ public class Controller {
     return Math.min(Math.max(0, offset), length);
   }
   
-  private static long offsetToGeomCol(Text text, long offset) {
-    TextZipper offsetZ = text.zipper().scanToCodepoint(offset);
-    long line = offsetZ.lineNumber();
-    TextZipper lineStartZ = text.zipper().scanToLineStart(line);
-    return offsetZ.geomOffset() - lineStartZ.geomOffset();
-  }
-  
   public static Editor moveCarets(Editor editor, Map<Object, CaretMovement> movements) {
     Carets carets = editor.getCarets();
     List<Caret> caretsUpdate = new ArrayList<>();
@@ -73,7 +66,7 @@ public class Controller {
                                  offset,
                                  restrictToLength(caret.selectionStart + mv.selectionStartDelta, codePointsCount),
                                  restrictToLength(caret.selectionEnd + mv.selectionEndDelta, codePointsCount),
-                                 mv.keepVCol ? caret.vCol : offsetToGeomCol(text, offset)));
+                                 mv.keepVCol ? caret.vCol : text.offsetToGeomCol(offset)));
     }
     caretsUpdate.sort(Carets.COMPARE_BY_OFFSET);
     return editor

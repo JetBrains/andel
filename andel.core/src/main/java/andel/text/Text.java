@@ -46,6 +46,13 @@ public class Text {
   public TextZipper zipper() {
     return TextImpl.zipper(this.rope);
   }
+  
+  public long offsetToGeomCol(long offset) {
+    TextZipper offsetZ = zipper().scanToCodepoint(offset);
+    long line = offsetZ.lineNumber();
+    TextZipper lineStartZ = zipper().scanToLineStart(line);
+    return offsetZ.geomOffset() - lineStartZ.geomOffset();
+  }
 
   @Override
   public boolean equals(Object o) {
