@@ -14,7 +14,7 @@
    (update-in state [:editor :caret] drop-virtual-position (get-in state [:document :text])))
   ([caret text]
    (let [{:keys [line col]} (utils/offset->line-col (:offset caret) text)]
-     (assoc caret :v-col col))))
+     (assoc caret :vcol col))))
 
 (defn backspace [state]
   (let [selection (core/selection state)
@@ -71,16 +71,16 @@
                            (+ delta-offset)
                            (restrict-to-text-length text))))
 
-(defn translate-caret-verticaly [{v-col :v-col :as caret} text delta-line]
-  (let [{:keys [line col]} (utils/offset->line-col (core/caret->offset caret) text)
+(defn translate-caret-verticaly [caret text delta-line]
+  (let [{:keys [offset vcol]} caret
+        {:keys [line col]} (utils/offset->line-col offset text)
         to-line (+ line delta-line)]
-    (if (and (<= 0 to-line )
+    (if (and (<= 0 to-line)
              (< to-line (text/lines-count text)))
       (let [line-len (utils/line-length to-line text)
-            new-v-col (if (some? v-col) (max v-col col) col)
-            new-col (min line-len new-v-col)]
+            new-col  (min line-len vcol)]
         {:offset (utils/line-col->offset {:line to-line :col new-col} text)
-         :v-col new-v-col})
+         :vcol vcol})
       caret)))
 
 (def tab-or-space? #{(int \space) (int \tab)})
@@ -92,7 +92,7 @@
         {:keys [text]} document
         line-offset (utils/line->offset line text)
         caret-offset' (+ line-offset col)
-        caret' {:offset caret-offset' :v-col 0}
+        caret' {:offset caret-offset' :vcol 0}
         selection' (if selection?
                      (update-selection selection caret caret')
                      [caret-offset' caret-offset'])]
@@ -105,7 +105,7 @@
         {:keys [text]} document
         [line-start-offset line-end-offset] (utils/line->from-to-offsets line text)
         caret-offset' (+ line-start-offset col)
-        caret' {:offset caret-offset' :v-col 0}
+        caret' {:offset caret-offset' :vcol 0}
         selection' [line-start-offset (restrict-to-text-length (inc line-end-offset)
                                                                text)]]
     (update state :editor assoc
@@ -117,7 +117,7 @@
         {:keys [text]} document
         [line-start-offset line-end-offset] (utils/line->from-to-offsets line text)
         caret-offset' (+ line-start-offset col)
-        caret' {:offset caret-offset' :v-col 0}]
+        caret' {:offset caret-offset' :vcol 0}]
     (if (= caret-offset' (text/text-length text))
       (update state :editor assoc
               :caret caret'
@@ -136,7 +136,7 @@
 (defn set-caret-at-offset [{:keys [document editor] :as state} caret-offset' selection?]
   (let [text (:text document)
         {:keys [caret selection]} editor
-        caret' {:offset caret-offset' :v-col 0}
+        caret' {:offset caret-offset' :vcol 0}
         selection' (if selection?
                      (update-selection selection caret caret')
                      [caret-offset' caret-offset'])]

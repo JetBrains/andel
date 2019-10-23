@@ -3,6 +3,7 @@ package andel;
 import andel.carets.Caret;
 import andel.carets.CaretMovement;
 import andel.carets.Carets;
+import andel.text.Text;
 import andel.text.TextZipper;
 
 import java.util.*;
@@ -51,19 +52,28 @@ public class Controller {
   private static long restrictToLength(long offset, long length) {
     return Math.min(Math.max(0, offset), length);
   }
-
+  
+  private static long offsetToGeomCol(Text text, long offset) {
+    TextZipper offsetZ = text.zipper().scanToCodepoint(offset);
+    long line = offsetZ.lineNumber();
+    TextZipper lineStartZ = text.zipper().scanToLineStart(line);
+    return offsetZ.geomOffset() - lineStartZ.geomOffset();
+  }
+  
   public static Editor moveCarets(Editor editor, Map<Object, CaretMovement> movements) {
     Carets carets = editor.getCarets();
     List<Caret> caretsUpdate = new ArrayList<>();
-    long codePointsCount = editor.composite.text.codePointsCount();
+    Text text = editor.composite.text;
+    long codePointsCount = text.codePointsCount();
     for (Map.Entry<Object, CaretMovement> entry : movements.entrySet()) {
       Caret caret = carets.getCaret(entry.getKey());
       CaretMovement mv = entry.getValue();
+      long offset = restrictToLength(caret.offset + mv.offsetDelta, codePointsCount);
       caretsUpdate.add(new Caret(caret.id,
-                                 restrictToLength(caret.offset + mv.offsetDelta, codePointsCount),
+                                 offset,
                                  restrictToLength(caret.selectionStart + mv.selectionStartDelta, codePointsCount),
                                  restrictToLength(caret.selectionEnd + mv.selectionEndDelta, codePointsCount),
-                                 -1));
+                                 mv.keepVCol ? caret.vCol : offsetToGeomCol(text, offset)));
     }
     caretsUpdate.sort(Carets.COMPARE_BY_OFFSET);
     return editor
@@ -80,7 +90,7 @@ public class Controller {
                                  caret.offset,
                                  caret.offset,
                                  caret.offset,
-                                 -1));
+                                 caret.vCol));
     }
     caretsUpdate.sort(Carets.COMPARE_BY_OFFSET);
     return editor

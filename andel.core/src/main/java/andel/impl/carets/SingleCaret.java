@@ -78,4 +78,11 @@ public class SingleCaret implements Carets {
       return new SingleCaret(new Caret(this.caret.id, offsetPrime, selectionStartPrime, selectionEndPrime, -1));
     }
   }
+
+  @Override
+  public String toString() {
+    return "SingleCaret{" +
+           "caret=" + caret +
+           '}';
+  }
 }

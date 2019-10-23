@@ -17,9 +17,9 @@ public class Caret {
     this.vCol = vCol;
   }
 
-    public boolean hasSelection() {
-        return this.selectionStart != this.selectionEnd;
-    }
+  public boolean hasSelection() {
+    return this.selectionStart != this.selectionEnd;
+  }
 
   @Override
   public String toString() {
@@ -41,7 +41,7 @@ public class Caret {
            offset == caret.offset &&
            selectionStart == caret.selectionStart &&
            selectionEnd == caret.selectionEnd &&
-           vCol == vCol;
+           vCol == caret.vCol;
   }
 
   @Override
