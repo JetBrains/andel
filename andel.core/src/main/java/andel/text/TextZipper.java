@@ -68,7 +68,7 @@ public interface TextZipper {
   }
 
   default String text(long codePointsLength) {
-    StringBuilder sb = new StringBuilder();
+    StringBuilder sb = new StringBuilder((int) codePointsLength);
     this.consume(codePointsLength, sb::append);
     return sb.toString();
   }
