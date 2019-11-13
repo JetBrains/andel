@@ -1,8 +1,11 @@
 package andel.intervals;
 
+import java.util.Comparator;
 import java.util.Objects;
 
 public class Interval<T> {
+  public static final Comparator<Interval> CMP_ENDS = Comparator.comparingLong((i) -> i.to);
+  
   public long id;
   public long from;
   public long to;
@@ -39,6 +42,6 @@ public class Interval<T> {
 
   @Override
   public String toString() {
-    return "id=" + id + (closedLeft ? "[" : "(") + from + ", " + to + (closedRight ? "]" : ")");
+    return "id=" + id + " " + (closedLeft ? "[" : "(") + from + ", " + to + (closedRight ? "]" : ")" + " " + data);
   }
 }

@@ -1,6 +1,10 @@
 (ns ^:lean-ns andel.intervals
   (:refer-clojure :exclude [remove])
-  (:import [andel.intervals Intervals Interval IntervalsIterator]))
+  (:require
+    [andel.utils :refer [cond+]])
+  (:import
+    [java.util ArrayList PriorityQueue]
+    [andel.intervals Intervals Interval IntervalsIterator]))
 
 (def empty-tree (Intervals/empty))
 
@@ -64,3 +68,49 @@
 
 (defn find-marker-by-id ^Interval [^Intervals itree ^long id]
   (.findById itree id))
+
+(defn map-shredded [start end intervals visit]
+  (let [acc    (ArrayList.)
+        yield  (fn [^long from ^long to active]
+                 (let [from' (max from start)
+                       to'   (min to end)]
+                   (when (< from' to')
+                     (.add acc (visit from' to' active)))))
+        active (PriorityQueue. Interval/CMP_ENDS)]
+    (loop [pos   start
+           queue intervals]
+      (cond+
+        (and (empty? queue) (empty? active))
+        (yield pos end active)
+       
+        (>= pos end)
+        (yield pos end active)
+       
+        (empty? queue)
+        (let [^Interval first-active (first active)]
+          (yield pos (.-to first-active) active)
+          (.poll active)
+          (recur (.-to first-active) queue))
+        
+        :let [^Interval first-queue (first queue)]
+       
+        (empty? active)
+        (do
+          (yield pos (.-from first-queue) active)
+          (.add active first-queue)
+          (recur (.-from first-queue) (next queue)))
+       
+        :let [^Interval first-active (first active)]
+        
+        (< (.-from first-queue) (.-to first-active))
+        (do
+          (yield pos (.-from first-queue) active)
+          (.add active first-queue)
+          (recur (.-from first-queue) (next queue)))
+       
+        :else
+        (do
+          (yield pos (.-to first-active) active)
+          (.poll active)
+          (recur (.-to first-active) queue))))
+    acc))
