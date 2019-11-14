@@ -10,11 +10,26 @@ public class CaretMovement {
 
   public static CaretMovement move(Caret caret, long targetOffset, boolean extendSelection, boolean keepVCol) {
     if (extendSelection) {
-      return new CaretMovement(targetOffset - caret.offset,
-                               targetOffset - caret.selectionStart,
-                               0,
-                               keepVCol);
-    } else {
+      if (targetOffset <= caret.selectionStart) {
+        return new CaretMovement(targetOffset - caret.offset,
+                                 targetOffset - caret.selectionStart,
+                                 0,
+                                 keepVCol);
+      } else if (caret.selectionEnd <= targetOffset) {
+        return new CaretMovement(targetOffset - caret.offset,
+                                 0,
+                                 targetOffset - caret.selectionEnd,
+                                 keepVCol);
+      } else {
+        long selectionStart = Math.min(caret.offset, targetOffset);
+        long selectionEnd = Math.max(caret.offset, targetOffset);
+        return new CaretMovement(targetOffset - caret.offset,
+                                 selectionStart - caret.selectionStart,
+                                 selectionEnd - caret.selectionEnd,
+                                 keepVCol);
+      }
+    }
+    else {
       assert caret.offset == caret.selectionStart &&
              caret.offset == caret.selectionEnd;
       return new CaretMovement(targetOffset - caret.offset,

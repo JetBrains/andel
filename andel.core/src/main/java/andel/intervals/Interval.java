@@ -14,6 +14,7 @@ public class Interval<T> {
   public boolean closedRight;
 
   public Interval(long id, long from, long to, boolean closedLeft, boolean closedRight, T data) {
+    assert from <= to : ("Interval to <= from: " + to + " <= " + from);
     this.id = id;
     this.from = from;
     this.to = to;
@@ -42,6 +43,6 @@ public class Interval<T> {
 
   @Override
   public String toString() {
-    return "id=" + id + " " + (closedLeft ? "[" : "(") + from + ", " + to + (closedRight ? "]" : ")" + " " + data);
+    return "id=" + id + " " + (closedLeft ? "[" : "(") + from + ", " + to + (closedRight ? "]" : ")") + " " + data;
   }
 }
