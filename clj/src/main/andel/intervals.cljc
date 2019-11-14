@@ -69,6 +69,13 @@
 (defn find-marker-by-id ^Interval [^Intervals itree ^long id]
   (.findById itree id))
 
+(defn trim [^Interval i ^long from ^long to]
+  (cond
+    (<= (.-to i) from) nil
+    (>= (.-from i) to) nil
+    (and (<= from (.-from i)) (<= (.-to i) to)) i
+    :else (Interval. (.-id i) (max from (.-from i)) (min to (.-to i)) (.-closedLeft i) (.-closedRight i) (.-data i)))) 
+
 (defn map-shredded [start end intervals visit]
   (let [acc    (ArrayList.)
         yield  (fn [^long from ^long to active]
