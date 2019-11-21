@@ -17,3 +17,6 @@ pom.xml.asc
 .projectile
 /.DS_Store
 andel.iml
+.project
+.settings
+.classpath
