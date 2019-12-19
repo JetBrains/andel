@@ -1,4 +1,4 @@
-(ns andel.impl.text-test
+(ns andel.text-test
   (:require [clojure.spec.alpha :as s]
             [clojure.test.check.generators :as g]
             [clojure.test.check.properties :as prop]

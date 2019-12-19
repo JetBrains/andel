@@ -1,4 +1,4 @@
-(ns andel.impl.intervals-test
+(ns andel.intervals-test
   (:require [clojure.test.check.generators :as g]
             [clojure.test.check.properties :as prop]
             [clojure.test.check.rose-tree :as rose]

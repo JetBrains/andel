@@ -73,6 +73,7 @@
   (cond
     (<= (.-to i) from) nil
     (>= (.-from i) to) nil
+    (= (.-from i) (.-to i)) nil
     (and (<= from (.-from i)) (<= (.-to i) to)) i
     :else (Interval. (.-id i) (max from (.-from i)) (min to (.-to i)) (.-closedLeft i) (.-closedRight i) (.-data i)))) 
 
