@@ -6,17 +6,21 @@ import java.util.Objects;
 
 public class Edit {
 
-    public static Insert insert(String text) {
-        return new Edit.Insert(text);
-    }
+  public static Edit empty() {
+    return new Edit(new Object[0], false);
+  }
 
-    public static Retain retain(long count) {
-        return new Edit.Retain(count);
-    }
+  public static Insert insert(String text) {
+    return new Edit.Insert(text);
+  }
 
-    public static Delete delete(String text) {
-        return new Edit.Delete(text);
-    }
+  public static Retain retain(long count) {
+    return new Edit.Retain(count);
+  }
+
+  public static Delete delete(String text) {
+    return new Edit.Delete(text);
+  }
 
   public static Edit insert(long offset, String text) {
     return new Edit(new Object[]{new Edit.Retain(offset), new Edit.Insert(text)}, true);

@@ -5,10 +5,14 @@ import java.util.Objects;
 public class LogEntry {
   public final Op op;
   public final Object arg;
+  public final Edit edit;
+  public final long timestamp;
 
-  public LogEntry(Op op, Object arg) {
+  public LogEntry(Op op, Object arg, Edit edit, long timestamp) {
     this.op = op;
     this.arg = arg;
+    this.edit = edit;
+    this.timestamp = timestamp;
   }
 
   @Override
@@ -30,6 +34,8 @@ public class LogEntry {
     return "LogEntry{" +
            "op=" + op +
            ", arg=" + arg +
+           ", edit=" + edit +
+           ", timestamp=" + timestamp +
            '}';
   }
 }
