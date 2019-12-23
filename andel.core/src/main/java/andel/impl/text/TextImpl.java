@@ -336,8 +336,7 @@ public class TextImpl {
       String newData = data.substring(0, relCharOffset)
         .concat(s)
         .concat(data.substring(relCharOffset));
-      return retain(Rope.replace(leaf, newData, ops.calculateMetrics(newData)),
-                    s.codePointCount(0, s.length()));
+      return Rope.replace(leaf, newData, ops.calculateMetrics(newData));
     }
   }
 

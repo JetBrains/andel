@@ -2,6 +2,7 @@ package andel;
 
 public enum Op {
   EDIT,
+  UNDO,
   INSERT_BEFORE_CARETS,
   INSERT_AFTER_CARETS,
   MOVE_CARETS,

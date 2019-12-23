@@ -10,6 +10,24 @@ import java.util.*;
 
 public class Controller {
 
+  private static void retainToEnd(List<Object> edits, long textLength) {
+    long maxIndex = Math.max(0, textLength);
+    for (Object edit : edits) {
+      if (edit instanceof Edit.Retain) {
+        maxIndex -= ((Edit.Retain)edit).count;
+      } else if (edit instanceof Edit.Delete) {
+        String text = ((Edit.Delete)edit).text;
+        maxIndex -= text.codePointCount(0, text.length());
+      } else if (edit instanceof Edit.Insert) {
+        //String text = ((Edit.Insert)edit).text;
+        //maxIndex += text.codePointCount(0, text.length());
+      } else {
+        throw new IllegalArgumentException("expected Edit");
+      }
+    }
+    edits.add(new Edit.Retain(maxIndex));
+  }
+
   private static ArrayList<Object> createCaretsInsertionOperation(Editor editor, Map<Object, String> insertions) {
     Carets carets = editor.getCarets();
     long prevCaretOffset = 0;
@@ -22,6 +40,7 @@ public class Controller {
         prevCaretOffset = caret.offset;
       }
     }
+    retainToEnd(ops, editor.composite.text.codePointsCount());
     return ops;
   }
 
@@ -114,6 +133,7 @@ public class Controller {
         prevCaretSelectionEnd = caret.selectionMax();
       }
     }
+    retainToEnd(ops, editor.composite.text.codePointsCount());
     Edit edit = new Edit(ops.toArray(), false);
     return editor
       .edit(edit)
@@ -136,6 +156,7 @@ public class Controller {
         lastOffset = to;
       }
     }
+    retainToEnd(ops, editor.composite.text.codePointsCount());
     Edit edit = new Edit(ops.toArray(), false);
     return editor
       .edit(edit)
@@ -159,6 +180,7 @@ public class Controller {
         lastOffset = to;
       }
     }
+    retainToEnd(ops, editor.composite.text.codePointsCount());
     Edit edit = new Edit(ops.toArray(), false);
     return editor
       .edit(edit)
