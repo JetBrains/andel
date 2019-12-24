@@ -149,7 +149,7 @@ public class Edit {
 
     @Override
     public String toString() {
-      return "[delete \"" + text + "\"";
+      return "[delete \"" + text + "\"]";
     }
   }
 
@@ -178,7 +178,7 @@ public class Edit {
 
     @Override
     public String toString() {
-      return "[insert \"" + text + "\"";
+      return "[insert \"" + text + "\"]";
     }
   }
 }
