@@ -45,13 +45,13 @@ public class Controller {
   }
 
   public static Composite edit(Composite composite, Edit edit) {
-    return composite.edit(edit).log(new LogEntry(Op.EDIT, edit, edit, System.currentTimeMillis()));
+    return composite.edit(edit).log(Op.EDIT, edit, edit);
   }
 
   public static Editor edit(Editor editor, Edit edit) {
     return editor.withComposite(editor.composite
                                 .edit(edit)
-                                .log(new LogEntry(Op.EDIT, edit, edit, System.currentTimeMillis())));
+                                .log(Op.EDIT, edit, edit));
   }
 
   public static Editor insertBeforeCarets(Editor editor, Map<Object, String> insertions) {
@@ -59,7 +59,7 @@ public class Controller {
     Edit edit = new Edit(ops.toArray(), true);
     return editor.withComposite(editor.composite
                                   .edit(edit)
-                                  .log(new LogEntry(Op.INSERT_BEFORE_CARETS, insertions, edit, System.currentTimeMillis())));
+                                  .log(Op.INSERT_BEFORE_CARETS, insertions, edit));
   }
 
   public static Editor insertAfterCarets(Editor editor, Map<Object, String> insertions) {
@@ -67,7 +67,7 @@ public class Controller {
     Edit edit = new Edit(ops.toArray(), false);
     return editor.withComposite(editor.composite
                                   .edit(edit)
-                                  .log(new LogEntry(Op.INSERT_AFTER_CARETS, insertions, edit, System.currentTimeMillis())));
+                                  .log(Op.INSERT_AFTER_CARETS, insertions, edit));
   }
 
   private static long restrictToLength(long offset, long length) {
@@ -92,7 +92,7 @@ public class Controller {
     caretsUpdate.sort(Carets.COMPARE_BY_OFFSET);
     return editor
       .putCarets(carets.merge(caretsUpdate))
-      .log(new LogEntry(Op.MOVE_CARETS, movements, Edit.empty(), System.currentTimeMillis()));
+      .log(Op.MOVE_CARETS, movements, Edit.empty());
   }
 
   public static Editor dropSelections(Editor editor, Iterable<Object> caretIds) {
@@ -109,14 +109,14 @@ public class Controller {
     caretsUpdate.sort(Carets.COMPARE_BY_OFFSET);
     return editor
       .putCarets(carets.merge(caretsUpdate))
-      .log(new LogEntry(Op.DROP_SELECTIONS, caretIds, Edit.empty(), System.currentTimeMillis()));
+      .log(Op.DROP_SELECTIONS, caretIds, Edit.empty());
   }
 
   public static Editor addCaret(Editor editor, Caret caret) {
     Carets carets = editor.getCarets();
     return editor
       .putCarets(carets.merge(Collections.singletonList(caret)))
-      .log(new LogEntry(Op.ADD_CARET, caret, Edit.empty(), System.currentTimeMillis()));
+      .log(Op.ADD_CARET, caret, Edit.empty());
   }
 
   public static Editor deleteSelectedText(Editor editor, Set<Object> caretIds) {
@@ -137,7 +137,7 @@ public class Controller {
     Edit edit = new Edit(ops.toArray(), false);
     return editor
       .edit(edit)
-      .log(new LogEntry(Op.DELETE_SELECTIONS, caretIds, edit, System.currentTimeMillis()));
+      .log(Op.DELETE_SELECTIONS, caretIds, edit);
   }
 
   public static Editor deleteBeforeCarets(Editor editor, Map<Object, Long> caretIds) {
@@ -160,7 +160,7 @@ public class Controller {
     Edit edit = new Edit(ops.toArray(), false);
     return editor
       .edit(edit)
-      .log(new LogEntry(Op.DELETE_BEFORE_CARETS, caretIds, edit, System.currentTimeMillis()));
+      .log(Op.DELETE_BEFORE_CARETS, caretIds, edit);
   }
 
   public static Editor deleteAfterCarets(Editor editor, Map<Object, Long> caretIds) {
@@ -184,6 +184,6 @@ public class Controller {
     Edit edit = new Edit(ops.toArray(), false);
     return editor
       .edit(edit)
-      .log(new LogEntry(Op.DELETE_AFTER_CARETS, caretIds, edit, System.currentTimeMillis()));
+      .log(Op.DELETE_AFTER_CARETS, caretIds, edit);
   }
 }

@@ -8,7 +8,8 @@ import java.util.Objects;
 import java.util.function.Function;
 
 public class Composite {
-  public static final Attr<List<LogEntry>> LOG = new Attr<>("LOG");
+  public static final Attr<List<Log.Entry>> LOG = new Attr<>("LOG");
+  public static final Attr<Object> EDIT_AUTHOR = new Attr<>("AUTHOR");
 
   public final Map<Object, Component> components;
   public final Text text;
@@ -34,8 +35,8 @@ public class Composite {
   }
 
   @SuppressWarnings("unchecked")
-  public Composite log(LogEntry entry) {
-    return this.varyMeta((m) -> m.update(LOG, l -> (l == null ? new List() : (List)l).addLast(entry)));
+  public Composite log(Op op, Object arg, Edit edit) {
+    return this.varyMeta((m) -> m.update(LOG, l -> (l == null ? new Log() : (Log)l).add(op, arg, edit, meta.get(EDIT_AUTHOR, null))));
   }
 
   public Composite varyMeta(Function<Map, Map> f) {
