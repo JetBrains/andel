@@ -68,7 +68,7 @@ public class Log {
     return Lists.toList(this.entries);
   }
 
-  public long authorPosition(Object author) {
+  private long authorPosition(Object author) {
     if (undoStack.get(author).isPresent() && undoStack.get(author, null).size() != 0) {
       return undoStack.get(author, null).last().from - 1;
     } else {
@@ -82,7 +82,7 @@ public class Log {
            || op == Op.DROP_SELECTIONS;
   }
 
-  public long undoRangeEnd(Object author) {
+  private long undoRangeEnd(Object author) {
     long idx = authorPosition(author);
     while (idx > 0) {
       Entry e = entries.nth(idx);
@@ -97,11 +97,7 @@ public class Log {
     return -1;
   }
 
-  public long undoRangeStart(Object author, long end) {
-    if (end == -1) {
-      return -1;
-    }
-
+  private long undoRangeStart(Object author, long end) {
     long idx = end - 1;
     while (idx > 0) {
       Entry e = entries.nth(idx);
@@ -117,6 +113,16 @@ public class Log {
     }
 
     return 0;
+  }
+
+  public Range nextUndoRange(Object author) {
+    long to = undoRangeEnd(author);
+    if (to < 0) {
+      return null;
+    }
+
+    long from = undoRangeStart(author, to);
+    return new Range(from, to);
   }
 
   public Log pushUndo(UndoInfo info, Object author) {
@@ -172,6 +178,31 @@ public class Log {
              ", timestamp=" + timestamp +
              ", author=" + author +
              '}';
+    }
+  }
+
+  public class Range {
+
+    public final long from;
+    public final long to;
+
+    public Range(long from, long to) {
+      this.from = from;
+      this.to = to;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      Range range = (Range)o;
+      return from == range.from &&
+             to == range.to;
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(from, to);
     }
   }
 }
