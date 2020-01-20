@@ -1,6 +1,7 @@
 package andel;
 
 import io.lacuna.bifurcan.List;
+import io.lacuna.bifurcan.Lists;
 import io.lacuna.bifurcan.Map;
 
 import java.util.ArrayList;
@@ -50,7 +51,7 @@ public class Log {
   }
 
   public java.util.List<Entry> entriesSince(long timestamp) {
-    // binarysearch here
+    // todo binarysearch here
     int start = 0;
     for (int i = 0; i < this.entries.size(); i++) {
       Entry e = this.entries.nth(i);
@@ -60,21 +61,11 @@ public class Log {
       }
     }
 
-    ArrayList<Entry> result = new ArrayList<Entry>();
-    for (int i = start; i < this.entries.size(); i++) {
-      result.add(this.entries.nth(i));
-    }
-
-    return result;
+    return Lists.toList(this.entries.slice(start, this.entries.size()));
   }
 
   public java.util.List<Entry> entries() {
-    ArrayList<Entry> result = new ArrayList<Entry>();
-    for (int i = 0; i < this.entries.size(); i++) {
-      result.add(this.entries.nth(i));
-    }
-
-    return result;
+    return Lists.toList(this.entries);
   }
 
   public long authorPosition(Object author) {
@@ -161,12 +152,15 @@ public class Log {
       if (o == null || getClass() != o.getClass()) return false;
       Entry entry = (Entry)o;
       return op == entry.op &&
-             Objects.equals(arg, entry.arg);
+             Objects.equals(arg, entry.arg) &&
+             Objects.equals(edit, entry.edit) &&
+             timestamp == entry.timestamp &&
+             Objects.equals(author, entry.author);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(op, arg);
+      return Objects.hash(op, arg, edit, timestamp, author);
     }
 
     @Override
