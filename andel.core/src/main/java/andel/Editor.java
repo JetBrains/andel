@@ -53,8 +53,8 @@ public class Editor {
     return this.assoc(CARETS, carets);
   }
 
-  public Editor log(LogEntry entry) {
-    return this.withComposite(this.composite.log(entry));
+  public Editor log(Op op, Object arg, Edit edit) {
+    return this.withComposite(this.composite.log(op, arg, edit));
   }
 
   public Editor edit(Edit edit) {

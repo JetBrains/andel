@@ -10,6 +10,24 @@ import java.util.*;
 
 public class Controller {
 
+  private static void retainToEnd(List<Object> edits, long textLength) {
+    long maxIndex = Math.max(0, textLength);
+    for (Object edit : edits) {
+      if (edit instanceof Edit.Retain) {
+        maxIndex -= ((Edit.Retain)edit).count;
+      } else if (edit instanceof Edit.Delete) {
+        String text = ((Edit.Delete)edit).text;
+        maxIndex -= text.codePointCount(0, text.length());
+      } else if (edit instanceof Edit.Insert) {
+        //String text = ((Edit.Insert)edit).text;
+        //maxIndex += text.codePointCount(0, text.length());
+      } else {
+        throw new IllegalArgumentException("expected Edit");
+      }
+    }
+    edits.add(new Edit.Retain(maxIndex));
+  }
+
   private static ArrayList<Object> createCaretsInsertionOperation(Editor editor, Map<Object, String> insertions) {
     Carets carets = editor.getCarets();
     long prevCaretOffset = 0;
@@ -22,31 +40,34 @@ public class Controller {
         prevCaretOffset = caret.offset;
       }
     }
+    retainToEnd(ops, editor.composite.text.codePointsCount());
     return ops;
   }
 
   public static Composite edit(Composite composite, Edit edit) {
-    return composite.edit(edit).log(new LogEntry(Op.EDIT, edit));
+    return composite.edit(edit).log(Op.EDIT, edit, edit);
   }
 
   public static Editor edit(Editor editor, Edit edit) {
     return editor.withComposite(editor.composite
                                 .edit(edit)
-                                .log(new LogEntry(Op.EDIT, edit)));
+                                .log(Op.EDIT, edit, edit));
   }
 
   public static Editor insertBeforeCarets(Editor editor, Map<Object, String> insertions) {
     ArrayList<Object> ops = createCaretsInsertionOperation(editor, insertions);
+    Edit edit = new Edit(ops.toArray(), true);
     return editor.withComposite(editor.composite
-                                  .edit(new Edit(ops.toArray(), true))
-                                  .log(new LogEntry(Op.INSERT_BEFORE_CARETS, insertions)));
+                                  .edit(edit)
+                                  .log(Op.INSERT_BEFORE_CARETS, insertions, edit));
   }
 
   public static Editor insertAfterCarets(Editor editor, Map<Object, String> insertions) {
     ArrayList<Object> ops = createCaretsInsertionOperation(editor, insertions);
+    Edit edit = new Edit(ops.toArray(), false);
     return editor.withComposite(editor.composite
-                                  .edit(new Edit(ops.toArray(), false))
-                                  .log(new LogEntry(Op.INSERT_AFTER_CARETS, insertions)));
+                                  .edit(edit)
+                                  .log(Op.INSERT_AFTER_CARETS, insertions, edit));
   }
 
   private static long restrictToLength(long offset, long length) {
@@ -71,7 +92,7 @@ public class Controller {
     caretsUpdate.sort(Carets.COMPARE_BY_OFFSET);
     return editor
       .putCarets(carets.merge(caretsUpdate))
-      .log(new LogEntry(Op.MOVE_CARETS, movements));
+      .log(Op.MOVE_CARETS, movements, Edit.empty());
   }
 
   public static Editor dropSelections(Editor editor, Iterable<Object> caretIds) {
@@ -88,14 +109,14 @@ public class Controller {
     caretsUpdate.sort(Carets.COMPARE_BY_OFFSET);
     return editor
       .putCarets(carets.merge(caretsUpdate))
-      .log(new LogEntry(Op.DROP_SELECTIONS, caretIds));
+      .log(Op.DROP_SELECTIONS, caretIds, Edit.empty());
   }
 
   public static Editor addCaret(Editor editor, Caret caret) {
     Carets carets = editor.getCarets();
     return editor
       .putCarets(carets.merge(Collections.singletonList(caret)))
-      .log(new LogEntry(Op.ADD_CARET, caret));
+      .log(Op.ADD_CARET, caret, Edit.empty());
   }
 
   public static Editor deleteSelectedText(Editor editor, Set<Object> caretIds) {
@@ -112,9 +133,11 @@ public class Controller {
         prevCaretSelectionEnd = caret.selectionMax();
       }
     }
+    retainToEnd(ops, editor.composite.text.codePointsCount());
+    Edit edit = new Edit(ops.toArray(), false);
     return editor
-      .edit(new Edit(ops.toArray(), false))
-      .log(new LogEntry(Op.DELETE_SELECTIONS, caretIds));
+      .edit(edit)
+      .log(Op.DELETE_SELECTIONS, caretIds, edit);
   }
 
   public static Editor deleteBeforeCarets(Editor editor, Map<Object, Long> caretIds) {
@@ -133,9 +156,11 @@ public class Controller {
         lastOffset = to;
       }
     }
+    retainToEnd(ops, editor.composite.text.codePointsCount());
+    Edit edit = new Edit(ops.toArray(), false);
     return editor
-      .edit(new Edit(ops.toArray(), false))
-      .log(new LogEntry(Op.DELETE_BEFORE_CARETS, caretIds));
+      .edit(edit)
+      .log(Op.DELETE_BEFORE_CARETS, caretIds, edit);
   }
 
   public static Editor deleteAfterCarets(Editor editor, Map<Object, Long> caretIds) {
@@ -155,8 +180,10 @@ public class Controller {
         lastOffset = to;
       }
     }
+    retainToEnd(ops, editor.composite.text.codePointsCount());
+    Edit edit = new Edit(ops.toArray(), false);
     return editor
-      .edit(new Edit(ops.toArray(), false))
-      .log(new LogEntry(Op.DELETE_AFTER_CARETS, caretIds));
+      .edit(edit)
+      .log(Op.DELETE_AFTER_CARETS, caretIds, edit);
   }
 }
