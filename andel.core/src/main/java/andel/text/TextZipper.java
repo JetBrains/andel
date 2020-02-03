@@ -72,4 +72,35 @@ public interface TextZipper {
     this.consume(codePointsLength, sb::append);
     return sb.toString();
   }
+
+  default long distanceToEOL() {
+    Cursor cursor = Cursor.create(this, true);
+    long c = 0L;
+    do {
+      if (cursor.codepoint() == '\n') break;
+      cursor = cursor.next();
+      c++;
+    } while(cursor != null);
+    return c;
+  }
+
+  default TextZipper scanToLineEnd() {
+    long offset = codePointsOffset();
+    long deol = distanceToEOL();
+    return scanToCodepoint(offset + deol);
+  }
+
+  default TextZipper skipColumns(long cols) {
+    long geom = geomOffset();
+    long lineNumber = lineNumber();
+    long textGeomLen = makeText().rope.metrics.geometricLength;
+    TextZipper loc1 = scanToGeomOffset(Math.min(geom + cols, textGeomLen));
+    if (lineNumber == loc1.lineNumber()) {
+      return loc1;
+    } else {
+      return scanToLineEnd();
+    }
+  }
+
+
 }

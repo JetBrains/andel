@@ -262,7 +262,7 @@ public class TextImpl {
      * if we start chunk reduction from the beginning we may end up at the start of this interval
      * resulting in a position which is to the left from original
      */
-    if (offset == currentOffset)
+    if (offset == currentOffset && Rope.isLeaf(zipper))
       return zipper;
 
     boolean isTransient = zipper.isTransient;
