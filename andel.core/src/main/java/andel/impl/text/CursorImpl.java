@@ -36,6 +36,13 @@ public class CursorImpl implements Cursor {
 
     long leafCharOffset = TextImpl.nodeCharOffset(zipper);
     long innerCharOffset = TextImpl.charOffset(zipper) - leafCharOffset;
+
+    if (innerCharOffset == Rope.data(zipper).length()) {
+      zipper = Rope.nextLeaf(zipper);
+      leafCharOffset = TextImpl.nodeCharOffset(zipper);
+      innerCharOffset = TextImpl.charOffset(zipper) - leafCharOffset;
+    }
+
     return new CursorImpl(zipper,
                           Rope.data(zipper),
                           leafCharOffset,
