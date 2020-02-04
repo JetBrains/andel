@@ -9,6 +9,7 @@ import andel.text.Text;
 
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.Objects;
 
 
 public class SingleCaret implements Carets {
@@ -84,5 +85,18 @@ public class SingleCaret implements Carets {
     return "SingleCaret{" +
            "caret=" + caret +
            '}';
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    SingleCaret caret1 = (SingleCaret)o;
+    return Objects.equals(caret, caret1.caret);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(caret);
   }
 }
