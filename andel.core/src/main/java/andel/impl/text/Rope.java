@@ -557,7 +557,9 @@ public class Rope {
   }
 
   public static <Metrics, Data> Zipper<Metrics, Data> next(Zipper<Metrics, Data> zipper) {
-    assert hasNext(zipper);
+    if (!hasNext(zipper)) {
+      throw new IllegalArgumentException("zipper has no next");
+    }
     if (isBranch(zipper)) {
       return downLeft(zipper);
     } else {
