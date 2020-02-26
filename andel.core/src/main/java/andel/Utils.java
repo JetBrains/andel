@@ -53,4 +53,12 @@ public class Utils {
         final long column = offset - lineStartOffset;
         return new Position(line, column);
     }
+
+    public static long offsetToCharOffset(long offset, Text text) {
+        return text.zipper().scanToCodepoint(offset).charOffset();
+    }
+
+    public static long charOffsetToOffset(long charOffset, Text text) {
+        return text.zipper().scanToCharOffset(charOffset).codePointsOffset();
+    }
 }
