@@ -73,7 +73,16 @@ public interface TextZipper {
     return sb.toString();
   }
 
+  default boolean isEndOfText() {
+    Rope.Zipper<TextMetrics, String> loc = (Rope.Zipper<TextMetrics, String>)this;
+    long chunkOffset = loc.charOffset() - TextImpl.nodeCharOffset(loc);
+    return !Rope.hasNext(loc) && chunkOffset == Rope.data(loc).length();
+  }
+
   default long distanceToEOL() {
+    if (this.isEndOfText()) {
+      return 0;
+    }
     Cursor cursor = Cursor.create(this, true);
     long c = 0L;
     do {
@@ -101,6 +110,4 @@ public interface TextZipper {
       return scanToLineEnd();
     }
   }
-
-
 }
