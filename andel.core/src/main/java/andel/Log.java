@@ -9,9 +9,26 @@ import java.util.Objects;
 
 public class Log {
 
+  public static Log EMPTY = new Log();
+
   public long timestamp;
   public List<Entry> entries;
   public Map<Object, List<UndoInfo>> undoStack;
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    Log log = (Log)o;
+    return timestamp == log.timestamp &&
+           entries.equals(log.entries) &&
+           undoStack.equals(log.undoStack);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(timestamp, entries, undoStack);
+  }
 
   public Log(List<Entry> entries, Map<Object, List<UndoInfo>> undoStack, long timestamp) {
     this.timestamp = timestamp;
