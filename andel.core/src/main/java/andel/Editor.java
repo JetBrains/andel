@@ -1,24 +1,20 @@
 package andel;
 
-import andel.carets.Carets;
-import io.lacuna.bifurcan.Map;
+import andel.carets.MultiCaret;
 
 import java.util.Objects;
 
 public class Editor {
-
-  public static final Attr<Carets> CARETS = new Attr<>("CARETS");
-
-  public final Map identities;
+  private final Attr<MultiCaret> caretsId;
   public final Composite composite;
 
-  public Editor(Map identities, Composite composite) {
-    this.identities = identities;
+  public Editor(Composite composite, Attr<MultiCaret> caretsId) {
+    this.caretsId = caretsId;
     this.composite = composite;
   }
 
   public Editor withComposite(Composite composite) {
-    return new Editor(this.identities, composite);
+    return new Editor(composite, caretsId);
   }
 
   @Override
@@ -26,31 +22,21 @@ public class Editor {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
     Editor editor = (Editor)o;
-    return Objects.equals(identities, editor.identities) &&
+    return Objects.equals(caretsId, editor.caretsId) &&
            Objects.equals(composite, editor.composite);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(identities, composite);
+    return Objects.hash(caretsId, composite);
   }
 
-  @SuppressWarnings({"unchecked", "OptionalGetWithoutIsPresent"})
-  public <T extends Component> T get(Attr<T> attr) {
-    return (T)this.composite.components.get(identities.get(attr).get(), null);
+  public MultiCaret getCarets() {
+    return composite.get(caretsId);
   }
 
-  @SuppressWarnings({"unchecked", "OptionalGetWithoutIsPresent"})
-  public <T extends Component> Editor assoc(Attr<T> attr, T val) {
-    return this.withComposite(this.composite.assoc(this.identities.get(attr).get(), val));
-  }
-
-  public Carets getCarets() {
-    return this.get(CARETS);
-  }
-
-  public Editor putCarets(Carets carets) {
-    return this.assoc(CARETS, carets);
+  public Editor putCarets(MultiCaret multiCaret) {
+    return withComposite(composite.assoc(caretsId, multiCaret));
   }
 
   public Editor log(Op op, Object arg, Edit edit) {
