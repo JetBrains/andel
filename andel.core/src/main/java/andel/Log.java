@@ -4,7 +4,6 @@ import io.lacuna.bifurcan.List;
 import io.lacuna.bifurcan.Lists;
 import io.lacuna.bifurcan.Map;
 
-import java.util.ArrayList;
 import java.util.Objects;
 
 public class Log {
@@ -198,7 +197,7 @@ public class Log {
     }
   }
 
-  public class Range {
+  public static class Range {
 
     public final long from;
     public final long to;

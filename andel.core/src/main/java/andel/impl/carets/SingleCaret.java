@@ -1,10 +1,9 @@
 package andel.impl.carets;
 
 import andel.Component;
-import andel.Controller;
 import andel.Edit;
 import andel.carets.Caret;
-import andel.carets.Carets;
+import andel.carets.MultiCaret;
 import andel.text.Text;
 
 import java.util.Collections;
@@ -12,7 +11,7 @@ import java.util.Iterator;
 import java.util.Objects;
 
 
-public class SingleCaret implements Carets {
+public class SingleCaret implements MultiCaret {
 
   private final Caret caret;
 
@@ -36,7 +35,7 @@ public class SingleCaret implements Carets {
   }
 
   @Override
-  public Carets merge(Iterable<Caret> carets) {
+  public MultiCaret merge(Iterable<Caret> carets) {
     Iterator<Caret> iterator = carets.iterator();
     if (!iterator.hasNext()) {
       return this;
@@ -58,7 +57,7 @@ public class SingleCaret implements Carets {
   }
 
   @Override
-  public Carets remove(Iterable<Object> ids) {
+  public MultiCaret remove(Iterable<Object> ids) {
     if (ids.iterator().hasNext()) {
       throw new AssertionError();
     }

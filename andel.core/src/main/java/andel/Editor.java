@@ -1,13 +1,13 @@
 package andel;
 
-import andel.carets.Carets;
+import andel.carets.MultiCaret;
 import io.lacuna.bifurcan.Map;
 
 import java.util.Objects;
 
 public class Editor {
 
-  public static final Attr<Carets> CARETS = new Attr<>("CARETS");
+  public static final Attr<MultiCaret> CARETS = new Attr<>("CARETS");
 
   public final Map identities;
   public final Composite composite;
@@ -45,11 +45,11 @@ public class Editor {
     return this.withComposite(this.composite.assoc(this.identities.get(attr).get(), val));
   }
 
-  public Carets getCarets() {
+  public MultiCaret getCarets() {
     return this.get(CARETS);
   }
 
-  public Editor putCarets(Carets carets) {
+  public Editor putCarets(MultiCaret carets) {
     return this.assoc(CARETS, carets);
   }
 

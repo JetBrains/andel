@@ -5,8 +5,8 @@ import andel.impl.carets.SingleCaret;
 
 import java.util.Comparator;
 
-public interface Carets extends Component {
-  static Carets singleCaret(Caret caret) {
+public interface MultiCaret extends Component {
+  static MultiCaret singleCaret(Caret caret) {
     return new SingleCaret(caret);
   }
 
@@ -14,9 +14,9 @@ public interface Carets extends Component {
 
   Iterable<Caret> getCarets();
 
-  Carets merge(Iterable<Caret> carets);
+  MultiCaret merge(Iterable<Caret> carets);
 
   Caret getCaret(Object id);
 
-  Carets remove(Iterable<Object> ids);
+  MultiCaret remove(Iterable<Object> ids);
 }

@@ -2,7 +2,7 @@ package andel;
 
 import andel.carets.Caret;
 import andel.carets.CaretMovement;
-import andel.carets.Carets;
+import andel.carets.MultiCaret;
 import andel.text.Text;
 import andel.text.TextZipper;
 
@@ -29,7 +29,7 @@ public class Controller {
   }
 
   private static ArrayList<Object> createCaretsInsertionOperation(Editor editor, Map<Object, String> insertions) {
-    Carets carets = editor.getCarets();
+    MultiCaret carets = editor.getCarets();
     long prevCaretOffset = 0;
     ArrayList<Object> ops = new ArrayList<>();
     for (Caret caret : carets.getCarets()) {
@@ -75,7 +75,7 @@ public class Controller {
   }
   
   public static Editor moveCarets(Editor editor, Map<Object, CaretMovement> movements) {
-    Carets carets = editor.getCarets();
+    MultiCaret carets = editor.getCarets();
     List<Caret> caretsUpdate = new ArrayList<>();
     Text text = editor.composite.text;
     long codePointsCount = text.codePointsCount();
@@ -89,14 +89,14 @@ public class Controller {
                                  restrictToLength(caret.selectionEnd + mv.selectionEndDelta, codePointsCount),
                                  mv.keepVCol ? caret.vCol : text.offsetToGeomCol(offset)));
     }
-    caretsUpdate.sort(Carets.COMPARE_BY_OFFSET);
+    caretsUpdate.sort(MultiCaret.COMPARE_BY_OFFSET);
     return editor
       .putCarets(carets.merge(caretsUpdate))
       .log(Op.MOVE_CARETS, movements, Edit.empty());
   }
 
   public static Editor dropSelections(Editor editor, Iterable<Object> caretIds) {
-    Carets carets = editor.getCarets();
+    MultiCaret carets = editor.getCarets();
     List<Caret> caretsUpdate = new ArrayList<>();
     for (Object caretId : caretIds) {
       Caret caret = carets.getCaret(caretId);
@@ -106,21 +106,21 @@ public class Controller {
                                  caret.offset,
                                  caret.vCol));
     }
-    caretsUpdate.sort(Carets.COMPARE_BY_OFFSET);
+    caretsUpdate.sort(MultiCaret.COMPARE_BY_OFFSET);
     return editor
       .putCarets(carets.merge(caretsUpdate))
       .log(Op.DROP_SELECTIONS, caretIds, Edit.empty());
   }
 
   public static Editor addCaret(Editor editor, Caret caret) {
-    Carets carets = editor.getCarets();
+    MultiCaret carets = editor.getCarets();
     return editor
       .putCarets(carets.merge(Collections.singletonList(caret)))
       .log(Op.ADD_CARET, caret, Edit.empty());
   }
 
   public static Editor deleteSelectedText(Editor editor, Set<Object> caretIds) {
-    Carets carets = editor.getCarets();
+    MultiCaret carets = editor.getCarets();
     long prevCaretSelectionEnd = 0;
     List<Object> ops = new ArrayList<>();
     TextZipper zipper = editor.composite.text.zipper().asTransient();
