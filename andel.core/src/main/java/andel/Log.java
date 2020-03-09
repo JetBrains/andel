@@ -92,7 +92,7 @@ public class Log {
     }
   }
 
-  public static boolean breaksLog(Op op) {
+  private static boolean breaksLog(Op op) {
     return op == Op.ADD_CARET
            || op == Op.MOVE_CARETS
            || op == Op.DROP_SELECTIONS;

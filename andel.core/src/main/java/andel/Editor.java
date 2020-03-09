@@ -37,7 +37,7 @@ public class Editor {
 
   @SuppressWarnings({"unchecked", "OptionalGetWithoutIsPresent"})
   public <T extends Component> T get(Attr<T> attr) {
-    return (T)this.composite.components.get(identities.get(attr).get(), null);
+    return (T)this.composite.getComponent(identities.get(attr).get());
   }
 
   @SuppressWarnings({"unchecked", "OptionalGetWithoutIsPresent"})

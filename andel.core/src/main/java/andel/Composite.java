@@ -33,6 +33,10 @@ public class Composite {
                          this.meta);
   }
 
+  public Component getComponent(Object key) {
+    return components.get(key, null);
+  }
+
   public Composite assoc(Object key, Component component) {
     return new Composite(this.components.put(key, component),
                          this.text,
@@ -41,7 +45,6 @@ public class Composite {
                          this.meta);
   }
 
-  @SuppressWarnings("unchecked")
   public Composite log(Op op, Object arg, Edit edit) {
     return new Composite(this.components,
                          this.text,
@@ -58,12 +61,12 @@ public class Composite {
                          this.meta);
   }
 
-  public Composite varyMeta(Function<Map, Map> f) {
+  public Composite withMeta(Map meta) {
     return new Composite(this.components,
                          this.text,
                          this.log,
                          this.editsAuthor,
-                         f.apply(this.meta));
+                         meta);
   }
 
   @Override
