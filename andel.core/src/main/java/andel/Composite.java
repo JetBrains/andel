@@ -69,6 +69,15 @@ public class Composite {
                          meta);
   }
 
+  public Composite withComponents(Map<Object, Component> components) {
+    return new Composite(components,
+                         this.text,
+                         this.log,
+                         this.editsAuthor,
+                         this.meta);
+  }
+
+
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;

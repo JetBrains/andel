@@ -2,12 +2,31 @@ package andel;
 
 import andel.text.Text;
 
+import java.util.List;
 import java.util.Objects;
 
 public class Utils {
     private Utils() {}
 
-    public static class Position {
+  static void retainToEnd(List<Object> edits, long textLength) {
+      long maxIndex = Math.max(0, textLength);
+      for (Object edit : edits) {
+        if (edit instanceof Edit.Retain) {
+          maxIndex -= ((Edit.Retain)edit).count;
+        } else if (edit instanceof Edit.Delete) {
+          String text = ((Edit.Delete)edit).text;
+          maxIndex -= text.codePointCount(0, text.length());
+        } else if (edit instanceof Edit.Insert) {
+          //String text = ((Edit.Insert)edit).text;
+          //maxIndex += text.codePointCount(0, text.length());
+        } else {
+          throw new IllegalArgumentException("expected Edit");
+        }
+      }
+      edits.add(new Edit.Retain(maxIndex));
+    }
+
+  public static class Position {
         public final long line;
         public final long column;
 
