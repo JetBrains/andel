@@ -9,16 +9,16 @@ public class Editor {
 
   public static final Attr<MultiCaret> CARETS = new Attr<>("CARETS");
 
-  public final Map identities;
+  public final Object caretsKey;
   public final Composite composite;
 
-  public Editor(Map identities, Composite composite) {
-    this.identities = identities;
+  public Editor(Object caretsKey, Composite composite) {
+    this.caretsKey = caretsKey;
     this.composite = composite;
   }
 
   public Editor withComposite(Composite composite) {
-    return new Editor(this.identities, composite);
+    return new Editor(this.caretsKey, composite);
   }
 
   @Override
@@ -26,31 +26,21 @@ public class Editor {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
     Editor editor = (Editor)o;
-    return Objects.equals(identities, editor.identities) &&
+    return Objects.equals(caretsKey, editor.caretsKey) &&
            Objects.equals(composite, editor.composite);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(identities, composite);
-  }
-
-  @SuppressWarnings({"unchecked", "OptionalGetWithoutIsPresent"})
-  public <T extends Component> T get(Attr<T> attr) {
-    return (T)this.composite.getComponent(identities.get(attr).get());
-  }
-
-  @SuppressWarnings({"unchecked", "OptionalGetWithoutIsPresent"})
-  public <T extends Component> Editor assoc(Attr<T> attr, T val) {
-    return this.withComposite(this.composite.assoc(this.identities.get(attr).get(), val));
+    return Objects.hash(caretsKey, composite);
   }
 
   public MultiCaret getCarets() {
-    return this.get(CARETS);
+    return (MultiCaret)this.composite.getComponent(caretsKey);
   }
 
   public Editor putCarets(MultiCaret carets) {
-    return this.assoc(CARETS, carets);
+    return new Editor(caretsKey, this.composite.assoc(caretsKey, carets));
   }
 
   public Editor log(Op op, Object arg, Edit edit) {

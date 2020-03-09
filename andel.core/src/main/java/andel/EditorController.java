@@ -13,9 +13,7 @@ import java.util.stream.StreamSupport;
 public class EditorController {
 
   public static Editor edit(Editor editor, Edit edit) {
-    return editor.withComposite(editor.composite
-                                  .edit(edit)
-                                  .log(Op.EDIT, edit, edit));
+    return editor.withComposite(editor.composite.edit(edit).log(Op.EDIT, edit, edit));
   }
 
   public static Editor insertBeforeCarets(Editor editor, Map<Object, String> insertions) {
