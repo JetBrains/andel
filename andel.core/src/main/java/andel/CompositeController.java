@@ -53,25 +53,25 @@ public class CompositeController {
     return ops;
   }
 
-  public static Composite insertBeforeCarets(Composite composite, Map<Object, String> insertions) {
+  public static Composite insertBeforeCarets(Composite composite, Map<Object, String> insertions, Object editsAuthor) {
     ArrayList<Object> ops = createCaretsInsertionOperation(composite, insertions);
     Edit edit = new Edit(ops.toArray(), true);
-    return composite.edit(edit).log(Op.INSERT_BEFORE_CARETS, insertions, edit);
+    return composite.edit(edit).log(Op.INSERT_BEFORE_CARETS, insertions, edit, editsAuthor);
   }
 
-  public static Composite insertAfterCarets(Composite composite, Map<Object, String> insertions) {
+  public static Composite insertAfterCarets(Composite composite, Map<Object, String> insertions, Object editsAuthor) {
     ArrayList<Object> ops = createCaretsInsertionOperation(composite, insertions);
     Edit edit = new Edit(ops.toArray(), false);
     return composite
       .edit(edit)
-      .log(Op.INSERT_AFTER_CARETS, insertions, edit);
+      .log(Op.INSERT_AFTER_CARETS, insertions, edit, editsAuthor);
   }
 
-  public static Composite edit(Composite composite, Edit edit) {
-    return composite.edit(edit).log(Op.EDIT, edit, edit);
+  public static Composite edit(Composite composite, Edit edit, Object editsAuthor) {
+    return composite.edit(edit).log(Op.EDIT, edit, edit, editsAuthor);
   }
 
-  public static Composite deleteSelectedText(Composite composite, Set<Object> caretIds) {
+  public static Composite deleteSelectedText(Composite composite, Set<Object> caretIds, Object editsAuthor) {
     Iterable<Caret> carets = selectCarets(composite, caretIds)::iterator;
     long prevCaretSelectionEnd = 0;
     List<Object> ops = new ArrayList<>();
@@ -87,14 +87,14 @@ public class CompositeController {
     }
     Utils.retainToEnd(ops, composite.text.codePointsCount());
     Edit edit = new Edit(ops.toArray(), false);
-    return composite.edit(edit).log(Op.DELETE_SELECTIONS, caretIds, edit);
+    return composite.edit(edit).log(Op.DELETE_SELECTIONS, caretIds, edit, editsAuthor);
   }
 
-  public static Composite deleteBeforeCarets(Map<Object, Long> caretIds, Composite composite, Iterable<Caret> carets) {
+  public static Composite deleteBeforeCarets(Map<Object, Long> caretIds, Composite composite, Object editsAuthor) {
     List<Object> ops = new ArrayList<>();
     long lastOffset = 0;
     TextZipper zipper = composite.text.zipper().asTransient();
-    for (Caret caret : carets) {
+    for (Caret caret : (Iterable<Caret>)selectCarets(composite, caretIds.keySet())::iterator) {
       Long count = caretIds.get(caret.id);
       if (count != null && count != 0) {
         long from = Math.max(caret.offset - count, 0);
@@ -108,10 +108,10 @@ public class CompositeController {
     }
     Utils.retainToEnd(ops, composite.text.codePointsCount());
     Edit edit = new Edit(ops.toArray(), false);
-    return composite.edit(edit).log(Op.DELETE_BEFORE_CARETS, caretIds, edit);
+    return composite.edit(edit).log(Op.DELETE_BEFORE_CARETS, caretIds, edit, editsAuthor);
   }
 
-  public static Composite deleteAfterCarets(Composite composite, Map<Object, Long> caretIds) {
+  public static Composite deleteAfterCarets(Composite composite, Map<Object, Long> caretIds, Object editsAuthor) {
     Iterable<Caret> carets = selectCarets(composite, caretIds.keySet())::iterator;
     List<Object> ops = new ArrayList<>();
     long lastOffset = 0;
@@ -131,19 +131,19 @@ public class CompositeController {
     }
     Utils.retainToEnd(ops, composite.text.codePointsCount());
     Edit edit = new Edit(ops.toArray(), false);
-    return composite.edit(edit).log(Op.DELETE_AFTER_CARETS, caretIds, edit);
+    return composite.edit(edit).log(Op.DELETE_AFTER_CARETS, caretIds, edit, editsAuthor);
   }
 
-  public static Composite dropSelections(Composite composite, Set<?> caretIds) {
+  public static Composite dropSelections(Composite composite, Set<?> caretIds, Object editsAuthor) {
     return
       updateCarets(
         composite,
         selectCarets(composite, caretIds)
           .map(caret -> new Caret(caret.id, caret.offset, caret.offset, caret.offset, caret.vCol)))
-        .log(Op.DROP_SELECTIONS, caretIds, Edit.empty());
+        .log(Op.DROP_SELECTIONS, caretIds, Edit.empty(), editsAuthor);
   }
 
-  public static Composite moveCarets(Composite composite, Map<Object, CaretMovement> movements) {
+  public static Composite moveCarets(Composite composite, Map<Object, CaretMovement> movements, Object editsAuthor) {
     Text text = composite.text;
     long codePointsCount = text.codePointsCount();
     return updateCarets(
@@ -158,7 +158,7 @@ public class CompositeController {
                            clamp(caret.selectionEnd + mv.selectionEndDelta, codePointsCount),
                            mv.keepVCol ? caret.vCol : text.offsetToGeomCol(offset));
         }))
-      .log(Op.MOVE_CARETS, movements, Edit.empty());
+      .log(Op.MOVE_CARETS, movements, Edit.empty(), editsAuthor);
   }
 
   public static long clamp(long offset, long length) {

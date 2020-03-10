@@ -1,24 +1,22 @@
 package andel;
 
 import andel.carets.MultiCaret;
-import io.lacuna.bifurcan.Map;
 
 import java.util.Objects;
 
 public class Editor {
-
-  public static final Attr<MultiCaret> CARETS = new Attr<>("CARETS");
-
   public final Object caretsKey;
+  public final Object editsAuthor;
   public final Composite composite;
 
-  public Editor(Object caretsKey, Composite composite) {
+  public Editor(Object caretsKey, Object editsAuthor, Composite composite) {
     this.caretsKey = caretsKey;
+    this.editsAuthor = editsAuthor;
     this.composite = composite;
   }
 
   public Editor withComposite(Composite composite) {
-    return new Editor(this.caretsKey, composite);
+    return new Editor(this.caretsKey, editsAuthor, composite);
   }
 
   @Override
@@ -27,12 +25,13 @@ public class Editor {
     if (o == null || getClass() != o.getClass()) return false;
     Editor editor = (Editor)o;
     return Objects.equals(caretsKey, editor.caretsKey) &&
-           Objects.equals(composite, editor.composite);
+           Objects.equals(composite, editor.composite) &&
+           Objects.equals(editsAuthor, editor.editsAuthor);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(caretsKey, composite);
+    return Objects.hash(caretsKey, composite, editsAuthor);
   }
 
   public MultiCaret getCarets() {
@@ -40,11 +39,11 @@ public class Editor {
   }
 
   public Editor putCarets(MultiCaret carets) {
-    return new Editor(caretsKey, this.composite.assoc(caretsKey, carets));
+    return new Editor(this.caretsKey, this.editsAuthor, this.composite.assoc(this.caretsKey, carets));
   }
 
   public Editor log(Op op, Object arg, Edit edit) {
-    return this.withComposite(this.composite.log(op, arg, edit));
+    return this.withComposite(this.composite.log(op, arg, edit, this.editsAuthor));
   }
 
   public Editor edit(Edit edit) {
