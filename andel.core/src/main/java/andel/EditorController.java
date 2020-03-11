@@ -35,9 +35,9 @@ public class EditorController {
   }
 
   public static Editor addCaret(Editor editor, Caret caret) {
-    MultiCaret carets = editor.getCarets();
+    MultiCaret carets = editor.getMultiCaret();
     return editor
-      .putCarets(carets.merge(Collections.singletonList(caret)))
+      .putMultiCaret(carets.merge(Collections.singletonList(caret)))
       .log(Op.ADD_CARET, caret, Edit.empty());
   }
 

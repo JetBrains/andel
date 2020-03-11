@@ -34,11 +34,11 @@ public class Editor {
     return Objects.hash(caretsKey, composite, editsAuthor);
   }
 
-  public MultiCaret getCarets() {
+  public MultiCaret getMultiCaret() {
     return (MultiCaret)this.composite.getComponent(caretsKey);
   }
 
-  public Editor putCarets(MultiCaret carets) {
+  public Editor putMultiCaret(MultiCaret carets) {
     return new Editor(this.caretsKey, this.editsAuthor, this.composite.assoc(this.caretsKey, carets));
   }
 
