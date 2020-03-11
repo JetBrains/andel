@@ -12,7 +12,7 @@ public class Log {
 
   public long timestamp;
   public List<Entry> entries;
-  public Map<Object, List<UndoInfo>> undoStack;
+  public Map<Object, List<UndoStackEntry>> undoStack;
 
   @Override
   public boolean equals(Object o) {
@@ -29,7 +29,7 @@ public class Log {
     return Objects.hash(timestamp, entries, undoStack);
   }
 
-  public Log(List<Entry> entries, Map<Object, List<UndoInfo>> undoStack, long timestamp) {
+  public Log(List<Entry> entries, Map<Object, List<UndoStackEntry>> undoStack, long timestamp) {
     this.timestamp = timestamp;
     this.entries = entries;
     this.undoStack = undoStack;
@@ -38,14 +38,14 @@ public class Log {
   public Log() {
     this.timestamp = 0;
     this.entries = new List<Entry>();
-    this.undoStack = new Map<Object, List<UndoInfo>>();
+    this.undoStack = new Map<Object, List<UndoStackEntry>>();
   }
 
-  public static class UndoInfo {
+  public static class UndoStackEntry {
     public long from;
     public long to;
 
-    public UndoInfo(long from, long to) {
+    public UndoStackEntry(long from, long to) {
       this.from = from;
       this.to = to;
     }
@@ -55,7 +55,7 @@ public class Log {
     long next = this.timestamp + 1;
     Entry entry = new Entry(op, arg, edit, next, author);
     List<Entry> entries = this.entries.addLast(entry);
-    Map<Object, List<UndoInfo>> stack;
+    Map<Object, List<UndoStackEntry>> stack;
     if (op == Op.UNDO || op == Op.REDO || breaksLog(op)) {
       stack = this.undoStack;
     } else {
@@ -105,7 +105,7 @@ public class Log {
       if (e.author != author || breaksLog(e.op)) {
         idx -= 1;
       } else if (e.op == Op.UNDO) {
-        idx = ((UndoInfo)e.arg).from - 1;
+        idx = ((UndoStackEntry)e.arg).from - 1;
       } else {
         return idx + 1;
       }
@@ -119,7 +119,7 @@ public class Log {
       Entry e = entries.nth(idx);
       if (e.author == author && !breaksLog(e.op)) {
         if (e.op == Op.UNDO) {
-          idx = ((UndoInfo)e.arg).from - 1;
+          idx = ((UndoStackEntry)e.arg).from - 1;
         } else {
           idx -= 1;
         }
@@ -141,9 +141,9 @@ public class Log {
     return new Range(from, to);
   }
 
-  public Log pushUndo(UndoInfo info, Object author) {
+  public Log pushUndo(UndoStackEntry info, Object author) {
     return new Log(this.entries,
-                   this.undoStack.update(author, infos -> (infos == null ? new List<UndoInfo>() : infos).addLast(info)),
+                   this.undoStack.update(author, infos -> (infos == null ? new List<UndoStackEntry>() : infos).addLast(info)),
                    this.timestamp);
   }
 
